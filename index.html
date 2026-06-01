@@ -37,7 +37,7 @@ const ENEMYBULLET_CAP = 8192, PLAYERSHOT_CAP = 1024, PARTICLE_CAP = 4096;
 const BULLET_DESPAWN_MARGIN = 32;
 
 const PLAYER_R = 2.4, GRAZE_R = 14;
-const PLAYER_SPEED = 200, PLAYER_FOCUS_MUL = 0.45, PLAYER_MARGIN = 10;
+const PLAYER_SPEED = 200, PLAYER_FOCUS_MUL = 0.45, PLAYER_FAST_MUL = 1.6, PLAYER_MARGIN = 10;
 const PLAYER_START = { x: 216, y: 496 };
 const FIRE_CADENCE = 0.055, SHOT_SPEED = 720, SHOT_DMG = 2, OPTION_DMG = 1.4, MUZZLE_PARTICLES = 2;
 const START_POWER = 100;
@@ -1057,7 +1057,7 @@ function playerUpdate(dt){
   if(player.state==='pendingdeath'){ player.pendingDeath-=dt; if(keyEdge('KeyX')&&player.bombs>0){ player.state='alive'; doBomb(true); return; } if(player.pendingDeath<=0){ finalizeDeath(); return; } }
   if(player.state==='dead'){ player.respawnT-=dt; if(player.respawnT<=0) respawnNow(); return; }
   let dx=0,dy=0; if(moveLeft()) dx-=1; if(moveRight()) dx+=1; if(moveUp()) dy-=1; if(moveDown()) dy+=1; if(dx&&dy){ const inv=0.70710678; dx*=inv; dy*=inv; } player.mvx=dx; player.mvy=dy;
-  const spd=PLAYER_SPEED*(player.focus?PLAYER_FOCUS_MUL:1); player.x+=dx*spd*dt; player.y+=dy*spd*dt;
+  const moveMul=player.focus?PLAYER_FOCUS_MUL:(fireHeld()?1:PLAYER_FAST_MUL); const spd=PLAYER_SPEED*moveMul; player.x+=dx*spd*dt; player.y+=dy*spd*dt;
   player.x=clamp(player.x,PLAYER_MARGIN,PF_W-PLAYER_MARGIN); player.y=clamp(player.y,PLAYER_MARGIN,PF_H-PLAYER_MARGIN);
   layoutOptions();
   if(keyEdge('KeyX')) tryBomb();
