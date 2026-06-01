@@ -999,7 +999,43 @@ function drawScenery(){
 
 // ---- spell bg + boss + banner ----
 function drawSpellBackground(t,intensity){ if(intensity<=0) return; ctx.save(); const g=ctx.createRadialGradient(PF_W*0.5,PF_H*0.42,40,PF_W*0.5,PF_H*0.42,PF_H*0.8); g.addColorStop(0,'rgba(60,20,90,0)'); g.addColorStop(1,'rgba(20,6,34,'+(0.5*intensity)+')'); ctx.fillStyle=g; ctx.fillRect(0,0,PF_W,PF_H); ctx.globalCompositeOperation='lighter'; ctx.translate(PF_W*0.5,PF_H*0.42); ctx.rotate(t*0.25); for(let i=0;i<10;i++){ ctx.rotate(TAU/10); const sg=ctx.createLinearGradient(0,0,0,-PF_H); sg.addColorStop(0,'rgba(180,120,255,'+(0.1*intensity)+')'); sg.addColorStop(1,'rgba(180,120,255,0)'); ctx.fillStyle=sg; ctx.beginPath(); ctx.moveTo(-26,0); ctx.lineTo(26,0); ctx.lineTo(8,-PF_H); ctx.lineTo(-8,-PF_H); ctx.closePath(); ctx.fill(); } ctx.restore(); }
-function drawBoss(boss,t){ const x=boss.x,y=boss.y; ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.translate(x,y); for(let k=0;k<2;k++){ ctx.save(); ctx.rotate(t*BOSS_AURA_SPIN*(k?-1:1)+k); const col=k?PALETTE.auraB:PALETTE.auraA; const g=ctx.createRadialGradient(0,0,6,0,0,46+k*10); g.addColorStop(0,hexA(col,0.5)); g.addColorStop(1,hexA(col,0)); ctx.fillStyle=g; for(let p=0;p<6;p++){ ctx.rotate(Math.PI/3); ctx.beginPath(); ctx.ellipse(20,0,26,9,0,0,TAU); ctx.fill(); } ctx.restore(); } ctx.restore(); ctx.save(); ctx.translate(x,y); ctx.fillStyle=PALETTE.bossBody; ctx.beginPath(); ctx.ellipse(0,4,16,22,0,0,TAU); ctx.fill(); ctx.beginPath(); ctx.arc(0,-16,9,0,TAU); ctx.fill(); ctx.strokeStyle=PALETTE.bossRim; ctx.lineWidth=1.6; ctx.beginPath(); ctx.ellipse(0,4,16,22,0,0,TAU); ctx.stroke(); ctx.beginPath(); ctx.arc(0,-16,9,0,TAU); ctx.stroke(); ctx.fillStyle=hexA(PALETTE.bossRim,0.5); ctx.beginPath(); ctx.moveTo(-16,-2); ctx.quadraticCurveTo(-40,-18,-30,12); ctx.quadraticCurveTo(-22,2,-16,6); ctx.fill(); ctx.beginPath(); ctx.moveTo(16,-2); ctx.quadraticCurveTo(40,-18,30,12); ctx.quadraticCurveTo(22,2,16,6); ctx.fill(); ctx.restore(); }
+// ---- boss designs (dispatched on boss.design; set in stageScript via spec.design) ----
+function bossGlow(c,r,h,s,l,a){ const g=c.createRadialGradient(0,0,r*0.18,0,0,r); g.addColorStop(0,'hsla('+h+','+s+'%,'+l+'%,'+a+')'); g.addColorStop(1,'hsla('+h+','+s+'%,'+l+'%,0)'); c.fillStyle=g; c.beginPath(); c.arc(0,0,r,0,TAU); c.fill(); }
+function bossPetal(c,len,wid){ c.beginPath(); c.moveTo(0,0); c.bezierCurveTo(wid,-len*0.4,wid*0.5,-len,0,-len); c.bezierCurveTo(-wid*0.5,-len,-wid,-len*0.4,0,0); c.closePath(); }
+function bossSakuraPetal(c,len,wid){ c.beginPath(); c.moveTo(0,0); c.bezierCurveTo(wid,-len*0.34,wid*0.72,-len*0.86,wid*0.26,-len); c.lineTo(0,-len*0.84); c.lineTo(-wid*0.26,-len); c.bezierCurveTo(-wid*0.72,-len*0.86,-wid,-len*0.34,0,0); c.closePath(); }
+// MIDBOSS — "Verdant Wisp": rising spirit flame · orbiting leaves · glowing core
+function drawBossWisp(c,t){ const H=155;
+  c.save(); c.globalCompositeOperation='lighter';
+  for(let k=3;k>=1;k--){ const ph=t*2.2,h=58*k/1.3; c.fillStyle='hsla('+H+',80%,55%,'+(0.11*k)+')'; c.beginPath(); c.moveTo(-17,12); c.quadraticCurveTo(-22+7*Math.sin(ph+k),-h*0.5,4*Math.sin(ph*1.3+k),-h); c.quadraticCurveTo(22+7*Math.sin(ph+k+1),-h*0.5,17,12); c.quadraticCurveTo(0,26,-17,12); c.fill(); }
+  c.restore();
+  c.save(); c.strokeStyle='hsla('+H+',85%,72%,0.4)'; c.lineWidth=2; c.lineCap='round';
+  for(let i=0;i<3;i++){ const base=i/3*TAU+t*0.7; c.beginPath(); c.moveTo(0,0); for(let s=1;s<=9;s++){ const r=s*6.5,a=base+Math.sin(t*2+s*0.5)*0.35+s*0.22; c.lineTo(Math.cos(a)*r,Math.sin(a)*r);} c.stroke(); }
+  c.restore();
+  for(let i=0;i<5;i++){ const a=t*1.1+i/5*TAU,x=Math.cos(a)*54,y=Math.sin(a)*23,sc=0.7+0.3*Math.sin(a); c.save(); c.translate(x,y); c.rotate(a+HALFPI); c.scale(sc,sc); c.fillStyle='hsla('+H+',75%,62%,0.88)'; bossPetal(c,18,7); c.fill(); c.restore(); }
+  const pulse=0.9+0.1*Math.sin(t*4); c.save(); c.globalCompositeOperation='lighter'; c.scale(pulse,pulse); bossGlow(c,42,H,90,58,0.8); bossGlow(c,21,H,60,86,0.95); c.restore();
+  c.fillStyle='#f4fff0'; c.beginPath(); c.arc(0,0,9,0,TAU); c.fill();
+}
+// FINAL BOSS — "Sakura Empress Mandala": halo rays · 5 breathing sakura rings · jeweled core
+const _MANDALA_RINGS=[{n:12,len:80,wid:23,r:11,rot:0.10,h:330,l:55},{n:10,len:62,wid:22,r:9,rot:-0.16,h:315,l:62},{n:8,len:46,wid:20,r:7,rot:0.22,h:300,l:68},{n:6,len:32,wid:18,r:5,rot:-0.30,h:290,l:74},{n:5,len:22,wid:14,r:4,rot:0.45,h:48,l:80}];
+function drawBossMandala(c,t){ const breath=Math.sin(t*1.0);
+  c.save(); c.globalCompositeOperation='lighter'; bossGlow(c,122,320,75,55,0.5); c.rotate(t*0.1);
+  { const g=c.createLinearGradient(0,0,0,-118); g.addColorStop(0,'hsla(320,80%,70%,0)'); g.addColorStop(0.6,'hsla(320,85%,72%,0.12)'); g.addColorStop(1,'hsla(320,90%,80%,0)'); c.fillStyle=g;
+    for(let i=0;i<24;i++){ c.rotate(TAU/24); c.beginPath(); c.moveTo(-6,0); c.lineTo(6,0); c.lineTo(2,-118); c.lineTo(-2,-118); c.closePath(); c.fill(); } }
+  c.restore();
+  for(let ri=0;ri<_MANDALA_RINGS.length;ri++){ const rg=_MANDALA_RINGS[ri]; c.save(); c.rotate(t*rg.rot+ri*0.6); const sp=1+0.08*breath;
+    const g=c.createLinearGradient(0,0,0,-rg.len); g.addColorStop(0,'hsla('+rg.h+',70%,'+(rg.l-20)+'%,0.95)'); g.addColorStop(0.5,'hsla('+rg.h+',85%,'+rg.l+'%,0.95)'); g.addColorStop(1,'hsla('+rg.h+',95%,'+(rg.l+14)+'%,0.92)');
+    for(let i=0;i<rg.n;i++){ c.save(); c.rotate(i/rg.n*TAU); c.translate(0,-rg.r*sp); c.scale(sp,sp); c.fillStyle=g; bossSakuraPetal(c,rg.len,rg.wid); c.fill(); c.strokeStyle='hsla('+rg.h+',90%,92%,0.4)'; c.lineWidth=1; c.stroke(); c.restore(); }
+    c.restore(); }
+  const pulse=0.85+0.15*Math.sin(t*2.6); c.save(); c.globalCompositeOperation='lighter'; c.scale(pulse,pulse); bossGlow(c,30,48,95,82,0.95); c.restore();
+  c.fillStyle='#fff6fb'; c.beginPath(); c.arc(0,0,10,0,TAU); c.fill(); c.fillStyle='hsla(330,90%,76%,0.92)'; c.beginPath(); c.arc(0,0,5,0,TAU); c.fill();
+}
+// generic fallback (original ellipse-with-wings) — drawn at origin; used when boss.design is unset
+function drawBossGeneric(c,t){ c.save(); c.globalCompositeOperation='lighter'; for(let k=0;k<2;k++){ c.save(); c.rotate(t*BOSS_AURA_SPIN*(k?-1:1)+k); const col=k?PALETTE.auraB:PALETTE.auraA; const g=c.createRadialGradient(0,0,6,0,0,46+k*10); g.addColorStop(0,hexA(col,0.5)); g.addColorStop(1,hexA(col,0)); c.fillStyle=g; for(let p=0;p<6;p++){ c.rotate(Math.PI/3); c.beginPath(); c.ellipse(20,0,26,9,0,0,TAU); c.fill(); } c.restore(); } c.restore(); c.fillStyle=PALETTE.bossBody; c.beginPath(); c.ellipse(0,4,16,22,0,0,TAU); c.fill(); c.beginPath(); c.arc(0,-16,9,0,TAU); c.fill(); c.strokeStyle=PALETTE.bossRim; c.lineWidth=1.6; c.beginPath(); c.ellipse(0,4,16,22,0,0,TAU); c.stroke(); c.beginPath(); c.arc(0,-16,9,0,TAU); c.stroke(); c.fillStyle=hexA(PALETTE.bossRim,0.5); c.beginPath(); c.moveTo(-16,-2); c.quadraticCurveTo(-40,-18,-30,12); c.quadraticCurveTo(-22,2,-16,6); c.fill(); c.beginPath(); c.moveTo(16,-2); c.quadraticCurveTo(40,-18,30,12); c.quadraticCurveTo(22,2,16,6); c.fill(); }
+// hitbox radius per design — covers the SOLID silhouette (opaque petals/leaves/core); the translucent
+// 'lighter' flame/halo is aura, excluded. +shot.r(4) = effective hit radius. Sized so anything that
+// visually lands registers (player-favourable over-coverage is fine). Keep in sync with the scales below.
+const BOSS_HIT_R = { wisp:32, mandala:60 };
+function drawBoss(boss,t){ const x=boss.x,y=boss.y+Math.sin(t*1.4)*2; ctx.save(); ctx.translate(x,y); const d=boss.design; if(d==='wisp'){ ctx.scale(0.55,0.55); drawBossWisp(ctx,t); } else if(d==='mandala'){ ctx.scale(0.60,0.60); drawBossMandala(ctx,t); } else drawBossGeneric(ctx,t); ctx.restore(); }
 function drawBanner(dt){ if(!_banner.active) return; _banner.t+=dt; const tt=_banner.t; let x; if(tt<0.35) x=PF_W*(1-easeOut(tt/0.35)); else if(tt<1.6) x=0; else if(tt<2.0) x=-PF_W*easeIn((tt-1.6)/0.4); else { _banner.active=false; return; } ctx.save(); ctx.translate(x,0); const by=PF_H*0.34; ctx.fillStyle=PALETTE.banner; ctx.fillRect(0,by,PF_W,46); ctx.fillStyle=hexA(PALETTE.bossRim,0.9); ctx.fillRect(0,by,PF_W,2); ctx.fillRect(0,by+44,PF_W,2); ctx.fillStyle=PALETTE.uiText; ctx.textAlign='center'; ctx.font='bold 19px "Trebuchet MS",sans-serif'; ctx.fillText(_banner.name,PF_W/2,by+25); ctx.font='12px "Trebuchet MS",sans-serif'; ctx.fillStyle=PALETTE.uiDim; ctx.fillText(_banner.sub,PF_W/2,by+39); ctx.restore(); }
 function triggerBanner(name,sub){ _banner={active:true,t:0,name:name||'',sub:sub||''}; }
 
@@ -1301,7 +1337,7 @@ function waveStream(opts){ return (function*(){ const n=opts.n||10, x=opts.x||PF
 function waveTurrets(opts){ return (function*(){ const xs=opts.xs||[PF_W*0.28,PF_W*0.72], y=opts.y||130; for(let i=0;i<xs.length;i++){ spawnEnemy({ x:xs[i], y:-SPAWN_MARGIN, hp:HP_POP_HEAVY, r:R_POP_HEAVY, hue:280, score:2500, drops:['power','power','point'], cancelOnDeath:0.4, coro:function*(e){ yield* moveTo(e,xs[i],y,1.0,EASE.out); yield* holdFire(e,function*(en){ yield* fireSpiralTurret(en,{da:i?-0.33:0.33,period:0.07,arms:2,speed:125,a0:i*Math.PI}); },opts.hold||5.0); yield* exitOff(e,i?Math.PI*0.85:Math.PI*0.15,140); } }); } yield; })(); }
 
 // ---- boss: descriptor-driven phase machine ----
-function makeBoss(spec){ const b=spawnEnemy({ x:spec.enterFrom?spec.enterFrom.x:PF_W/2, y:spec.enterFrom?spec.enterFrom.y:-60, hp:1, r:spec.r||18, hue:spec.hue!=null?spec.hue:320, boss:true, score:spec.score||50000, drops:[], coro:null }); b.invuln=true; b.phaseTotal=spec.phases.length; b.phaseIndex=0; b.phasesLeft=spec.phases.length; b.spellName=''; b.inSpell=false; b.timer=null; b.hpMax=1; return b; }
+function makeBoss(spec){ const b=spawnEnemy({ x:spec.enterFrom?spec.enterFrom.x:PF_W/2, y:spec.enterFrom?spec.enterFrom.y:-60, hp:1, r:spec.r!=null?spec.r:(BOSS_HIT_R[spec.design]||18), hue:spec.hue!=null?spec.hue:320, boss:true, score:spec.score||50000, drops:[], coro:null }); b.invuln=true; b.phaseTotal=spec.phases.length; b.phaseIndex=0; b.phasesLeft=spec.phases.length; b.spellName=''; b.inSpell=false; b.timer=null; b.hpMax=1; b.design=spec.design; return b; }
 function* runBoss(spec){ const boss=makeBoss(spec); hud.setBoss(boss); yield* moveTo(boss,spec.enterTo.x,spec.enterTo.y,BOSS_ENTER,EASE.inOut); boss.invuln=false;
   for(let pi=0;pi<spec.phases.length;pi++){ const ph=spec.phases[pi]; boss.phaseIndex=pi; boss.phasesLeft=spec.phases.length-pi; yield* runPhase(boss,ph,pi);
     sfx.bomb&&sfx.bomb(); cancelBullets({all:true,toItems:CANCEL_TO_ITEM}); screenFlash('#ffffff',0.35); shake(6,0.3);
@@ -1336,7 +1372,7 @@ function* stageScript(){
 
   // ===== MIDBOSS =====
   banner('','enemy approaching'); sfx.warn&&sfx.warn(); Audio.playMusic('midboss');
-  yield* runBoss({ name:'Mei-Ling, the Petal Sentinel', hue:140, enterFrom:{x:PF_W/2,y:-60}, enterTo:{x:PF_W/2,y:150}, score:80000, drops:['bigpower','point','point','point','point','power'],
+  yield* runBoss({ name:'Mei-Ling, the Petal Sentinel', design:'wisp', hue:140, enterFrom:{x:PF_W/2,y:-60}, enterTo:{x:PF_W/2,y:150}, score:80000, drops:['bigpower','point','point','point','point','power'],
     phases:[
       { kind:'nonspell', hp:MIDBOSS_HP_NONSPELL, emitter:function*(b){ Director.fork(function*(){ while(true){ fan(b,{n:7,spread:0.7,speed:150,aim:true,hue:150,style:'mid'}); yield* waitT(0.85); } },b); while(true){ ring(b,{count:20,speed:95,hue:110,style:'mid'}); yield* waitT(1.5); } }, onEnter:function(b){ Director.fork(function*(){ while(true){ yield* moveTo(b,PF_W*0.35,150,1.6,EASE.inOut); yield* moveTo(b,PF_W*0.65,150,1.6,EASE.inOut); } },b); } },
       { kind:'spell', name:'Verdant Sign "Petal Whirlpool"', hp:MIDBOSS_HP_SPELL, bonus:250000, drops:['point','point','point','point','power'], emitter:function*(b){ let a=0; Director.fork(function*(){ while(true){ wall(b,{n:9,speed:175,hue:320,style:'dart'}); yield* waitT(2.0); } },b); while(true){ spiral(b,{angle:a,arms:3,speed:120,hue:(140+T*30)%360,style:'small'}); spiral(b,{angle:-a*1.3,arms:3,speed:120,hue:(170+T*30)%360,style:'small'}); a+=0.27; yield* waitT(0.05); } } }
@@ -1348,7 +1384,7 @@ function* stageScript(){
 
   // ===== FINAL BOSS =====
   banner('WARNING','final boss'); sfx.warn&&sfx.warn(); screenFlash('#ff3366',0.4); shake(4,0.6); Audio.playMusic('boss'); yield* waitT(2.0);
-  yield* runBoss({ name:'Sakuya Eternal', hue:300, enterFrom:{x:PF_W/2,y:-80}, enterTo:{x:PF_W/2,y:140}, score:500000, drops:['full','full','oneup','point','point','point','point','point','bigpower'],
+  yield* runBoss({ name:'Sakuya Eternal', design:'mandala', hue:300, enterFrom:{x:PF_W/2,y:-80}, enterTo:{x:PF_W/2,y:140}, score:500000, drops:['full','full','oneup','point','point','point','point','point','bigpower'],
     phases:[
       { kind:'nonspell', hp:1800, emitter:function*(b){ while(true){ ring(b,{count:24,speed:110,hue:(300+T*20)%360,style:'mid'}); yield* waitT(0.55); aimedShot(b,{n:5,spread:0.4,speed:200,hue:0,style:'dart'}); yield* waitT(0.55); } } },
       { kind:'spell', name:'Spring Sign "Petal Storm"', hp:2400, bonus:1500000, drops:['point','point','point'], emitter:function*(b){ Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:14,speed:90,hue:330,style:'petal'}); yield* waitT(0.4); } },b); while(true){ fan(b,{n:9,spread:1.1,speed:160,aim:true,hue:290,style:'mid'}); yield* waitT(1.1); } } },
