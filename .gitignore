@@ -3,3 +3,6 @@
 
 # Local pre-integration backup (rollback safety, not for the repo)
 design/index.html.bak
+
+# Generated audition harness (rebuild with: node design/build-bgm.js)
+bgm-demo.html
