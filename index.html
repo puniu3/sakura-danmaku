@@ -858,7 +858,7 @@ function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w
 
 let _vig=null;
 function buildVignette(){ const cv=document.createElement('canvas'); cv.width=PF_W; cv.height=PF_H; const c=cv.getContext('2d'); const g=c.createRadialGradient(PF_W/2,PF_H/2,PF_H*0.35,PF_W/2,PF_H/2,PF_H*0.72); g.addColorStop(0,'rgba(40,18,46,0)'); g.addColorStop(1,'rgba(40,18,46,0.5)'); c.fillStyle=g; c.fillRect(0,0,PF_W,PF_H); c.fillStyle='rgba(0,0,0,0.05)'; for(let y=0;y<PF_H;y+=3) c.fillRect(0,y,PF_W,1); _vig=cv; }
-function RenderInit(canvasEl){ canvas=canvasEl; ctx=canvas.getContext('2d',{alpha:false,desynchronized:true}); buildPetals(); buildVignette(); window.addEventListener('resize',RenderResize); RenderResize(); }
+function RenderInit(canvasEl){ canvas=canvasEl; ctx=canvas.getContext('2d',{alpha:false,desynchronized:true}); buildPetals(); buildScenery(); buildVignette(); window.addEventListener('resize',RenderResize); RenderResize(); }
 function RenderResize(){ dpr=Math.min(DPR_CAP,window.devicePixelRatio||1); canvas.width=Math.round(CANVAS_W*dpr); canvas.height=Math.round(CANVAS_H*dpr); const sx=window.innerWidth/CANVAS_W, sy=window.innerHeight/CANVAS_H; let s=Math.min(sx,sy); if(s>=1) s=Math.max(1,Math.floor(s*2)/2); canvas.style.width=(CANVAS_W*s)+'px'; canvas.style.height=(CANVAS_H*s)+'px'; ctx.imageSmoothingEnabled=true; }
 
 // ---- bullet sprite cache ----
@@ -890,11 +890,112 @@ function getPlayerShotSprite(kind,hue){ const key=kind+'|'+hueKey(hue); let cv=_
 
 // ---- background ----
 let _skyCache={d:999,c0:'',c1:'',c2:''};
-function drawBackground(t){ const drift=Math.sin(t*0.05)*14, db=Math.round(drift); if(db!==_skyCache.d){ _skyCache.d=db; _skyCache.c0=shiftHue(PALETTE.skyTop,drift); _skyCache.c1=shiftHue(PALETTE.skyMid,drift*0.5); _skyCache.c2=shiftHue(PALETTE.skyBot,-drift*0.4); } const g=ctx.createLinearGradient(0,0,0,PF_H); g.addColorStop(0,_skyCache.c0); g.addColorStop(0.5,_skyCache.c1); g.addColorStop(1,_skyCache.c2); ctx.fillStyle=g; ctx.fillRect(0,0,PF_W,PF_H); ctx.save(); ctx.globalAlpha=0.5; for(let i=0;i<3;i++){ const y=((t*8*(i+1))%(PF_H+120))-60; const cg=ctx.createLinearGradient(0,y-30,0,y+30); cg.addColorStop(0,'rgba(255,255,255,0)'); cg.addColorStop(0.5,PALETTE.cloud); cg.addColorStop(1,'rgba(255,255,255,0)'); ctx.fillStyle=cg; ctx.fillRect(0,y-30,PF_W,60); } ctx.restore(); }
-function buildPetals(){ const L=[{n:14,scale:0.55,vy:18,sway:10,alpha:0.55},{n:18,scale:0.8,vy:34,sway:16,alpha:0.8},{n:12,scale:1.15,vy:58,sway:24,alpha:1.0}]; petals.length=0; L.forEach((layer,li)=>{ for(let i=0;i<layer.n;i++) petals.push({ layer:li, x:rng()*PF_W, y:rng()*PF_H, scale:layer.scale*(0.7+rng()*0.6), vy:layer.vy*(0.8+rng()*0.4), sway:layer.sway, swayPh:rng()*6.28, swaySpd:0.6+rng()*0.8, rot:rng()*6.28, rotV:(rng()-0.5)*1.4, alpha:layer.alpha }); }); }
+function drawBackground(t){ const drift=Math.sin(t*0.05)*14, db=Math.round(drift); if(db!==_skyCache.d){ _skyCache.d=db; _skyCache.c0=shiftHue(PALETTE.skyTop,drift); _skyCache.c1=shiftHue(PALETTE.skyMid,drift*0.5); _skyCache.c2=shiftHue(PALETTE.skyBot,-drift*0.4); } const g=ctx.createLinearGradient(0,0,0,PF_H); g.addColorStop(0,_skyCache.c0); g.addColorStop(0.5,_skyCache.c1); g.addColorStop(1,_skyCache.c2); ctx.fillStyle=g; ctx.fillRect(0,0,PF_W,PF_H); }
+function buildPetals(){ const L=[{n:14,scale:0.55,vy:18,sway:10,alpha:0.55},{n:18,scale:0.8,vy:34,sway:16,alpha:0.8},{n:12,scale:1.15,vy:68,sway:24,alpha:1.0}]; petals.length=0; L.forEach((layer,li)=>{ for(let i=0;i<layer.n;i++) petals.push({ layer:li, x:rng()*PF_W, y:rng()*PF_H, scale:layer.scale*(0.7+rng()*0.6), vy:layer.vy*(0.8+rng()*0.4), sway:layer.sway, swayPh:rng()*6.28, swaySpd:0.6+rng()*0.8, rot:rng()*6.28, rotV:(rng()-0.5)*1.4, alpha:layer.alpha }); }); }
 const _petalSprite=(()=>{ const out=[]; PALETTE.petal.forEach(col=>{ const W=24,cv=document.createElement('canvas'); cv.width=W; cv.height=W; const c=cv.getContext('2d'); c.translate(W/2,W/2); c.fillStyle=col; c.beginPath(); c.moveTo(0,-9); c.bezierCurveTo(7,-6,7,6,0,9); c.bezierCurveTo(-7,6,-7,-6,0,-9); c.fill(); c.strokeStyle=PALETTE.petalEdge; c.lineWidth=0.8; c.beginPath(); c.moveTo(0,-8); c.lineTo(0,7); c.stroke(); out.push(cv); }); return out; })();
 function updateAndDrawPetals(dt,t){ for(const p of petals){ p.y+=p.vy*dt; p.swayPh+=p.swaySpd*dt; p.rot+=p.rotV*dt; if(p.y>PF_H+16){ p.y=-16; p.x=rng()*PF_W; } const x=p.x+Math.sin(p.swayPh)*p.sway; const spr=_petalSprite[p.layer]; ctx.save(); ctx.globalAlpha=p.alpha; ctx.translate(x,p.y); ctx.rotate(p.rot); const s=p.scale; ctx.scale(s,s*(0.6+0.4*Math.abs(Math.cos(p.swayPh)))); ctx.drawImage(spr,-spr.width/2,-spr.height/2); ctx.restore(); } }
 function drawPocLine(){ ctx.save(); ctx.globalAlpha=0.18; ctx.strokeStyle='#ffffff'; ctx.lineWidth=1; ctx.setLineDash([6,8]); ctx.beginPath(); ctx.moveTo(8,POC_LINE_Y); ctx.lineTo(PF_W-8,POC_LINE_Y); ctx.stroke(); ctx.setLineDash([]); ctx.restore(); }
+
+// ---- aerial scrolling scenery (flying over the Vernal Petal Lane) ----
+// Visual-only parallax ground plane that scrolls to convey forward flight.
+// Driven off the sim clock T (freezes on pause, scales with slow-mo, like drawBackground),
+// eases to a slow hover when a boss is present ("arrived at the destination").
+let bgScroll=0, bgSpeed=10, _bgLastT=0;
+const BG_CRUISE=10, BG_HOVER=2, LANE_SPAN=1e9;
+const TILE_H=608, STREAM_GAP=900;
+// bird's-eye projection (a BACKGROUND-ONLY illusion; the entity pass stays on the raw PF_W x PF_H rect).
+// near edge (bottom) scale=1, far edge (GROUND_TOP) scale~0.09; nothing is sampled at/above HORIZON_Y (no 1/0).
+const HORIZON_Y=48, GROUND_TOP=96, CAM=120, DEN=PF_H-HORIZON_Y;
+const N_STRIPS=24, STRIP_PX=(PF_H-GROUND_TOP)/N_STRIPS, LANE_ROW=20, SCN_SPAN=1210, HAZE_H=360;
+const PUFF_CULL_S=0.12, LANTERN_CULL_S=0.30, STREAM_MIN_S=0.18;
+const sAt=y=>(y-HORIZON_Y)/DEN, gAt=y=>{ const t=sAt(y); return CAM*(1-t)/t; }, sOfG=g=>CAM/(CAM+g);
+let _hazeCap=null, _groundTile=null, _streamSpr=null, _lanternSpr=null;
+const _mistSpr=[], canopyVar=[], puffs=[], lanterns=[], STRIPS=[], _ys=[], _cxs=[], _ss=[];
+const SCN={ groundBase:'#d8edc9', tones:['#cfe6c4','#f3d4e0','#e6dcf2','#f6eccf','#d2e8c2'], seam:'rgba(201,183,154,0.42)',
+            laneShoulder:'rgba(198,182,156,0.5)', laneBed:'#f3e6cf', lanePave:'rgba(255,250,240,0.32)' };
+// single source of truth for the path: shared by the lane stroke AND every puff/lantern x.
+function laneCx(wy){ let cx=PF_W*0.5+Math.sin(wy*0.0090)*78+Math.sin(wy*0.0235+1.7)*26; const lo=PF_W*0.30, hi=PF_W*0.70; return cx<lo?lo:(cx>hi?hi:cx); }
+function buildScenery(){
+  const srng=makeRng(0x5A6B7C8D); // independent stream — must NOT perturb gameplay rng
+  // ground patchwork tile, authored seamless over TILE_H (patches drawn at y, y±TILE_H)
+  { const cv=document.createElement('canvas'); cv.width=PF_W; cv.height=TILE_H; const c=cv.getContext('2d');
+    c.fillStyle=SCN.groundBase; c.fillRect(0,0,PF_W,TILE_H);
+    const rr=(x,y,w,h,r)=>{ c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); };
+    for(let i=0;i<22;i++){ const bx=srng()*PF_W, by=srng()*TILE_H, bw=46+srng()*96, bh=34+srng()*78, rot=(srng()-0.5)*0.7, tone=SCN.tones[(srng()*SCN.tones.length)|0], a=0.42+srng()*0.34, rad=8+srng()*12;
+      for(const oy of [0,-TILE_H,TILE_H]){ c.save(); c.translate(bx,by+oy); c.rotate(rot); c.globalAlpha=a; c.fillStyle=tone; rr(-bw/2,-bh/2,bw,bh,rad); c.fill(); c.globalAlpha=a*0.7; c.lineWidth=1.1; c.strokeStyle=SCN.seam; c.stroke(); c.restore(); } }
+    _groundTile=cv; }
+  // distance haze: a graded veil over the upper field — densest at the far top, fully clear by mid-screen.
+  // (this IS the depth cue: the farther/higher, the more atmosphere; it also masks far-strip downscale shimmer.)
+  { const cv=document.createElement('canvas'); cv.width=PF_W; cv.height=HAZE_H; const c=cv.getContext('2d');
+    const g=c.createLinearGradient(0,0,0,HAZE_H);
+    g.addColorStop(0,'rgba(246,240,241,0.96)'); g.addColorStop(0.13,'rgba(246,240,241,0.90)'); g.addColorStop(0.27,'rgba(244,239,236,0.78)');
+    g.addColorStop(0.5,'rgba(238,238,230,0.44)'); g.addColorStop(0.75,'rgba(232,238,226,0.18)'); g.addColorStop(1,'rgba(230,238,224,0)');
+    c.fillStyle=g; c.fillRect(0,0,PF_W,HAZE_H);
+    // faint distant hills sitting in the haze band near the horizon
+    c.fillStyle='rgba(202,219,198,0.45)'; const hump=(cx,base,top,w)=>{ c.beginPath(); c.moveTo(cx-w,base); c.quadraticCurveTo(cx,top,cx+w,base); c.closePath(); c.fill(); };
+    hump(PF_W*0.30,108,74,150); hump(PF_W*0.72,112,80,140);
+    c.strokeStyle='rgba(228,240,222,0.5)'; c.lineWidth=1.2; c.beginPath(); c.moveTo(PF_W*0.30-150,108); c.quadraticCurveTo(PF_W*0.30,74,PF_W*0.30+150,108); c.moveTo(PF_W*0.72-140,112); c.quadraticCurveTo(PF_W*0.72,80,PF_W*0.72+140,112); c.stroke();
+    _hazeCap=cv; }
+  // stream slab (a wide soft water band with a diagonal glint)
+  { const W=PF_W+140, H=96, cv=document.createElement('canvas'); cv.width=W; cv.height=H; const c=cv.getContext('2d');
+    const g=c.createLinearGradient(0,0,0,H); g.addColorStop(0,'rgba(200,230,242,0)'); g.addColorStop(0.5,'rgba(200,230,242,0.85)'); g.addColorStop(1,'rgba(200,230,242,0)'); c.fillStyle=g; c.fillRect(0,0,W,H);
+    c.strokeStyle='rgba(255,255,255,0.5)'; c.lineWidth=2.5; c.beginPath(); c.moveTo(0,H*0.6); c.lineTo(W,H*0.4); c.stroke();
+    c.strokeStyle='rgba(255,255,255,0.18)'; c.lineWidth=7; c.beginPath(); c.moveTo(0,H*0.66); c.lineTo(W,H*0.46); c.stroke();
+    _streamSpr=cv; }
+  // low mist sheets (near-depth, drift slightly faster than ground)
+  for(let k=0;k<2;k++){ const H=84, cv=document.createElement('canvas'); cv.width=PF_W; cv.height=H; const c=cv.getContext('2d');
+    for(let w=0;w<3;w++){ const cx=srng()*PF_W, cy=H*0.5+(srng()-0.5)*24, rx=70+srng()*90, ry=18+srng()*12; const g=c.createRadialGradient(cx,cy,2,cx,cy,rx); g.addColorStop(0,'rgba(255,255,255,0.18)'); g.addColorStop(1,'rgba(255,255,255,0)'); c.fillStyle=g; c.save(); c.translate(cx,cy); c.scale(1,ry/rx); c.beginPath(); c.arc(0,0,rx,0,TAU); c.fill(); c.restore(); }
+    _mistSpr.push(cv); }
+  // sakura canopy variants (tree crowns seen from above)
+  for(let v=0;v<3;v++){ const W=46, R=19, cv=document.createElement('canvas'); cv.width=W; cv.height=W; const c=cv.getContext('2d'); c.translate(W/2,W/2);
+    const g=c.createRadialGradient(-R*0.15,-R*0.18,R*0.15,0,0,R); g.addColorStop(0,'#ffe6f0'); g.addColorStop(0.5,'#ffc8dd'); g.addColorStop(0.85,'#ffd1e2'); g.addColorStop(1,'rgba(255,240,246,0)'); c.fillStyle=g; c.beginPath(); c.arc(0,0,R,0,TAU); c.fill();
+    c.fillStyle='rgba(255,240,246,0.85)'; const lobes=5+v; for(let i=0;i<lobes;i++){ const a=i/lobes*TAU+v*0.7; c.beginPath(); c.arc(Math.cos(a)*R*0.82,Math.sin(a)*R*0.82,R*0.26,0,TAU); c.fill(); }
+    const g2=c.createRadialGradient(0,0,1,0,0,R*0.8); g2.addColorStop(0,'#ffd4e3'); g2.addColorStop(0.7,'rgba(255,200,221,0.85)'); g2.addColorStop(1,'rgba(255,200,221,0)'); c.fillStyle=g2; c.beginPath(); c.arc(0,0,R*0.8,0,TAU); c.fill();
+    c.fillStyle='rgba(247,169,198,0.7)'; for(let i=0;i<4;i++){ const a=i*1.9+v; const d=R*(0.2+0.16*i); c.beginPath(); c.arc(Math.cos(a)*d,Math.sin(a)*d,2.1,0,TAU); c.fill(); }
+    canopyVar.push(cv); }
+  // roadside stone lantern
+  { const W=16, cv=document.createElement('canvas'); cv.width=W; cv.height=W; const c=cv.getContext('2d'); c.translate(W/2,W/2);
+    c.fillStyle='rgba(120,100,66,0.45)'; c.beginPath(); c.arc(0,0,6,0,TAU); c.fill();
+    c.fillStyle='#ecdcb6'; c.beginPath(); c.arc(0,0,4.6,0,TAU); c.fill();
+    c.fillStyle='rgba(255,224,138,0.6)'; c.beginPath(); c.arc(0,0,2.1,0,TAU); c.fill();
+    _lanternSpr=cv; }
+  // perspective strip LUT (built once; keeps all gAt()/division out of the per-frame hot loop)
+  STRIPS.length=0; for(let i=0;i<N_STRIPS;i++){ const yTop=GROUND_TOP+i*STRIP_PX, gT=gAt(yTop), gB=gAt(yTop+STRIP_PX); STRIPS.push({ destY:Math.round(yTop), destH:Math.ceil(STRIP_PX)+1, gTop:gT, worldSpan:gT-gB }); }
+  // pools (worldY = world-travel distance; positions from the independent srng → gameplay determinism untouched)
+  puffs.length=0; for(let i=0;i<22;i++) puffs.push({ worldY:i*(SCN_SPAN/22), side:(i&1)?1:-1, off:srng()*22, v:(srng()*3)|0 });
+  lanterns.length=0; for(let i=0;i<6;i++) lanterns.push({ worldY:i*(SCN_SPAN/6)+srng()*60, side:srng()<0.5?-1:1 });
+}
+function drawScenery(){
+  let dT=T-_bgLastT; _bgLastT=T; if(dT<0||dT>0.5) dT=0;           // T-derived → freezes on pause, scales with slow-mo
+  const target=(game.boss&&!game.boss.dead)?BG_HOVER:BG_CRUISE;
+  bgSpeed+=(target-bgSpeed)*Math.min(1,dT*0.7);                    // ~1.4s ease to a hover on boss arrival
+  bgScroll=(bgScroll+bgSpeed*dT)%LANE_SPAN; const sc=bgScroll;     // sc = world-travel distance flown
+  ctx.save();
+  ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='low';
+  // GROUND: 24 horizontal strips, each a depth-mapped slice of the seamless tile → vertical foreshortening.
+  // Far strips downsample a tall world span into a thin band; near strips magnify a thin span. (rows above
+  // GROUND_TOP carry no ground — they are the hazed far distance, painted by drawBackground's sky + the veil.)
+  for(let i=0;i<N_STRIPS;i++){ const st=STRIPS[i], span=st.worldSpan, dY=st.destY, dH=st.destH; const srcV=((sc+st.gTop)%TILE_H+TILE_H)%TILE_H;
+    if(srcV+span<=TILE_H){ ctx.drawImage(_groundTile,0,srcV,PF_W,span,0,dY,PF_W,dH); }
+    else { const aSpan=TILE_H-srcV, hA=Math.ceil(dH*(aSpan/span)); ctx.drawImage(_groundTile,0,srcV,PF_W,aSpan,0,dY,PF_W,hA+1); ctx.drawImage(_groundTile,0,0,PF_W,span-aSpan,0,dY+hA,PF_W,dH-hA); } }
+  // STREAM crossings, projected → narrow & thin into the distance
+  { const hi=sc+gAt(GROUND_TOP); for(let Wd=Math.ceil(sc/STREAM_GAP)*STREAM_GAP; Wd<=hi; Wd+=STREAM_GAP){ const g=Wd-sc; if(g<0) continue; const s=sOfG(g); if(s<STREAM_MIN_S) continue; const y=HORIZON_Y+DEN*s, w=_streamSpr.width*s, h=_streamSpr.height*s; ctx.drawImage(_streamSpr,(PF_W-w)/2,y-h/2,w,h); } }
+  // HERO LANE: tapering filled ribbon (shoulder + bed) + dashed centerline, converging to a vanishing tip.
+  let n=0; for(let y=GROUND_TOP;y<=PF_H+2;y+=LANE_ROW){ const s=sAt(y); _ss[n]=s; _ys[n]=y; _cxs[n]=PF_W/2+(laneCx(sc+gAt(y))-PF_W/2)*s; n++; }
+  ctx.lineCap='round'; ctx.lineJoin='round';
+  ctx.fillStyle=SCN.laneShoulder; ctx.beginPath(); ctx.moveTo(_cxs[0]-30*_ss[0],_ys[0]); for(let i=1;i<n;i++) ctx.lineTo(_cxs[i]-30*_ss[i],_ys[i]); for(let i=n-1;i>=0;i--) ctx.lineTo(_cxs[i]+30*_ss[i],_ys[i]); ctx.closePath(); ctx.fill();
+  ctx.fillStyle=SCN.laneBed; ctx.beginPath(); ctx.moveTo(_cxs[0]-22*_ss[0],_ys[0]); for(let i=1;i<n;i++) ctx.lineTo(_cxs[i]-22*_ss[i],_ys[i]); for(let i=n-1;i>=0;i--) ctx.lineTo(_cxs[i]+22*_ss[i],_ys[i]); ctx.closePath(); ctx.fill();
+  ctx.setLineDash([10,16]); ctx.strokeStyle=SCN.lanePave; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(_cxs[0],_ys[0]); for(let i=1;i<n;i++) ctx.lineTo(_cxs[i],_ys[i]); ctx.stroke(); ctx.setLineDash([]);
+  // SCENERY: sakura canopies (far→near painter order) + lanterns, depth-scaled, hugging the same lane curve
+  puffs.sort((a,b)=>(((b.worldY-sc)%SCN_SPAN+SCN_SPAN)%SCN_SPAN)-(((a.worldY-sc)%SCN_SPAN+SCN_SPAN)%SCN_SPAN));
+  for(const p of puffs){ const g=((p.worldY-sc)%SCN_SPAN+SCN_SPAN)%SCN_SPAN, s=sOfG(g); if(s<PUFF_CULL_S) continue; const y=HORIZON_Y+DEN*s, x=PF_W/2+(laneCx(sc+g)-PF_W/2)*s+p.side*(30+p.off)*s, spr=canopyVar[p.v], w=spr.width*s; ctx.drawImage(spr,x-w/2,y-w/2,w,w); }
+  for(const p of lanterns){ const g=((p.worldY-sc)%SCN_SPAN+SCN_SPAN)%SCN_SPAN, s=sOfG(g); if(s<LANTERN_CULL_S) continue; const y=HORIZON_Y+DEN*s, x=PF_W/2+(laneCx(sc+g)-PF_W/2)*s+p.side*52*s, w=_lanternSpr.width*s; ctx.drawImage(_lanternSpr,x-w/2,y-w/2,w,w); }
+  // HAZE: graded distance veil (densest far, clear near) — depth cue + far-strip anti-shimmer mask
+  ctx.drawImage(_hazeCap,0,0);
+  // MIST: nearest layer, drifting low in the clear foreground
+  const bandH=PF_H*0.45; for(let k=0;k<2;k++){ const my=PF_H*0.55+(((sc*1.35+k*400)%bandH)+bandH)%bandH; ctx.drawImage(_mistSpr[k],0,my); }
+  ctx.restore();
+}
 
 // ---- spell bg + boss + banner ----
 function drawSpellBackground(t,intensity){ if(intensity<=0) return; ctx.save(); const g=ctx.createRadialGradient(PF_W*0.5,PF_H*0.42,40,PF_W*0.5,PF_H*0.42,PF_H*0.8); g.addColorStop(0,'rgba(60,20,90,0)'); g.addColorStop(1,'rgba(20,6,34,'+(0.5*intensity)+')'); ctx.fillStyle=g; ctx.fillRect(0,0,PF_W,PF_H); ctx.globalCompositeOperation='lighter'; ctx.translate(PF_W*0.5,PF_H*0.42); ctx.rotate(t*0.25); for(let i=0;i<10;i++){ ctx.rotate(TAU/10); const sg=ctx.createLinearGradient(0,0,0,-PF_H); sg.addColorStop(0,'rgba(180,120,255,'+(0.1*intensity)+')'); sg.addColorStop(1,'rgba(180,120,255,0)'); ctx.fillStyle=sg; ctx.beginPath(); ctx.moveTo(-26,0); ctx.lineTo(26,0); ctx.lineTo(8,-PF_H); ctx.lineTo(-8,-PF_H); ctx.closePath(); ctx.fill(); } ctx.restore(); }
@@ -964,7 +1065,7 @@ function drawOverlays(){ ctx.setTransform(dpr,0,0,dpr,0,0); const cx=PF_W/2; if(
 // ---- master frame ----
 function RenderFrame(now,alpha){ const dt=_lastNow?Math.min(0.05,(now-_lastNow)/1000):0.016; _lastNow=now; _fpsAcc+=dt; _fpsN++; if(_fpsAcc>=0.25){ _fps=_fps*0.5+(_fpsN/_fpsAcc)*0.5; _fpsAcc=0; _fpsN=0; } updateCam(dt); const paused=game.paused; ctx.setTransform(dpr,0,0,dpr,0,0); ctx.fillStyle='#05030a'; ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
   ctx.save(); ctx.beginPath(); ctx.rect(PF_X,PF_Y,PF_W,PF_H); ctx.clip();
-  ctx.save(); ctx.translate(PF_X,PF_Y); drawBackground(T); updateAndDrawPetals(paused?0:dt,T); const spellI=(game.boss&&game.boss.inSpell&&!game.boss.dead)?(game.spellIntensity!=null?game.spellIntensity:1):0; drawSpellBackground(T,spellI); if(game.state===STATE.PLAYING||game.state===STATE.PAUSED||game.boss){ ctx.fillStyle='rgba(22,9,38,0.36)'; ctx.fillRect(0,0,PF_W,PF_H); } if(game.state===STATE.PLAYING) drawPocLine(); ctx.restore();
+  ctx.save(); ctx.translate(PF_X,PF_Y); drawBackground(T); drawScenery(); updateAndDrawPetals(paused?0:dt,T); const spellI=(game.boss&&game.boss.inSpell&&!game.boss.dead)?(game.spellIntensity!=null?game.spellIntensity:1):0; drawSpellBackground(T,spellI); if(game.state===STATE.PLAYING||game.state===STATE.PAUSED||game.boss){ ctx.fillStyle='rgba(22,9,38,0.36)'; ctx.fillRect(0,0,PF_W,PF_H); } if(game.state===STATE.PLAYING) drawPocLine(); ctx.restore();
   ctx.save(); ctx.translate(PF_X+cam.shakeX,PF_Y+cam.shakeY); drawItems(T); drawPlayerShots(alpha); if(game.boss&&!game.boss.dead) drawBoss(game.boss,T); drawEnemies(ctx,T,alpha); drawParticles(); drawEnemyBullets(alpha); drawPlayer(T); drawWaves(dt); drawPops(dt); ctx.restore();
   ctx.save(); ctx.translate(PF_X,PF_Y); drawBanner(paused?0:dt); drawFlash(); drawVignette(T); ctx.restore();
   ctx.restore();
