@@ -55,8 +55,10 @@ const GRAZE_SCORE = 50;
 const EXTEND_THRESHOLDS = [1e6,3e6,6e6,1e7];
 const POINT_BASE = 10000, POINT_MIN = 2000, SPELL_CAPTURE_BONUS = 500000;
 const ITEM_GRAV = 120, ITEM_TERMINAL = 130, ITEM_R = 11, ITEM_COLLECT_R = 30;
-const ITEM_MAGNET_ACC = 900, ITEM_MAGNET_MAXSPD = 520;
-const AUTO_COLLECT_Y = 64, POC_LINE_Y = 140;
+// magnet: speed ramps at full ACC toward MAXSPD; heading slews loosely at TURN (rad/s);
+// PULL is the min closing-speed fraction (radial floor) that guarantees the radius shrinks → no orbit.
+const ITEM_MAGNET_ACC = 2400, ITEM_MAGNET_MAXSPD = 1100, ITEM_MAGNET_TURN = 9, ITEM_MAGNET_PULL = 0.45;
+const POC_LINE_Y = 140;
 const ITEM_HUE = { power:15, point:205, bigpower:15, oneup:340, full:280, star:55, bomb:200 };
 
 const STATE = { TITLE:0, PLAYING:1, PAUSED:2, GAMEOVER:3, STAGECLEAR:4 };
@@ -1105,8 +1107,19 @@ function dropItem(x,y,kind){ spawnItem(kind,x,y,rng.range(-30,30),-rng.range(40,
 function updateItems(dt){ const pAlive=(player.state==='alive'||player.state==='pendingdeath'); const magnetAll=game.fullpower||(pAlive&&player.y<=POC_LINE_Y);
   for(let i=items.length-1;i>=0;i--){ const it=items[i];
     if(!it.magnet){ if(magnetAll&&pAlive) it.magnet=true; }
-    if(it.y<=AUTO_COLLECT_Y&&pAlive) it.magnet=true;
-    if(it.magnet&&pAlive){ const dx=player.x-it.x, dy=player.y-it.y, d=Math.hypot(dx,dy)||1; it.vx+=(dx/d)*ITEM_MAGNET_ACC*dt; it.vy+=(dy/d)*ITEM_MAGNET_ACC*dt; const sp=Math.hypot(it.vx,it.vy); if(sp>ITEM_MAGNET_MAXSPD){ it.vx*=ITEM_MAGNET_MAXSPD/sp; it.vy*=ITEM_MAGNET_MAXSPD/sp; } } else { it.vy+=ITEM_GRAV*dt; if(it.vy>ITEM_TERMINAL) it.vy=ITEM_TERMINAL; it.vx*=0.992; }
+    if(it.magnet&&pAlive){
+      // decoupled homing: speed ramps fast (full ACC), heading slews loosely (TURN rad/s),
+      // radial floor (PULL) forces the radius to shrink every tick so it can't orbit.
+      const dx=player.x-it.x, dy=player.y-it.y, d=Math.hypot(dx,dy)||1, ux=dx/d, uy=dy/d;
+      if(it.spd==null){ it.spd=Math.hypot(it.vx,it.vy); it.dir=(it.spd>1)?Math.atan2(it.vy,it.vx):Math.atan2(dy,dx); }
+      it.spd=Math.min(ITEM_MAGNET_MAXSPD, it.spd+ITEM_MAGNET_ACC*dt);
+      let da=Math.atan2(dy,dx)-it.dir; while(da>Math.PI)da-=TAU; while(da<-Math.PI)da+=TAU;
+      const maxTurn=ITEM_MAGNET_TURN*dt; if(da>maxTurn)da=maxTurn; else if(da<-maxTurn)da=-maxTurn; it.dir+=da;
+      let vx=Math.cos(it.dir)*it.spd, vy=Math.sin(it.dir)*it.spd;
+      const radial=vx*ux+vy*uy, minClose=ITEM_MAGNET_PULL*it.spd;
+      if(radial<minClose){ const tx=vx-radial*ux, ty=vy-radial*uy, tlen=Math.hypot(tx,ty), maxTang=Math.sqrt(Math.max(0,it.spd*it.spd-minClose*minClose)), sc=tlen>0?Math.min(1,maxTang/tlen):0; vx=minClose*ux+tx*sc; vy=minClose*uy+ty*sc; it.dir=Math.atan2(vy,vx); }
+      it.vx=vx; it.vy=vy;
+    } else { it.vy+=ITEM_GRAV*dt; if(it.vy>ITEM_TERMINAL) it.vy=ITEM_TERMINAL; it.vx*=0.992; if(it.spd!=null){ it.spd=null; it.dir=null; } }
     it.x+=it.vx*dt; it.y+=it.vy*dt;
     if(pAlive){ const ddx=it.x-player.x, ddy=it.y-player.y; if(ddx*ddx+ddy*ddy<=ITEM_COLLECT_R*ITEM_COLLECT_R){ collectItem(it); swapRemove(items,i); continue; } }
     if(it.y>PF_H+40){ swapRemove(items,i); }
