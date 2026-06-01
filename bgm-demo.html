@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BGM Audition — 弾幕STG</title>
+<style>
+  :root{
+    --bg:#140a20; --panel:#20122f; --edge:#3d2459; --text:#ffe9fb; --dim:#9d83c0;
+    --stage:#7fe0a8; --midboss:#ffce5e; --boss:#ff6aa0; --accent:#b98cff;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; height:100%; }
+  body{
+    background:radial-gradient(120% 90% at 50% -10%, #2a1640 0%, var(--bg) 60%);
+    color:var(--text); font-family:system-ui,-apple-system,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+    display:flex; flex-direction:column; align-items:center; gap:18px; padding:26px 16px 40px; min-height:100%;
+  }
+  h1{ font-size:20px; font-weight:700; margin:0; letter-spacing:.04em; }
+  .sub{ color:var(--dim); font-size:12.5px; margin-top:-10px; text-align:center; line-height:1.5; }
+  .cards{ display:flex; flex-wrap:wrap; gap:14px; justify-content:center; width:100%; max-width:760px; }
+  .card{
+    flex:1 1 210px; min-width:200px; border:1px solid var(--edge); border-radius:16px;
+    background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(0,0,0,.18)); padding:16px 16px 18px;
+    display:flex; flex-direction:column; gap:10px; transition:border-color .2s, box-shadow .2s, transform .12s;
+  }
+  .card.playing{ border-color:var(--c); box-shadow:0 0 0 1px var(--c), 0 8px 30px -8px var(--c); }
+  .card .tag{ font-size:11px; letter-spacing:.18em; color:var(--c); font-weight:700; }
+  .card .name{ font-size:18px; font-weight:700; }
+  .card .meta{ font-size:11.5px; color:var(--dim); line-height:1.5; min-height:34px; }
+  button{
+    font:inherit; color:var(--text); border:1px solid var(--edge); background:#2c1a40;
+    border-radius:10px; padding:11px 14px; cursor:pointer; font-weight:600; transition:filter .12s, background .12s;
+  }
+  button:active{ transform:translateY(1px); }
+  @media (hover:hover) and (pointer:fine){ button:hover{ filter:brightness(1.18); } }
+  .card .play{ background:var(--c); color:#1a0d28; border-color:transparent; font-size:15px; }
+  .controls{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; justify-content:center; max-width:760px; width:100%; }
+  .controls .stop{ background:#3a2150; }
+  label.vol{ display:flex; align-items:center; gap:8px; font-size:12px; color:var(--dim); }
+  input[type=range]{ width:160px; accent-color:var(--accent); }
+  .viz-wrap{ width:100%; max-width:760px; }
+  canvas{ width:100%; height:120px; display:block; border:1px solid var(--edge); border-radius:12px; background:#0d0617; }
+  .now{ font-size:13px; color:var(--dim); height:18px; }
+  .now b{ color:var(--text); }
+  .footer{ font-size:11px; color:var(--dim); max-width:680px; text-align:center; line-height:1.6; }
+</style>
+</head>
+<body>
+  <h1>🌸 BGM Audition Harness</h1>
+  <div class="sub">道中 / 中ボス / 大ボス の3トラックを試聴。<br>カードの再生ボタンで切替（クロスフェード）。最終的にゲーム本体へ移植します。</div>
+
+  <div class="cards" id="cards"></div>
+
+  <div class="controls">
+    <button class="stop" id="stop">■ 停止</button>
+    <button id="mute">🔊 ミュート</button>
+    <label class="vol">音量 <input type="range" id="vol" min="0" max="1" step="0.01" value="0.85"></label>
+  </div>
+
+  <div class="now" id="now">停止中</div>
+  <div class="viz-wrap"><canvas id="viz" width="1520" height="240"></canvas></div>
+
+  <div class="footer">
+    すべて Web Audio による手続き型合成（音声ファイル無し）。リミッタ -6dB/20:1 でクリップ防止。
+    ループは複数セクション（intro→A→B→…）構成で、最後に頭へ戻ります。
+  </div>
+
+<script>
+'use strict';
+// ============================================================================
+//  BASE AUDIO PRIMITIVES  (mirrors index.html's Audio module core)
+// ============================================================================
+let ctx=null, masterGain=null, limiter=null, musicGain=null, sfxGain=null, analyser=null, noiseBuf=null;
+let masterVol=0.85, muted=false;
+const MASTER_BASE_GAIN=0.42;
+
+function mtof(m){ return 440*Math.pow(2,(m-69)/12); }
+function now(){ return ctx?ctx.currentTime:0; }
+function makeNoiseBuffer(){ const len=(ctx.sampleRate*1)|0, buf=ctx.createBuffer(1,len,ctx.sampleRate), d=buf.getChannelData(0); for(let i=0;i<len;i++) d[i]=Math.random()*2-1; return buf; }
+function envGain(dest,t0,peak,atk,dec,sus,rel,holdAt){ const g=ctx.createGain(); g.gain.setValueAtTime(0.0001,t0); g.gain.exponentialRampToValueAtTime(Math.max(0.0002,peak),t0+atk); const sl=Math.max(0.0002,peak*sus); g.gain.exponentialRampToValueAtTime(sl,t0+atk+dec); const rs=(holdAt!=null)?holdAt:(t0+atk+dec); g.gain.setValueAtTime(sl,rs); g.gain.exponentialRampToValueAtTime(0.0001,rs+rel); g.connect(dest); return g; }
+function tone(opts){ if(!ctx) return; const dest=opts.dest||sfxGain, t0=opts.t0!=null?opts.t0:now(); const f0=opts.f0, f1=opts.f1!=null?opts.f1:f0; const peak=opts.peak!=null?opts.peak:0.3; const atk=opts.atk!=null?opts.atk:0.004,dec=opts.dec!=null?opts.dec:0.02,sus=opts.sus!=null?opts.sus:0.4,rel=opts.rel!=null?opts.rel:0.08; const dur=opts.dur!=null?opts.dur:(atk+dec+rel); const osc=ctx.createOscillator(); osc.type=opts.type||'sine'; osc.frequency.setValueAtTime(f0,t0); if(f1!==f0){ if(opts.glideExp) osc.frequency.exponentialRampToValueAtTime(Math.max(1,f1),t0+dur); else osc.frequency.linearRampToValueAtTime(f1,t0+dur); } if(opts.detune) osc.detune.setValueAtTime(opts.detune,t0); const holdAt=t0+Math.max(atk+dec,dur-rel); const g=envGain(dest,t0,peak,atk,dec,sus,rel,holdAt); if(opts.filter){ const bq=ctx.createBiquadFilter(); bq.type=opts.filter; bq.frequency.setValueAtTime(opts.filterFreq||1200,t0); if(opts.filterFreq1!=null) bq.frequency.linearRampToValueAtTime(opts.filterFreq1,t0+dur); if(opts.q!=null) bq.Q.value=opts.q; osc.connect(bq); bq.connect(g); } else osc.connect(g); const stopAt=holdAt+rel+0.02; osc.start(t0); osc.stop(stopAt); osc.onended=function(){ try{ osc.disconnect(); g.disconnect(); }catch(e){} }; }
+function noise(opts){ if(!ctx) return; const dest=opts.dest||sfxGain, t0=opts.t0!=null?opts.t0:now(); const peak=opts.peak!=null?opts.peak:0.25, atk=opts.atk!=null?opts.atk:0.002, rel=opts.rel!=null?opts.rel:0.12; const dur=opts.dur!=null?opts.dur:(atk+rel); const src=ctx.createBufferSource(); src.buffer=noiseBuf; src.loop=true; let node=src; if(opts.filter){ const bq=ctx.createBiquadFilter(); bq.type=opts.filter; bq.frequency.setValueAtTime(opts.filterFreq||2000,t0); if(opts.filterFreq1!=null) bq.frequency.exponentialRampToValueAtTime(Math.max(60,opts.filterFreq1),t0+dur); if(opts.q!=null) bq.Q.value=opts.q; src.connect(bq); node=bq; } const g=ctx.createGain(); g.gain.setValueAtTime(0.0001,t0); g.gain.exponentialRampToValueAtTime(Math.max(0.0002,peak),t0+atk); g.gain.exponentialRampToValueAtTime(0.0001,t0+dur); node.connect(g); g.connect(dest); src.start(t0); src.stop(t0+dur+0.02); src.onended=function(){ try{ src.disconnect(); g.disconnect(); }catch(e){} }; }
+
+function build(){
+  const AC=window.AudioContext||window.webkitAudioContext; ctx=new AC();
+  limiter=ctx.createDynamicsCompressor(); limiter.threshold.value=-6; limiter.knee.value=0; limiter.ratio.value=20; limiter.attack.value=0.003; limiter.release.value=0.1; limiter.connect(ctx.destination);
+  analyser=ctx.createAnalyser(); analyser.fftSize=1024; analyser.smoothingTimeConstant=0.78; analyser.connect(limiter);
+  masterGain=ctx.createGain(); masterGain.gain.value=MASTER_BASE_GAIN*masterVol; masterGain.connect(analyser);
+  musicGain=ctx.createGain(); musicGain.gain.value=0.0001; musicGain.connect(masterGain);
+  sfxGain=ctx.createGain(); sfxGain.gain.value=1.0; sfxGain.connect(masterGain);
+  noiseBuf=makeNoiseBuffer();
+}
+
+// ============================================================================
+//  BGM ENGINE  (inlined from design/bgm-engine.js)
+// ============================================================================
+// ===================== bgm-engine.js =====================
+// High-quality procedural BGM engine for the danmaku game.
+// Drop-in replacement for the simple 2-bar-loop tracks. Designed to be INLINED
+// into both bgm-demo.html (audition harness) and index.html (live game).
+//
+// Assumes these already exist in the host scope (they do in index.html's Audio module):
+//   ctx, musicGain, mtof(midi)->Hz, tone(opts), noise(opts), now()
+// where tone/noise schedule one-shot self-cleaning voices on opts.dest at opts.t0.
+//
+// ---- DATA MODEL ----------------------------------------------------------
+// A track is authored as SECTIONS (intro/A/B/bridge/...) plus an ARRANGEMENT
+// (the order the sections play; it loops at the end). At first use the track is
+// COMPILED: sections are concatenated in arrangement order into long per-lane
+// arrays, note gate-lengths are precomputed (legato), pad chords get hold-lengths,
+// and a flat drum map is built. The scheduler then just walks `step % totalSteps`.
+//
+// Lanes (each is an array of absolute MIDI numbers; 0 = rest):
+//   lead    main melody (THE hook) — layered/detuned for body
+//   harm    secondary harmony voice (3rd/6th under lead, softer)
+//   counter counter-melody that answers in the lead's rests
+//   arp     fast plucky arpeggio of the chord
+//   bass    main bassline
+//   sub     sine sub-octave on accents (optional)
+//   chords  pad: non-null entry = chord (MIDI array) struck & held until next chord
+//   kick/snare/hat/crash  drums. hat: 0 none, 1 closed, 2 open. crash: 0/1.
+// Any lane may be omitted from a section (treated as all-rests of correct length).
+// 1 bar = 16 sixteenth steps, 4/4.
+
+// ---- per-lane default voice timbres (a track overrides via track.voices) ----
+const DEFAULT_VOICES = {
+  lead: {
+    maxGate: 6,
+    layers: [
+      { type: 'triangle', octave: 0, detune: 0, gain: 1.00 },
+      { type: 'triangle', octave: 0, detune: 7, gain: 0.45 },
+      { type: 'sawtooth', octave: -1, detune: 0, gain: 0.30, filter: 'lowpass', filterFreq: 1900 },
+    ],
+    atk: 0.006, dec: 0.06, sus: 0.55, rel: 0.14,
+  },
+  harm: {
+    maxGate: 6,
+    layers: [{ type: 'triangle', octave: 0, detune: -5, gain: 1.0 }],
+    atk: 0.008, dec: 0.06, sus: 0.5, rel: 0.16, filter: 'lowpass', filterFreq: 2400,
+  },
+  counter: {
+    maxGate: 5,
+    layers: [{ type: 'square', octave: 0, detune: 0, gain: 1.0, filter: 'lowpass', filterFreq: 2200 }],
+    atk: 0.006, dec: 0.05, sus: 0.4, rel: 0.12,
+  },
+  arp: {
+    maxGate: 1,
+    layers: [{ type: 'triangle', octave: 0, detune: 0, gain: 1.0 }],
+    atk: 0.002, dec: 0.03, sus: 0.18, rel: 0.06, filter: 'lowpass', filterFreq: 2800,
+  },
+  bass: {
+    maxGate: 4,
+    layers: [{ type: 'sawtooth', octave: 0, detune: 0, gain: 1.0 }],
+    atk: 0.005, dec: 0.06, sus: 0.6, rel: 0.09, filter: 'lowpass', filterFreq: 720,
+  },
+  sub: {
+    maxGate: 8,
+    layers: [{ type: 'sine', octave: 0, detune: 0, gain: 1.0 }],
+    atk: 0.006, dec: 0.08, sus: 0.7, rel: 0.12,
+  },
+  pad: {
+    octave: 1, voices: 2, detune: 9, type: 'sawtooth',
+    atk: 0.09, dec: 0.14, sus: 0.7, rel: 0.4, filter: 'lowpass', filterFreq: 1700,
+  },
+  drums: {
+    kick:  { f0: 150, f1: 47, peak: 0.30, atk: 0.002, dec: 0.07, rel: 0.12, dur: 0.20, click: true },
+    snare: { tone1: 190, tone2: 250, hp: 1500, peak: 0.20, rel: 0.13, dur: 0.15 },
+    hatC:  { hp: 9000, peak: 0.055, rel: 0.028, dur: 0.032 },
+    hatO:  { hp: 8000, peak: 0.05, rel: 0.13, dur: 0.16 },
+    crash: { hp: 5500, peak: 0.12, rel: 0.5, dur: 0.6 },
+  },
+};
+
+const DEFAULT_GAINS = {
+  lead: 0.135, harm: 0.07, counter: 0.085, arp: 0.06, bass: 0.16, sub: 0.13, pad: 0.05,
+  kick: 1, snare: 1, hat: 1, crash: 1, // drum gains baked into voice peaks; these scale them
+};
+
+// deep-ish merge of a track's partial voices over the defaults
+function mergeVoices(over) {
+  over = over || {};
+  const out = {};
+  for (const k in DEFAULT_VOICES) {
+    const d = DEFAULT_VOICES[k], o = over[k];
+    if (!o) { out[k] = d; continue; }
+    if (k === 'drums') {
+      out.drums = {};
+      for (const dk in d) out.drums[dk] = Object.assign({}, d[dk], o[dk] || {});
+    } else {
+      out[k] = Object.assign({}, d, o);
+      if (o.layers) out[k].layers = o.layers; // replace layers wholesale if given
+    }
+  }
+  return out;
+}
+
+// ---- COMPILE -------------------------------------------------------------
+// Concatenate sections (per arrangement) into flat lanes; precompute gates.
+const MELODIC_LANES = ['lead', 'harm', 'counter', 'arp', 'bass', 'sub'];
+
+function laneFromSections(track, lane) {
+  const out = [];
+  for (const secName of track.arrangement) {
+    const sec = track.sections[secName];
+    const len = sec.bars * 16;
+    const a = sec[lane];
+    for (let i = 0; i < len; i++) out.push((a && a[i]) ? a[i] : 0);
+  }
+  return out;
+}
+
+function drumFromSections(track, lane) {
+  const out = [];
+  for (const secName of track.arrangement) {
+    const sec = track.sections[secName];
+    const len = sec.bars * 16;
+    const a = sec[lane];
+    for (let i = 0; i < len; i++) out.push((a && a[i]) ? a[i] : 0);
+  }
+  return out;
+}
+
+// for each onset (note!=0) compute how many steps it sounds: to next onset, capped.
+function computeGates(notes, maxGate) {
+  const n = notes.length, gate = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    if (!notes[i]) continue;
+    let d = 1;
+    while (d < n && !notes[(i + d) % n]) d++;
+    gate[i] = Math.min(d, maxGate);
+  }
+  return gate;
+}
+
+function compile(track) {
+  if (track._compiled) return track._compiled;
+  const voices = mergeVoices(track.voices);
+  const gains = Object.assign({}, DEFAULT_GAINS, track.gains || {});
+  const step16 = 60 / track.bpm / 4;
+
+  const lanes = {};
+  for (const ln of MELODIC_LANES) {
+    const notes = laneFromSections(track, ln);
+    lanes[ln] = { notes, gate: computeGates(notes, voices[ln].maxGate) };
+  }
+  const totalSteps = lanes.lead.notes.length;
+
+  // pad chords: flatten, then hold each chord until the next non-null chord
+  const padFlat = new Array(totalSteps).fill(null);
+  {
+    let w = 0;
+    for (const secName of track.arrangement) {
+      const sec = track.sections[secName];
+      const len = sec.bars * 16;
+      const c = sec.chords;
+      for (let i = 0; i < len; i++) { padFlat[w++] = (c && c[i]) ? c[i] : null; }
+    }
+  }
+  const pad = new Array(totalSteps).fill(null);
+  for (let i = 0; i < totalSteps; i++) {
+    if (!padFlat[i]) continue;
+    let d = 1;
+    while (d < totalSteps && !padFlat[(i + d) % totalSteps]) d++;
+    pad[i] = { notes: padFlat[i], hold: d };
+  }
+
+  const drums = {
+    kick: drumFromSections(track, 'kick'),
+    snare: drumFromSections(track, 'snare'),
+    hat: drumFromSections(track, 'hat'),
+    crash: drumFromSections(track, 'crash'),
+  };
+
+  track._compiled = { totalSteps, step16, lanes, pad, drums, voices, gains };
+  return track._compiled;
+}
+
+// ---- SYNTH ---------------------------------------------------------------
+function playLaneNote(dst, when, midi, vcfg, gain, gateSteps, step16) {
+  const dur = Math.max(0.05, gateSteps * step16 * 0.92);
+  const layers = vcfg.layers || [{ type: vcfg.type || 'triangle', octave: 0, detune: 0, gain: 1 }];
+  for (let i = 0; i < layers.length; i++) {
+    const l = layers[i];
+    tone({
+      dest: dst, t0: when, type: l.type || vcfg.type || 'triangle',
+      f0: mtof(midi + 12 * (l.octave || 0)), detune: l.detune || 0,
+      peak: Math.max(0.0008, gain * (l.gain != null ? l.gain : 1)),
+      atk: vcfg.atk, dec: vcfg.dec, sus: vcfg.sus, rel: vcfg.rel, dur: dur,
+      filter: l.filter || vcfg.filter, filterFreq: l.filterFreq || vcfg.filterFreq,
+      filterFreq1: l.filterFreq1 != null ? l.filterFreq1 : vcfg.filterFreq1,
+    });
+  }
+}
+
+function playPad(dst, when, chord, holdSteps, vcfg, gain, step16) {
+  const dur = Math.max(0.2, holdSteps * step16 * 0.96);
+  const nVoices = vcfg.voices || 1;
+  for (let c = 0; c < chord.length; c++) {
+    const base = chord[c] + 12 * (vcfg.octave || 0);
+    for (let v = 0; v < nVoices; v++) {
+      const det = nVoices > 1 ? (vcfg.detune || 9) * (v - (nVoices - 1) / 2) : 0;
+      tone({
+        dest: dst, t0: when, type: vcfg.type || 'sawtooth',
+        f0: mtof(base), detune: det,
+        peak: Math.max(0.0008, gain / Math.sqrt(chord.length * nVoices)),
+        atk: vcfg.atk, dec: vcfg.dec, sus: vcfg.sus, rel: vcfg.rel, dur: dur,
+        filter: vcfg.filter, filterFreq: vcfg.filterFreq, filterFreq1: vcfg.filterFreq1,
+      });
+    }
+  }
+}
+
+function playKick(dst, when, d, g) {
+  tone({ dest: dst, t0: when, type: 'sine', f0: d.f0, f1: d.f1, glideExp: true,
+    peak: d.peak * g, atk: d.atk, dec: d.dec, sus: 0.3, rel: d.rel, dur: d.dur });
+  if (d.click) noise({ dest: dst, t0: when, filter: 'bandpass', filterFreq: 2200, q: 0.8,
+    peak: d.peak * 0.35 * g, atk: 0.0005, rel: 0.02, dur: 0.025 });
+}
+function playSnare(dst, when, d, g) {
+  noise({ dest: dst, t0: when, filter: 'highpass', filterFreq: d.hp,
+    peak: d.peak * g, atk: 0.001, rel: d.rel, dur: d.dur });
+  tone({ dest: dst, t0: when, type: 'triangle', f0: d.tone1, peak: d.peak * 0.5 * g,
+    atk: 0.001, dec: 0.02, sus: 0.2, rel: 0.06, dur: 0.07 });
+  tone({ dest: dst, t0: when, type: 'triangle', f0: d.tone2, peak: d.peak * 0.35 * g,
+    atk: 0.001, dec: 0.02, sus: 0.2, rel: 0.05, dur: 0.06 });
+}
+function playHat(dst, when, open, d, g) {
+  const cfg = open ? d.hatO : d.hatC;
+  noise({ dest: dst, t0: when, filter: 'highpass', filterFreq: cfg.hp,
+    peak: cfg.peak * g, atk: 0.001, rel: cfg.rel, dur: cfg.dur });
+}
+function playCrash(dst, when, d, g) {
+  noise({ dest: dst, t0: when, filter: 'highpass', filterFreq: d.crash.hp,
+    peak: d.crash.peak * g, atk: 0.002, rel: d.crash.rel, dur: d.crash.dur });
+}
+
+// schedule one 16th step `s` of compiled track `C` at ctx time `when`
+function scheduleTrackStep(C, dst, s, when) {
+  // melodic lanes
+  for (let li = 0; li < MELODIC_LANES.length; li++) {
+    const ln = MELODIC_LANES[li];
+    const L = C.lanes[ln];
+    const note = L.notes[s];
+    if (note) playLaneNote(dst, when, note, C.voices[ln], C.gains[ln], L.gate[s], C.step16);
+  }
+  // pad
+  const p = C.pad[s];
+  if (p) playPad(dst, when, p.notes, p.hold, C.voices.pad, C.gains.pad, C.step16);
+  // drums
+  const dv = C.voices.drums;
+  if (C.drums.kick[s]) playKick(dst, when, dv.kick, C.gains.kick);
+  if (C.drums.snare[s]) playSnare(dst, when, dv.snare, C.gains.snare);
+  const h = C.drums.hat[s];
+  if (h) playHat(dst, when, h === 2, dv, C.gains.hat);
+  if (C.drums.crash[s]) playCrash(dst, when, dv, C.gains.crash);
+}
+
+
+// ============================================================================
+//  TRACKS  (replaced with the composed arrangements)
+// ============================================================================
+// ===================== bgm-tracks.js =====================
+// The three composed BGM tracks (stage / midboss / boss), built from the
+// theory-verified blueprints. Authored via a small music-theory builder so the
+// source stays compact and correct; melodies (the lead/counter "art") are
+// hand-placed from the verified motifs, while pad/bass/arp/drums are generated
+// from chord-per-bar progressions.
+//
+// Pure data + builders — NO audio API used here, so it runs in Node for
+// validation (`node design/bgm-tracks.js`): checks lane lengths and in-key.
+// Inlined (with bgm-engine.js) into bgm-demo.html and index.html.
+
+// ---------------------------------------------------------------- theory
+const PC = { C:0,'C#':1,Db:1,D:2,'D#':3,Eb:3,E:4,F:5,'F#':6,Gb:6,G:7,'G#':8,Ab:8,A:9,'A#':10,Bb:10,B:11 };
+const SCALES = {
+  Amin:  [0,2,4,5,7,9,11],   // A natural minor: A B C D E F G
+  Aharm: [0,2,4,5,8,9,11],   // A harmonic minor: A B C D E F G#
+  Charm: [0,2,3,5,7,8,11],   // C harmonic minor: C D Eb F G Ab B
+};
+function parseChord(sym) {
+  let bass = null, s = sym;
+  const sl = s.indexOf('/'); if (sl >= 0) { bass = PC[s.slice(sl + 1)]; s = s.slice(0, sl); }
+  const m = s.match(/^([A-G][#b]?)(.*)$/); const root = PC[m[1]]; const q = m[2];
+  let iv;
+  if (q === '' || q === 'maj') iv = [0,4,7];
+  else if (q === 'm' || q === 'min') iv = [0,3,7];
+  else if (q === 'dim' || q === 'o' || q === '°') iv = [0,3,6];
+  else if (q === 'aug' || q === '+') iv = [0,4,8];
+  else if (q === '7') iv = [0,4,7,10];
+  else if (q === 'maj7') iv = [0,4,7,11];
+  else if (q === 'm7') iv = [0,3,7,10];
+  else if (q === 'sus4' || q === 'sus') iv = [0,5,7];
+  else if (q === 'sus2') iv = [0,2,7];
+  else if (q === '6') iv = [0,4,7,9];
+  else if (q === 'm6') iv = [0,3,7,9];
+  else if (q === 'dim7') iv = [0,3,6,9];
+  else iv = [0,4,7];
+  return { triad: iv.map(i => (root + i) % 12), root: root, bass: bass == null ? root : bass };
+}
+// pad voicing: cluster chord tones into a tight mid register (MIDI ~55-67) so
+// supersaw pads glide smoothly; the bass carries the actual root low.
+function voicePad(sym) {
+  return parseChord(sym).triad.map(pc => { let n = pc + 48; if (n < 55) n += 12; return n; });
+}
+function bassRoot(sym) { return parseChord(sym).bass + 36; } // octave 2: A2=45
+// ascending arp tones: root, 3rd, 5th (+octave) from a chord, around MIDI 60-84
+function arpAsc(sym) {
+  const tri = parseChord(sym).triad; let prev = -1; const t = [];
+  for (let j = 0; j < 3; j++) { let n = tri[j % tri.length] + 60; while (n <= prev) n += 12; t.push(n); prev = n; }
+  t.push(t[0] + 12); return t;
+}
+// move `deg` diatonic scale-degrees from a MIDI note within `scalePcs`
+function dShift(midi, scalePcs, deg) {
+  const pc = ((midi % 12) + 12) % 12;
+  let idx = scalePcs.indexOf(pc);
+  if (idx < 0) { let bd = 99; for (let i = 0; i < scalePcs.length; i++) { const d = Math.abs(scalePcs[i] - pc); if (d < bd) { bd = d; idx = i; } } }
+  const oct = Math.floor(midi / 12);
+  let ni = idx + deg, no = oct;
+  while (ni < 0) { ni += scalePcs.length; no--; }
+  while (ni >= scalePcs.length) { ni -= scalePcs.length; no++; }
+  return no * 12 + scalePcs[ni];
+}
+
+// ---------------------------------------------------------------- patterns
+function bassBar(sym, nextSym, style) {
+  const r = bassRoot(sym), fifth = r + 7, oct = r + 12, nr = bassRoot(nextSym), appr = nr - 1;
+  const a = new Array(16).fill(0);
+  switch (style) {
+    case 'whole': a[0] = r; break;
+    case 'half': a[0] = r; a[8] = r; break;
+    case 'pumpQ': a[0] = r; a[4] = fifth; a[8] = r; a[12] = fifth; break;
+    case 'pump8': for (let i = 0; i < 16; i += 2) a[i] = ((i % 4) === 0) ? r : fifth; a[14] = appr; break;
+    case 'walk8': a[0]=r; a[2]=r; a[4]=fifth; a[6]=r; a[8]=oct; a[10]=fifth; a[12]=r; a[14]=appr; break;
+    case 'gallop': [0,4,8,12].forEach(b => { a[b]=r; a[b+2]=r; a[b+3]=(b===12?appr:r); }); break;
+    case 'drive8': for (let i = 0; i < 16; i += 2) a[i] = r; a[8] = oct; a[14] = appr; break;
+    default: a[0] = r; a[8] = r;
+  }
+  return a;
+}
+function drumBar(g) {
+  const k = new Array(16).fill(0), s = new Array(16).fill(0), h = new Array(16).fill(0);
+  switch (g) {
+    case 'none': break;
+    case 'introTick': k[0] = 1; [0,4,8,12].forEach(i => h[i] = 1); break;
+    case 'four': [0,4,8,12].forEach(i => k[i]=1); [4,12].forEach(i => s[i]=1); for (let i=0;i<16;i++) h[i] = (i%4===2)?2:(i%2===0?1:0); break;
+    case 'fourLite': [0,8].forEach(i => k[i]=1); [4,12].forEach(i => s[i]=1); for (let i=0;i<16;i+=2) h[i] = (i%4===2)?2:1; break;
+    case 'halfTime': [0,8].forEach(i => k[i]=1); s[8]=1; for (let i=0;i<16;i+=4) h[i]=1; break;
+    case 'midGroove': [0,8].forEach(i => k[i]=1); k[15]=1; [4,12].forEach(i => s[i]=1); for (let i=0;i<16;i++) h[i] = (i%4===2)?2:1; break;
+    case 'midGallop': [0,3,8,11].forEach(i => k[i]=1); [4,12].forEach(i => s[i]=1); for (let i=0;i<16;i++) h[i] = (i===14?2:1); break;
+    case 'bossDrive': [0,6,8,14].forEach(i => k[i]=1); [4,12].forEach(i => s[i]=1); for (let i=0;i<16;i++) h[i] = (i===14?2:1); break;
+    case 'bossClimax': for (let i=0;i<16;i+=2) k[i]=1; [4,12].forEach(i => s[i]=1); s[15]=1; for (let i=0;i<16;i++) h[i]=1; break;
+    case 'bossBridge': [0,8].forEach(i => k[i]=1); [4,12].forEach(i => s[i]=1); break;
+    default: break;
+  }
+  return { k, s, h };
+}
+
+// ---------------------------------------------------------------- assembler
+// makeSection({ bars, chords:[..bars], scale, lead:[[step,midi]..], harm, counter,
+//   bassStyle, arpRate(0=off), groove, crash, sub, padPerBar })
+function makeSection(spec) {
+  const bars = spec.bars, L = bars * 16, chords = spec.chords;
+  const chordsLane = new Array(L).fill(null);
+  for (let b = 0; b < bars; b++) {
+    if (spec.padPerBar || b === 0 || chords[b] !== chords[b - 1]) chordsLane[b * 16] = voicePad(chords[b]);
+  }
+  const bass = new Array(L).fill(0), sub = new Array(L).fill(0);
+  for (let b = 0; b < bars; b++) {
+    const bb = bassBar(chords[b], chords[(b + 1) % bars], spec.bassStyle || 'half');
+    for (let i = 0; i < 16; i++) if (bb[i]) bass[b * 16 + i] = bb[i];
+    if (spec.sub) sub[b * 16] = bassRoot(chords[b]) - 12;
+  }
+  const arp = new Array(L).fill(0);
+  if (spec.arpRate) {
+    for (let b = 0; b < bars; b++) {
+      const tones = arpAsc(chords[b]);
+      const cyc = [tones[0], tones[1], tones[2], tones[3], tones[2], tones[1]];
+      let k = 0;
+      for (let i = 0; i < 16; i += spec.arpRate) { arp[b * 16 + i] = cyc[k % cyc.length]; k++; }
+    }
+  }
+  const lead = new Array(L).fill(0);
+  if (spec.lead) for (const [st, n] of spec.lead) if (st >= 0 && st < L) lead[st] = n;
+  const harm = new Array(L).fill(0);
+  if (spec.harm && spec.scale) for (let i = 0; i < L; i++) if (lead[i]) harm[i] = dShift(lead[i], SCALES[spec.scale], -2);
+  const counter = new Array(L).fill(0);
+  if (spec.counter) for (let i = 0; i < L; i++) { if (lead[i]) { const t = i + 2; if (t < L && !lead[t]) counter[t] = lead[i] - 12; } }
+  const kick = new Array(L).fill(0), snare = new Array(L).fill(0), hat = new Array(L).fill(0), crash = new Array(L).fill(0);
+  for (let b = 0; b < bars; b++) {
+    const d = drumBar(spec.groove || 'none');
+    for (let i = 0; i < 16; i++) { if (d.k[i]) kick[b*16+i]=1; if (d.s[i]) snare[b*16+i]=1; if (d.h[i]) hat[b*16+i]=d.h[i]; }
+  }
+  if (spec.crash) crash[0] = 1;
+  return { bars, chords: chordsLane, bass, sub, arp, lead, harm, counter, kick, snare, hat, crash, _scale: spec.scale || null };
+}
+function off(base, list) { return list.map(([s, n]) => [base + s, n]); }
+function cat() { const out = []; for (let i = 0; i < arguments.length; i++) out.push.apply(out, arguments[i]); return out; }
+
+// ================================================================ STAGE
+// "Sunny Petal March" — A natural minor (+ relative C lift), 112 BPM.
+const STAGE_HOOK = [
+  [0,69],[4,71],[6,72],[8,76],[12,74],[14,72],
+  [16,69],[20,67],[24,72],
+  [32,77],[36,76],[38,74],[40,72],[42,71],[44,69],
+  [48,76],[50,79],[52,77],[54,76],[56,74],[58,72],[60,69],
+];
+const STAGE_HOOK2 = [ // variation tail, hangs on E for the half-cadence
+  [0,69],[4,71],[6,72],[8,76],[12,74],[14,72],
+  [16,69],[24,72],
+  [32,77],[36,76],[40,72],[44,69],
+  [48,72],[52,74],[56,76],[60,76],
+];
+const STAGE_B = [ // 8-bar soaring lift, upper register, A natural minor
+  [0,84],[4,83],[6,81],[8,79],[12,76],
+  [16,79],[20,81],[24,83],[28,84],
+  [32,81],[36,79],[40,76],[44,72],
+  [48,76],[52,79],[56,76],[60,74],
+  [64,77],[68,76],[72,74],[76,72],
+  [80,72],[84,76],[88,79],[92,84],
+  [96,74],[100,76],[104,77],[108,76],
+  [112,79],[116,76],[120,72],[124,69],
+];
+const STAGE_BRIDGE = [ [0,72],[8,71],[16,69],[32,76],[40,74],[48,76],[56,76] ];
+const STAGE_OUTRO = [
+  [0,81],[4,79],[8,77],[12,76],[16,74],[20,72],[24,71],[28,69],
+  [32,72],[40,69],[48,76],[56,76],
+];
+const STAGE = {
+  title: 'Sunny Petal March', keyName: 'A minor', bpm: 112, gain: 0.55,
+  voices: { lead: { layers: [
+      { type:'triangle', octave:0, detune:0, gain:1.0 },
+      { type:'triangle', octave:0, detune:8, gain:0.45 },
+      { type:'sawtooth', octave:-1, detune:0, gain:0.28, filter:'lowpass', filterFreq:1900 } ],
+      atk:0.006, dec:0.06, sus:0.55, rel:0.15, maxGate:6 },
+    pad: { octave:1, voices:2, detune:9, type:'sawtooth', atk:0.10, dec:0.14, sus:0.72, rel:0.4, filter:'lowpass', filterFreq:1700 } },
+  gains: { lead:0.135, harm:0.07, counter:0.08, arp:0.055, bass:0.155, sub:0.12, pad:0.05 },
+  sections: {
+    intro: makeSection({ bars:4, scale:'Amin', chords:['Am','Am','F','G'], bassStyle:'half', arpRate:2, groove:'introTick', sub:true, crash:true }),
+    A:     makeSection({ bars:8, scale:'Amin', chords:['Am','F','C','G','Am','F','Dm','E'], lead:cat(STAGE_HOOK, off(64,STAGE_HOOK2)), bassStyle:'pump8', arpRate:2, groove:'four', sub:true }),
+    A2:    makeSection({ bars:8, scale:'Amin', chords:['Am','F','C','G','Am','Dm','Esus4','E'], lead:cat(STAGE_HOOK, off(64,STAGE_HOOK2)), harm:true, bassStyle:'pump8', arpRate:2, groove:'four', sub:true }),
+    B:     makeSection({ bars:8, scale:'Amin', chords:['C','G','Am','Em','F','C','Dm','G'], lead:STAGE_B, counter:true, bassStyle:'pump8', arpRate:1, groove:'four', sub:true, crash:true }),
+    bridge:makeSection({ bars:4, scale:'Amin', chords:['Dm','E','Am','E'], lead:STAGE_BRIDGE, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
+    A2b:   makeSection({ bars:8, scale:'Amin', chords:['Am','F','C','G','Am','Dm','Esus4','E'], lead:cat(STAGE_HOOK, off(64,STAGE_HOOK2)), harm:true, counter:true, bassStyle:'pump8', arpRate:1, groove:'four', sub:true, crash:true }),
+    outro: makeSection({ bars:4, scale:'Amin', chords:['Am','F','Dm','E'], lead:STAGE_OUTRO, bassStyle:'pump8', arpRate:1, groove:'four', sub:true, crash:true }),
+  },
+  arrangement: ['intro','A','A2','B','bridge','A2b','outro'],
+};
+
+// ================================================================ MIDBOSS
+// "Trickster's Waltz of Knives" — A harmonic minor, 134 BPM.
+const MID_HOOK = [
+  [2,69],[3,72],[4,71],[5,69],[6,68],[7,69],[11,76],[14,69],
+  [16,71],[17,72],[18,71],[19,68],[20,69],[22,76],[24,74],[26,72],[27,71],[28,69],[29,68],[30,69],
+];
+const MID_CLOSE = [ [0,72],[2,71],[4,69],[6,68],[8,69],[12,76],[16,68],[20,69],[24,72],[28,71] ];
+const MID_B = [ // brighter lift — A natural minor
+  [0,76],[4,77],[8,79],[12,81],[16,79],[24,76],
+  [32,79],[40,81],[48,83],[56,84],
+  [64,77],[72,76],[80,74],[88,72],
+  [96,76],[104,79],[112,76],[120,72],
+];
+const MID_BRIDGE = [ // D harmonic-minor tilt (scale check skipped)
+  [0,74],[8,77],[16,79],[24,77],
+  [32,74],[40,69],[48,73],[56,74],
+  [64,77],[72,79],[80,82],[88,81],
+  [96,77],[104,74],[112,68],[120,69],
+];
+const MID_OUTRO = [ [0,76],[8,69],[16,72],[24,71],[32,69],[40,68],[48,69],[56,76] ];
+function midHookExclaim() { const h = MID_HOOK.slice(); h[h.length-1] = [30,81]; return h; } // A5 exclamation
+const MIDBOSS = {
+  title: "Trickster's Waltz of Knives", keyName: 'A harmonic minor', bpm: 134, gain: 0.58,
+  voices: { lead: { layers: [
+      { type:'triangle', octave:0, detune:0, gain:1.0 },
+      { type:'sawtooth', octave:0, detune:7, gain:0.42, filter:'lowpass', filterFreq:2600 } ],
+      atk:0.004, dec:0.05, sus:0.4, rel:0.11, maxGate:5 },
+    counter: { layers:[{ type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:2000 }], atk:0.005, dec:0.04, sus:0.35, rel:0.1, maxGate:4 },
+    arp: { layers:[{ type:'triangle', octave:0, detune:6, gain:1.0 }], atk:0.002, dec:0.025, sus:0.16, rel:0.05, filter:'lowpass', filterFreq:3000, maxGate:1 },
+    bass: { layers:[{ type:'sawtooth', octave:0, detune:0, gain:1.0 }], atk:0.004, dec:0.05, sus:0.55, rel:0.08, filter:'lowpass', filterFreq:820, maxGate:3 },
+    pad: { octave:1, voices:3, detune:10, type:'sawtooth', atk:0.07, dec:0.12, sus:0.65, rel:0.35, filter:'lowpass', filterFreq:1600 } },
+  gains: { lead:0.14, harm:0.075, counter:0.085, arp:0.06, bass:0.165, sub:0.12, pad:0.046, hat:1.05 },
+  sections: {
+    intro:  makeSection({ bars:4, scale:'Aharm', chords:['Am','Am/G','F','E'], bassStyle:'half', arpRate:1, groove:'introTick', sub:true, crash:true }),
+    A:      makeSection({ bars:8, scale:'Aharm', chords:['Am','Am','Dm','E7','Am','F','Bdim','E7'], lead:cat(MID_HOOK, off(32,MID_HOOK), off(64,MID_HOOK), off(96,MID_CLOSE)), counter:true, bassStyle:'walk8', arpRate:2, groove:'midGroove', sub:true }),
+    A2:     makeSection({ bars:8, scale:'Aharm', chords:['Am','Am','Dm','E7','Am','F','E7','Am'], lead:cat(MID_HOOK, off(32,MID_HOOK), off(64,MID_HOOK), off(96,midHookExclaim())), harm:true, counter:true, bassStyle:'gallop', arpRate:2, groove:'midGallop', sub:true, crash:true }),
+    B:      makeSection({ bars:8, scale:'Amin', chords:['F','G','Em','Am','F','G','E7','E7'], lead:MID_B, bassStyle:'pump8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
+    bridge: makeSection({ bars:8, scale:null, chords:['Gm','Gm','Dm','A7','Gm','Bb','A7','E7'], lead:MID_BRIDGE, counter:true, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
+    outro:  makeSection({ bars:4, scale:'Aharm', chords:['Am','E7','Am','E7'], lead:MID_OUTRO, bassStyle:'walk8', arpRate:1, groove:'introTick', sub:true }),
+  },
+  arrangement: ['intro','A','A2','B','bridge','A2','B','outro'],
+};
+
+// ================================================================ BOSS
+// "Sakuya Eternal" — A harmonic minor, key-lift to C harmonic minor, 152 BPM.
+const BOSS_HOOK = [
+  [2,69],[4,76],[8,77],[10,76],[12,74],[14,72],[15,71],
+  [16,72],[18,76],[20,81],[24,80],[26,83],[28,81],[29,80],[30,77],[31,76],
+];
+const BOSS_CLOSE = [ [0,69],[4,72],[8,76],[12,74],[16,72],[20,71],[24,69],[28,68] ];
+function transpose(list, n) { return list.map(([s, m]) => [s, m + n]); }
+const BOSS_B = [ // beauty flip, A natural minor, upper register
+  [0,84],[4,83],[8,81],[12,79],[16,77],[24,76],
+  [32,79],[40,81],[48,83],[56,84],
+  [64,81],[72,79],[80,77],[88,76],
+  [96,72],[104,76],[112,79],[120,84],
+];
+const BOSS_BRIDGE = [ // lament + tension build (scale check skipped)
+  [0,69],[8,72],[16,76],[24,72],
+  [32,69],[40,68],[48,65],[56,69],
+  [64,69],[72,71],[80,72],[88,74],
+  [96,75],[104,77],[112,80],[120,83],
+];
+const BOSS_OUTRO = [ [0,69],[4,76],[8,77],[12,76],[16,74],[24,72],[32,69],[48,69] ];
+const BOSS = {
+  title: 'Sakuya Eternal', keyName: 'A harmonic minor → C', bpm: 152, gain: 0.62,
+  voices: { lead: { layers: [
+      { type:'triangle', octave:0, detune:0, gain:1.0 },
+      { type:'sawtooth', octave:0, detune:9, gain:0.5, filter:'lowpass', filterFreq:2400 },
+      { type:'triangle', octave:1, detune:0, gain:0.22 } ],
+      atk:0.005, dec:0.05, sus:0.5, rel:0.13, maxGate:6 },
+    harm: { layers:[{ type:'triangle', octave:0, detune:-4, gain:1.0 }], atk:0.007, dec:0.05, sus:0.45, rel:0.14, filter:'lowpass', filterFreq:2600, maxGate:6 },
+    counter: { layers:[{ type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:1900 }], atk:0.006, dec:0.05, sus:0.4, rel:0.12, maxGate:5 },
+    arp: { layers:[{ type:'square', octave:0, detune:7, gain:1.0 }], atk:0.002, dec:0.025, sus:0.15, rel:0.05, filter:'lowpass', filterFreq:3200, maxGate:1 },
+    bass: { layers:[{ type:'sawtooth', octave:0, detune:0, gain:1.0 }], atk:0.004, dec:0.05, sus:0.6, rel:0.08, filter:'lowpass', filterFreq:950, maxGate:3 },
+    pad: { octave:0, voices:3, detune:11, type:'sawtooth', atk:0.08, dec:0.13, sus:0.7, rel:0.4, filter:'lowpass', filterFreq:1450 } },
+  gains: { lead:0.145, harm:0.08, counter:0.085, arp:0.06, bass:0.17, sub:0.14, pad:0.058, kick:1.1, snare:1.05, crash:1.05 },
+  sections: {
+    intro:  makeSection({ bars:8, scale:'Aharm', chords:['Am','Am','E7','E7','Dm','Dm','E7','E7'], lead:cat(BOSS_HOOK, off(64,BOSS_HOOK)), harm:true, bassStyle:'half', arpRate:2, groove:'fourLite', sub:true, crash:true }),
+    A1:     makeSection({ bars:8, scale:'Aharm', chords:['Am','F','C','E7','Am','F','Dm','E7'], lead:cat(BOSS_HOOK, off(32,BOSS_HOOK), off(64,BOSS_HOOK), off(96,BOSS_CLOSE)), bassStyle:'drive8', arpRate:1, groove:'bossDrive', sub:true, crash:true }),
+    A2:     makeSection({ bars:8, scale:'Aharm', chords:['Am','F','C','E7','Am','Dm','E7','Am'], lead:cat(BOSS_HOOK, off(32,BOSS_HOOK), off(64,BOSS_HOOK), off(96,BOSS_CLOSE)), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossDrive', sub:true, crash:true }),
+    B:      makeSection({ bars:8, scale:'Amin', chords:['C','G','F','C','F','G','E7','Am'], lead:BOSS_B, harm:true, counter:true, bassStyle:'pump8', arpRate:1, groove:'bossDrive', sub:true, crash:true }),
+    bridge: makeSection({ bars:8, scale:null, chords:['Am','Am/G','F','Am/E','Bb','Bb','G#dim','E7'], lead:BOSS_BRIDGE, bassStyle:'half', arpRate:2, groove:'bossBridge', sub:true }),
+    climax: makeSection({ bars:8, scale:'Charm', chords:['Cm','Ab','Eb','G7','Cm','Ab','Fm','G7'], lead:cat(transpose(BOSS_HOOK,3), off(32,transpose(BOSS_HOOK,3)), off(64,transpose(BOSS_HOOK,3)), off(96,transpose(BOSS_CLOSE,3))), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
+    A3:     makeSection({ bars:8, scale:'Aharm', chords:['Am','F','C','E7','Am','F','Dm','E7'], lead:cat(BOSS_HOOK, off(32,BOSS_HOOK), off(64,BOSS_HOOK), off(96,BOSS_CLOSE)), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
+    outro:  makeSection({ bars:4, scale:null, chords:['Dm','E7','Am','A'], lead:BOSS_OUTRO, bassStyle:'half', arpRate:2, groove:'bossDrive', sub:true, crash:true }),
+  },
+  arrangement: ['intro','A1','A2','B','bridge','climax','A3','outro'],
+};
+
+const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS };
+
+
+// ============================================================================
+//  TRANSPORT
+// ============================================================================
+let curTrack='none', pumpTimer=0, nextNoteTime=0, stepIndex=0;
+const SCHEDULE_AHEAD=0.10, PUMP_MS=25, MUSIC_FADE=0.22;
+function trackOf(n){ return (TRACKS && TRACKS[n]) ? TRACKS[n] : null; }
+function pump(){
+  if(!ctx) return;
+  const trk=trackOf(curTrack);
+  if(trk){ const C=compile(trk); while(nextNoteTime<ctx.currentTime+SCHEDULE_AHEAD){ scheduleTrackStep(C, musicGain, stepIndex%C.totalSteps, nextNoteTime); stepIndex++; nextNoteTime+=C.step16; } }
+  pumpTimer=setTimeout(pump,PUMP_MS);
+}
+function startPump(){ if(pumpTimer||!ctx) return; nextNoteTime=ctx.currentTime+0.08; pump(); }
+function stopPump(){ if(pumpTimer){ clearTimeout(pumpTimer); pumpTimer=0; } }
+function rampMusic(target,dur){ if(!musicGain) return; const t=now(); musicGain.gain.cancelScheduledValues(t); musicGain.gain.setValueAtTime(Math.max(0.0001,musicGain.gain.value),t); musicGain.gain.exponentialRampToValueAtTime(Math.max(0.0001,target),t+dur); }
+function playMusic(name){
+  if(!ctx){ build(); }
+  if(ctx.state==='suspended') ctx.resume();
+  if(name==='none'){ rampMusic(0.0001,MUSIC_FADE); setTimeout(()=>{ if(curTrack==='none') stopPump(); },(MUSIC_FADE+0.3)*1000); curTrack='none'; updateUI(); return; }
+  const trk=trackOf(name); if(!trk) return;
+  const target=trk.gain||0.55;
+  if(name===curTrack) return;
+  if(curTrack==='none'){ curTrack=name; stepIndex=0; startPump(); rampMusic(target,MUSIC_FADE); }
+  else { rampMusic(0.0001,MUSIC_FADE); setTimeout(()=>{ curTrack=name; stepIndex=0; if(ctx) nextNoteTime=ctx.currentTime+0.05; rampMusic(target,MUSIC_FADE); },MUSIC_FADE*1000); }
+  updateUI();
+}
+
+// ============================================================================
+//  UI
+// ============================================================================
+const CARD_DEFS=[
+  { key:'stage',   tag:'道中  STAGE',   color:'var(--stage)' },
+  { key:'midboss', tag:'中ボス  MIDBOSS', color:'var(--midboss)' },
+  { key:'boss',    tag:'大ボス  BOSS',    color:'var(--boss)' },
+];
+const cardsEl=document.getElementById('cards'), nowEl=document.getElementById('now');
+function renderCards(){
+  cardsEl.innerHTML='';
+  CARD_DEFS.forEach(def=>{
+    const t=(typeof TRACKS!=='undefined' && TRACKS[def.key])||null;
+    const card=document.createElement('div'); card.className='card'; card.dataset.key=def.key; card.style.setProperty('--c',def.color);
+    const secCount=t?t.arrangement.length:0;
+    const barTotal=t?t.arrangement.reduce((a,s)=>a+(t.sections[s]?t.sections[s].bars:0),0):0;
+    card.innerHTML=
+      '<div class="tag">'+def.tag+'</div>'+
+      '<div class="name">'+(t&&t.title?t.title:def.key)+'</div>'+
+      '<div class="meta">'+(t?((t.bpm||'?')+' BPM ・ '+(t.keyName||'')+'<br>'+secCount+' sections / '+barTotal+' bars'):'（未収録）')+'</div>'+
+      '<button class="play" data-key="'+def.key+'">▶ 再生</button>';
+    cardsEl.appendChild(card);
+  });
+  cardsEl.querySelectorAll('.play').forEach(b=>b.addEventListener('click',()=>playMusic(b.dataset.key)));
+}
+function updateUI(){
+  document.querySelectorAll('.card').forEach(c=>c.classList.toggle('playing', c.dataset.key===curTrack));
+  const t=trackOf(curTrack);
+  nowEl.innerHTML = curTrack==='none' ? '停止中' : ('▶ 再生中: <b>'+(t&&t.title?t.title:curTrack)+'</b>');
+}
+document.getElementById('stop').addEventListener('click',()=>playMusic('none'));
+document.getElementById('vol').addEventListener('input',e=>{ masterVol=parseFloat(e.target.value); if(masterGain) masterGain.gain.setTargetAtTime(MASTER_BASE_GAIN*masterVol, now(), 0.02); });
+document.getElementById('mute').addEventListener('click',function(){ if(!ctx) build(); muted=!muted; if(muted){ ctx.suspend(); this.textContent='🔇 解除'; } else { ctx.resume(); this.textContent='🔊 ミュート'; } });
+
+// visualizer
+const cvs=document.getElementById('viz'), vctx=cvs.getContext('2d');
+function draw(){
+  requestAnimationFrame(draw);
+  vctx.clearRect(0,0,cvs.width,cvs.height);
+  if(!analyser){ return; }
+  const n=analyser.frequencyBinCount, data=new Uint8Array(n); analyser.getByteFrequencyData(data);
+  const bars=96, step=Math.floor(n/bars), W=cvs.width, H=cvs.height, bw=W/bars;
+  const accent = curTrack==='boss'?[255,106,160]: curTrack==='midboss'?[255,206,94]: curTrack==='stage'?[127,224,168]:[150,120,200];
+  for(let i=0;i<bars;i++){
+    let v=0; for(let j=0;j<step;j++) v=Math.max(v,data[i*step+j]); v/=255;
+    const h=Math.pow(v,0.85)*H*0.95;
+    const a=0.35+0.6*v;
+    vctx.fillStyle='rgba('+accent[0]+','+accent[1]+','+accent[2]+','+a+')';
+    vctx.fillRect(i*bw+1, H-h, bw-2, h);
+  }
+  // playhead / loop position
+  const t=trackOf(curTrack);
+  if(t){ const C=compile(t); const pos=(stepIndex%C.totalSteps)/C.totalSteps; vctx.fillStyle='rgba(255,255,255,.5)'; vctx.fillRect(pos*W,0,2,H); }
+}
+draw();
+renderCards(); updateUI();
+</script>
+</body>
+</html>

@@ -1,2 +1,5 @@
 # Playwright MCP artifacts (console logs, page snapshots)
 .playwright-mcp/
+
+# Local pre-integration backup (rollback safety, not for the repo)
+design/index.html.bak
