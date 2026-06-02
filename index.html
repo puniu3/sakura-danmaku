@@ -848,13 +848,7 @@ let canvas=null, ctx=null, dpr=1, _lastNow=0, _fps=60, _fpsAcc=0, _fpsN=0;
 const cam={ trauma:0, shakeX:0, shakeY:0, flash:0, flashHue:0, timeScale:1, slowT:0, slowTarget:1 };
 const waves=[], pops=[], petals=[];
 let _banner={active:false,t:0,name:'',sub:''};
-// boss portrait cut-ins (一枚絵 演出 on spell-card declarations) — purely visual, sim-decoupled.
-// PoC: midboss (wisp) + final boss (mandala) both share the single character.png; swap in per-boss art later.
-const PORTRAIT_SRC={ wisp:'character.png', mandala:'character.png' };
-const _portraitCache=new Map();                 // src -> {img,ready,failed}
-function loadPortrait(src){ let r=_portraitCache.get(src); if(r) return r; const img=new Image(); r={img,ready:false,failed:false}; img.onload=()=>{ r.ready=true; }; img.onerror=()=>{ r.failed=true; }; img.src=src; _portraitCache.set(src,r); return r; }
-function preloadPortraits(){ const ov=(typeof location!=='undefined')&&new URLSearchParams(location.search).get('portrait'); if(ov){ for(const k in PORTRAIT_SRC) PORTRAIT_SRC[k]=ov; }   // ?portrait=art.png to audition any asset
-  for(const k in PORTRAIT_SRC) loadPortrait(PORTRAIT_SRC[k]); }
+// spell-card declaration cut-in — a brief screen-dim "暗転" only (playtest found portrait art noisy; see drawCutin).
 let _cutin={active:false};
 
 function easeOut(t){ return 1-(1-t)*(1-t); }
@@ -1051,29 +1045,21 @@ function triggerBanner(name,sub){ _banner={active:true,t:0,name:name||'',sub:sub
 // Cover-fits the whole playfield (crops overflow), fades in → holds → fades out. Sits ABOVE the
 // background but BELOW bullets/sprites, so danmaku & the player ship stay readable on top.
 const CUTIN_IN=0.30, CUTIN_OUT=0.40;
-function triggerCutin(o){ o=o||{}; const hold=(o.announce!=null)?Math.max(0.3,o.announce-CUTIN_IN-CUTIN_OUT):(o.hold!=null?o.hold:0.7); _cutin={ active:true, t:0, rec:loadPortrait(PORTRAIT_SRC[o.key]||PORTRAIT_SRC.mandala), hue:(o.hue!=null?o.hue:330), hold }; }
+function triggerCutin(o){ o=o||{}; const hold=(o.announce!=null)?Math.max(0.3,o.announce-CUTIN_IN-CUTIN_OUT):(o.hold!=null?o.hold:0.7); _cutin={ active:true, t:0, hold }; }   // dim-only 暗転 (no portrait art)
 function drawCutin(dt){
   const ci=_cutin; if(!ci.active) return;
   ci.t+=dt; const t=ci.t, inD=CUTIN_IN, outD=CUTIN_OUT, total=inD+ci.hold+outD;
   if(t>=total){ ci.active=false; return; }
-  let a, ein;                                              // a = fade envelope (0..1), ein = entry progress (0..1)
-  if(t<inD){ ein=easeOut(t/inD); a=ein; }
-  else if(t<inD+ci.hold){ ein=1; a=1; }
-  else { ein=1; a=1-easeIn((t-inD-ci.hold)/outD); }
-  const hue=ci.hue, rec=ci.rec, img=rec&&rec.img, ready=!!(rec&&rec.ready&&img.naturalWidth&&img.naturalHeight);
+  let a;                                                   // fade envelope (0..1)
+  if(t<inD) a=easeOut(t/inD);
+  else if(t<inD+ci.hold) a=1;
+  else a=1-easeIn((t-inD-ci.hold)/outD);
+  // Spell-declaration "暗転" — dim the playfield only (no portrait art: playtest found the images noisy).
+  // Uniform darken + soft centre-focused vignette, fading in→hold→out with the same envelope.
+  const DIM=0.52;                                          // peak darkening (0..1) — tune to taste
   ctx.save();
-  if(ready){
-    const iw=img.naturalWidth, ih=img.naturalHeight;
-    const zoom=1.06-0.06*ein, scale=Math.max(PF_W/iw,PF_H/ih)*zoom;        // COVER-fit + subtle settle-zoom on entry
-    const Wd=iw*scale, H=ih*scale, x=(PF_W-Wd)/2, y=(PF_H-H)*0.5;
-    ctx.globalAlpha=a; ctx.drawImage(img,x,y,Wd,H);
-    if(t<inD){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=(1-t/inD)*0.45; ctx.drawImage(img,x,y,Wd,H); ctx.restore(); }   // entry brighten flash
-    // framing vignette so the full-bleed art focuses toward the centre (also masks the cropped edges)
-    ctx.globalAlpha=a; const vg=ctx.createRadialGradient(PF_W/2,PF_H*0.46,PF_H*0.32,PF_W/2,PF_H*0.5,PF_H*0.80); vg.addColorStop(0,'rgba(8,3,16,0)'); vg.addColorStop(1,'rgba(8,3,16,0.5)'); ctx.fillStyle=vg; ctx.fillRect(0,0,PF_W,PF_H);
-  } else {                                                 // fallback while loading / if missing
-    ctx.globalAlpha=a; ctx.fillStyle='hsl('+hue+',45%,16%)'; ctx.fillRect(0,0,PF_W,PF_H);
-    ctx.fillStyle='hsla('+hue+',70%,82%,0.95)'; ctx.textAlign='center'; ctx.font='bold 15px "Trebuchet MS",sans-serif'; ctx.fillText(rec&&rec.failed?'character.png missing':'loading…',PF_W/2,PF_H/2); ctx.textAlign='left';
-  }
+  ctx.globalAlpha=a; ctx.fillStyle='rgba(8,3,16,'+DIM+')'; ctx.fillRect(0,0,PF_W,PF_H);
+  const vg=ctx.createRadialGradient(PF_W/2,PF_H*0.46,PF_H*0.30,PF_W/2,PF_H*0.5,PF_H*0.85); vg.addColorStop(0,'rgba(6,2,12,0)'); vg.addColorStop(1,'rgba(6,2,12,0.5)'); ctx.fillStyle=vg; ctx.fillRect(0,0,PF_W,PF_H);
   ctx.globalAlpha=1; ctx.restore();
 }
 
@@ -1388,7 +1374,7 @@ function* runBoss(spec){ const boss=makeBoss(spec); hud.setBoss(boss); yield* mo
   yield* bossDefeat(boss,spec);
 }
 function* runPhase(boss,ph,pi){
-  if(ph.kind==='spell'){ sfx.spell&&sfx.spell(); hud.setSpell(ph.name); banner(ph.name,'Spell Card',SPELL_ANNOUNCE); cutin({ key:boss.design||'mandala', side:'right', hue:(boss.hue!=null?boss.hue:320), announce:SPELL_ANNOUNCE }); boss.invuln=true; yield* waitT(SPELL_ANNOUNCE); boss.invuln=false; }
+  if(ph.kind==='spell'){ sfx.spell&&sfx.spell(); hud.setSpell(ph.name); banner(ph.name,'Spell Card',SPELL_ANNOUNCE); cutin({ announce:SPELL_ANNOUNCE }); boss.invuln=true; yield* waitT(SPELL_ANNOUNCE); boss.invuln=false; }
   else hud.clearSpell();
   const survival=ph.survival||0; boss.hp=boss.maxHp=(ph.hp||1)*ENEMY_HP_MUL; boss.hpMax=boss.maxHp;
   const g=Director.beginGroup();
@@ -1443,7 +1429,6 @@ function* stageScript(){
 (function boot(){
   const cv=document.getElementById('game');
   Render.init(cv);
-  preloadPortraits();
   initGameSystems();
   attachInput(window);
   setState(STATE.TITLE);
