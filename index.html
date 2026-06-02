@@ -10,7 +10,7 @@
     font-family:"Trebuchet MS","Segoe UI",sans-serif;}
   #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     background:radial-gradient(circle at 50% 30%,#1a0e2a,#070310 70%);}
-  #game{image-rendering:auto;display:block;box-shadow:0 0 60px rgba(120,40,160,0.35),0 0 0 1px rgba(180,120,220,0.18);}
+  #game{image-rendering:auto;display:block;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;box-shadow:0 0 60px rgba(120,40,160,0.35),0 0 0 1px rgba(180,120,220,0.18);}
 </style>
 </head>
 <body>
@@ -40,6 +40,23 @@ const PLAYER_R = 2.4, GRAZE_R = 14;
 const PLAYER_SPEED = 200, PLAYER_FOCUS_MUL = 0.45, PLAYER_FAST_MUL = 1.6, PLAYER_MARGIN = 10;
 const PLAYER_START = { x: 216, y: 496 };
 const FIRE_CADENCE = 0.055, SHOT_SPEED = 720, SHOT_DMG = 2, OPTION_DMG = 1.4, MUZZLE_PARTICLES = 2;
+
+// ---- gamepad (standard mapping) ----
+const PAD_DEADZONE=0.20, PAD_AXIS_LX=0, PAD_AXIS_LY=1;
+const PAD_BTN_A=0, PAD_BTN_B=1, PAD_BTN_X=2, PAD_BTN_LB=4, PAD_BTN_RB=5, PAD_BTN_LT=6, PAD_BTN_RT=7;
+const PAD_BTN_SELECT=8, PAD_BTN_START=9, PAD_BTN_DUP=12, PAD_BTN_DDOWN=13, PAD_BTN_DLEFT=14, PAD_BTN_DRIGHT=15;
+// ---- touch ----  (relative drag to move; sticky SHOT/FOCUS toggles; BOMB/PAUSE momentary)
+const TOUCH_DRAG_SENS=1.0, TOUCH_DRAG_SENS_FOCUS=0.55;
+// on-screen button rects in logical coords; all live in the HUD strip (x>=PF_W) so they never
+// overlap the playfield drag-zone (x<PF_W). Gameplay cluster sits in the lower-mid HUD (thumb zone);
+// PAUSE is a *system* action so it is set apart (small, muted, top of the free band) to avoid
+// accidental taps and read as a different kind of control.
+const TOUCH_BTN={
+  shoot:{x:452,y:320,w:80,h:60,label:'SHOT'},
+  focus:{x:540,y:320,w:80,h:60,label:'FOCUS'},
+  bomb: {x:452,y:392,w:168,h:60,label:'BOMB'},
+  pause:{x:582,y:258,w:40,h:32,label:'II'},
+};
 const START_POWER = 100;
 
 const MAXPOWER = 400, POWER_BREAKS = [0,40,80,150,200,300,400];
@@ -222,8 +239,10 @@ function frame(nowMs){
   let dt=(nowMs-_lastMs)/1000; _lastMs=nowMs;
   if(dt>MAX_FRAME_DT) dt=MAX_FRAME_DT;
   if(dt>0) fps.frame=fps.frame*FPS_SMOOTH+(1/dt)*(1-FPS_SMOOTH);
+  pollGamepad();     // feed gamepad → rawKeys/edgeKeys/ext BEFORE edges are promoted (no 1-frame lag)
   handleInput(STEP); // promote input edges once per frame (runs even while paused)
   if((game.state===STATE.PLAYING||game.state===STATE.PAUSED) && keyEdge('Escape')) togglePause();
+  ext.dragConsumed=false;
   if(!game.paused){
     _acc += dt*(Render.timeScale||1);
     let steps=0;
@@ -231,6 +250,7 @@ function frame(nowMs){
     if(steps>=MAX_STEPS) _acc=0;
     renderAlpha=_acc/STEP;
   }
+  if(ext.dragConsumed){ ext.dragDX=0; ext.dragDY=0; } // drag applied this frame; carry-forward on 0-substep frames (120Hz)
   for(const k in stepEdge) stepEdge[k]=false; // edges are per-frame; clear leftovers
   Render.frame(nowMs, game.paused?1:renderAlpha);
 }
@@ -1121,7 +1141,14 @@ function drawBossHUD(boss){ ctx.save(); const frac=Math.max(0,Math.min(1,boss.hp
 // ---- overlays (title/pause/gameover/clear) ----
 function dimPlayfield(a){ ctx.save(); ctx.beginPath(); ctx.rect(PF_X,PF_Y,PF_W,PF_H); ctx.clip(); ctx.fillStyle='rgba(8,3,16,'+a+')'; ctx.fillRect(PF_X,PF_Y,PF_W,PF_H); ctx.restore(); }
 function ctext(s,x,y,font,col,align){ ctx.font=font; ctx.fillStyle=col; ctx.textAlign=align||'center'; ctx.fillText(s,x,y); ctx.textAlign='left'; }
-function drawOverlays(){ ctx.setTransform(dpr,0,0,dpr,0,0); const cx=PF_W/2; if(game.state===STATE.TITLE){ dimPlayfield(0.5); ctx.save(); ctx.beginPath(); ctx.rect(PF_X,PF_Y,PF_W,PF_H); ctx.clip(); const grd=ctx.createLinearGradient(0,120,0,200); grd.addColorStop(0,'#ffd9ec'); grd.addColorStop(1,'#ff8ec5'); ctext('桜花弾幕',cx,170,'bold 52px "Trebuchet MS",sans-serif','#ff8ec5'); ctx.save(); ctx.shadowColor='rgba(255,120,200,0.8)'; ctx.shadowBlur=18; ctext('桜花弾幕',cx,170,'bold 52px "Trebuchet MS",sans-serif','#ffe3f2'); ctx.restore(); ctext('S A K U R A   D A N M A K U',cx,200,'13px "Trebuchet MS",sans-serif','#cfa8e8'); ctext('Stage 1 — Vernal Petal Lane',cx,232,'14px "Trebuchet MS",sans-serif','#e9d4ff'); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext('▶  PRESS  Z  /  ENTER  TO  START',cx,330,'bold 16px "Trebuchet MS",sans-serif','#ffe08a'); ctext('Arrows move   ·   Shift focus & reveal hitbox',cx,392,'12px "Trebuchet MS",sans-serif','#b69fd6'); ctext('Z shoot   ·   X bomb   ·   P pause   ·   M mute',cx,412,'12px "Trebuchet MS",sans-serif','#b69fd6'); ctext('graze bullets for score · collect P power & • points',cx,440,'11px "Trebuchet MS",sans-serif','#9d83c0'); ctext('Hi-Score  '+pad(game.hi||0,9),cx,500,'12px "Trebuchet MS",monospace','#ffd45e'); ctx.restore(); } else if(game.state===STATE.PAUSED){ dimPlayfield(0.55); ctext('PAUSED',cx,PF_H/2-10,'bold 34px "Trebuchet MS",sans-serif','#ffe9fb'); ctext('Press P / Esc to resume',cx,PF_H/2+24,'13px "Trebuchet MS",sans-serif','#b69fd6'); } else if(game.state===STATE.GAMEOVER){ dimPlayfield(0.62); ctext('GAME OVER',cx,PF_H/2-30,'bold 40px "Trebuchet MS",sans-serif','#ff5d8f'); ctext('Score  '+pad(game.score||0,9),cx,PF_H/2+10,'16px "Trebuchet MS",monospace','#ffe9fb'); ctext('Hi-Score  '+pad(game.hi||0,9),cx,PF_H/2+34,'13px "Trebuchet MS",monospace','#ffd45e'); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext('Press Enter',cx,PF_H/2+78,'14px "Trebuchet MS",sans-serif','#cfa8e8'); } else if(game.state===STATE.STAGECLEAR){ dimPlayfield(0.5); ctext('STAGE CLEAR',cx,PF_H/2-30,'bold 38px "Trebuchet MS",sans-serif','#b9ff6a'); ctext('Score  '+pad(game.score||0,9),cx,PF_H/2+12,'16px "Trebuchet MS",monospace','#ffe9fb'); ctext('Graze  '+(game.grazeCount||0),cx,PF_H/2+38,'13px "Trebuchet MS",monospace','#b9ff6a'); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext('Press Enter',cx,PF_H/2+82,'14px "Trebuchet MS",sans-serif','#cfa8e8'); } }
+function drawOverlays(){ ctx.setTransform(dpr,0,0,dpr,0,0); const cx=PF_W/2; if(game.state===STATE.TITLE){ dimPlayfield(0.5); ctx.save(); ctx.beginPath(); ctx.rect(PF_X,PF_Y,PF_W,PF_H); ctx.clip(); const grd=ctx.createLinearGradient(0,120,0,200); grd.addColorStop(0,'#ffd9ec'); grd.addColorStop(1,'#ff8ec5'); ctext('桜花弾幕',cx,170,'bold 52px "Trebuchet MS",sans-serif','#ff8ec5'); ctx.save(); ctx.shadowColor='rgba(255,120,200,0.8)'; ctx.shadowBlur=18; ctext('桜花弾幕',cx,170,'bold 52px "Trebuchet MS",sans-serif','#ffe3f2'); ctx.restore(); ctext('S A K U R A   D A N M A K U',cx,200,'13px "Trebuchet MS",sans-serif','#cfa8e8'); ctext('Stage 1 — Vernal Petal Lane',cx,232,'14px "Trebuchet MS",sans-serif','#e9d4ff'); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext(inputMode==='touch'?'▶  TAP  TO  START':'▶  PRESS  Z  /  ENTER  TO  START',cx,330,'bold 16px "Trebuchet MS",sans-serif','#ffe08a'); if(inputMode==='touch'){ ctext('Drag in field to move   ·   tap SHOT / FOCUS to toggle',cx,392,'12px "Trebuchet MS",sans-serif','#b69fd6'); ctext('BOMB & PAUSE buttons   ·   gamepad also supported',cx,412,'12px "Trebuchet MS",sans-serif','#b69fd6'); } else { ctext('Arrows / WASD move   ·   Shift focus   ·   gamepad supported',cx,392,'12px "Trebuchet MS",sans-serif','#b69fd6'); ctext('Z shoot   ·   X bomb   ·   P pause   ·   M mute',cx,412,'12px "Trebuchet MS",sans-serif','#b69fd6'); } ctext('graze bullets for score · collect P power & • points',cx,440,'11px "Trebuchet MS",sans-serif','#9d83c0'); ctext('Hi-Score  '+pad(game.hi||0,9),cx,500,'12px "Trebuchet MS",monospace','#ffd45e'); ctx.restore(); } else if(game.state===STATE.PAUSED){ dimPlayfield(0.55); ctext('PAUSED',cx,PF_H/2-10,'bold 34px "Trebuchet MS",sans-serif','#ffe9fb'); ctext(inputMode==='touch'?'Tap to resume':'Press P / Esc to resume',cx,PF_H/2+24,'13px "Trebuchet MS",sans-serif','#b69fd6'); } else if(game.state===STATE.GAMEOVER){ dimPlayfield(0.62); ctext('GAME OVER',cx,PF_H/2-30,'bold 40px "Trebuchet MS",sans-serif','#ff5d8f'); ctext('Score  '+pad(game.score||0,9),cx,PF_H/2+10,'16px "Trebuchet MS",monospace','#ffe9fb'); ctext('Hi-Score  '+pad(game.hi||0,9),cx,PF_H/2+34,'13px "Trebuchet MS",monospace','#ffd45e'); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext(inputMode==='touch'?'Tap to continue':'Press Enter',cx,PF_H/2+78,'14px "Trebuchet MS",sans-serif','#cfa8e8'); } else if(game.state===STATE.STAGECLEAR){ dimPlayfield(0.5); ctext('STAGE CLEAR',cx,PF_H/2-30,'bold 38px "Trebuchet MS",sans-serif','#b9ff6a'); ctext('Score  '+pad(game.score||0,9),cx,PF_H/2+12,'16px "Trebuchet MS",monospace','#ffe9fb'); ctext('Graze  '+(game.grazeCount||0),cx,PF_H/2+38,'13px "Trebuchet MS",monospace','#b9ff6a'); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext(inputMode==='touch'?'Tap to continue':'Press Enter',cx,PF_H/2+82,'14px "Trebuchet MS",sans-serif','#cfa8e8'); } }
+
+// ---- on-screen touch controls (drawn only on touch devices / after first touch) ----
+function drawTouchControls(){ if(inputMode!=='touch') return; const st=game.state; if(st!==STATE.PLAYING&&st!==STATE.PAUSED) return; ctx.setTransform(dpr,0,0,dpr,0,0);
+  const btn=(r,label,lit,accent,fs,base)=>{ ctx.save(); const a=base||0.92; ctx.globalAlpha=a; ctx.fillStyle=lit?hexA(accent,0.32):'rgba(36,19,56,0.6)'; roundRect(r.x,r.y,r.w,r.h,10); ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=hexA(accent,lit?0.95:0.5); roundRect(r.x,r.y,r.w,r.h,10); ctx.stroke(); ctx.fillStyle=lit?'#ffffff':PALETTE.uiText; ctx.font='bold '+(fs||15)+'px "Trebuchet MS",sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(label,r.x+r.w/2,r.y+r.h/2); ctx.textAlign='left'; ctx.textBaseline='alphabetic'; ctx.restore(); };
+  if(st===STATE.PLAYING){ btn(TOUCH_BTN.shoot,'SHOT',touchShoot,PALETTE.graze,15,0.92); btn(TOUCH_BTN.focus,'FOCUS',touchFocus,PALETTE.hitRing,15,0.92); btn(TOUCH_BTN.bomb,'BOMB',false,PALETTE.bomb,17,0.92); }
+  btn(TOUCH_BTN.pause,(st===STATE.PAUSED?'▶':'II'),false,PALETTE.uiDim,13,0.6);   // pause: muted & small — a system action, set apart from the gameplay cluster
+}
 
 // ---- master frame ----
 function RenderFrame(now,alpha){ const dt=_lastNow?Math.min(0.05,(now-_lastNow)/1000):0.016; _lastNow=now; _fpsAcc+=dt; _fpsN++; if(_fpsAcc>=0.25){ _fps=_fps*0.5+(_fpsN/_fpsAcc)*0.5; _fpsAcc=0; _fpsN=0; } updateCam(dt); const paused=game.paused; ctx.setTransform(dpr,0,0,dpr,0,0); ctx.fillStyle='#05030a'; ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
@@ -1131,7 +1158,7 @@ function RenderFrame(now,alpha){ const dt=_lastNow?Math.min(0.05,(now-_lastNow)/
   ctx.save(); ctx.translate(PF_X+cam.shakeX,PF_Y+cam.shakeY); drawItems(T); drawPlayerShots(alpha); if(game.boss&&!game.boss.dead) drawBoss(game.boss,T); drawEnemies(ctx,T,alpha); drawParticles(); drawEnemyBullets(alpha); drawPlayer(T); drawWaves(dt); drawPops(dt); ctx.restore();
   ctx.save(); ctx.translate(PF_X,PF_Y); drawBanner(paused?0:dt); drawFlash(); drawVignette(T); ctx.restore();
   ctx.restore();
-  ctx.setTransform(dpr,0,0,dpr,0,0); drawHUD(); drawOverlays();
+  ctx.setTransform(dpr,0,0,dpr,0,0); drawHUD(); drawTouchControls(); drawOverlays();
 }
 const Render={ timeScale:1, init:RenderInit, resize:RenderResize, frame:RenderFrame, flash:reqFlash, shake:reqShake, cancelWave:reqCancelWave, slowmo:reqSlowmo, popText:reqPop, banner:triggerBanner, cutin:triggerCutin };
 
@@ -1173,17 +1200,86 @@ function rain(src,o){ o=o||{}; pat.acceleratingRain({x:PF_W*0.5,y:-8},{count:o.c
 
 // ============================ SYSTEMS ================================
 const rawKeys=Object.create(null), edgeKeys=Object.create(null), stepEdge=Object.create(null);
+// shared movement seam: gamepad writes analog* (velocity), touch writes drag* (positional). playerUpdate reads both.
+const ext={ analogX:0, analogY:0, analogActive:false, dragDX:0, dragDY:0, dragConsumed:false };
+let touchShoot=true, touchFocus=false;                      // touch toggle state (shoot default ON)
+// active input method (last-used wins). Gates touch UI rendering + whether touch toggles affect play,
+// so using keyboard/gamepad hides the on-screen controls and stops the toggles from interfering.
+let inputMode=(typeof matchMedia==='function'&&matchMedia('(pointer:coarse)').matches)?'touch':'key';
+const touchPointers=new Map(); let movePointerId=-1;        // per-finger roles for multi-touch
+const _padPrev=Object.create(null); let _padIndex=-1;       // gamepad cross-frame edge memory
+function clearTransientInput(){ touchPointers.clear(); movePointerId=-1; ext.dragDX=0; ext.dragDY=0; ext.analogActive=false; ext.analogX=0; ext.analogY=0; for(const k in _padPrev) _padPrev[k]=false; }
 function attachInput(targetEl){ const el=targetEl||window;
-  el.addEventListener('keydown',e=>{ const code=e.code; if(GAME_KEYS.has(code)) e.preventDefault(); if(Audio&&Audio.unlock) Audio.unlock(); if(code==='KeyM'){ if(!rawKeys[code]) Audio.toggleMute(); } if(!rawKeys[code]) edgeKeys[code]=true; rawKeys[code]=true; },{passive:false});
+  el.addEventListener('keydown',e=>{ const code=e.code; inputMode='key'; if(GAME_KEYS.has(code)) e.preventDefault(); if(Audio&&Audio.unlock) Audio.unlock(); if(code==='KeyM'){ if(!rawKeys[code]) Audio.toggleMute(); } if(!rawKeys[code]) edgeKeys[code]=true; rawKeys[code]=true; },{passive:false});
   el.addEventListener('keyup',e=>{ const code=e.code; if(GAME_KEYS.has(code)) e.preventDefault(); rawKeys[code]=false; },{passive:false});
-  window.addEventListener('blur',()=>{ for(const k in rawKeys) rawKeys[k]=false; });
+  window.addEventListener('blur',()=>{ for(const k in rawKeys) rawKeys[k]=false; clearTransientInput(); });
   document.addEventListener('visibilitychange',()=>{ if(document.hidden) Audio.suspendForHidden(); else Audio.resumeFromHidden(); });
 }
 function held2(a,b){ return !!(rawKeys[a]||rawKeys[b]); }
 function keyEdge(code){ if(stepEdge[code]){ stepEdge[code]=false; return true; } return false; }
 const moveLeft=()=>held2('ArrowLeft','KeyA'), moveRight=()=>held2('ArrowRight','KeyD'), moveUp=()=>held2('ArrowUp','KeyW'), moveDown=()=>held2('ArrowDown','KeyS');
-const focusHeld=()=>held2('ShiftLeft','ShiftRight'), fireHeld=()=>!!rawKeys['KeyZ'];
+const focusHeld=()=>held2('ShiftLeft','ShiftRight')||(inputMode==='touch'&&touchFocus), fireHeld=()=>!!rawKeys['KeyZ']||(inputMode==='touch'&&touchShoot);
 function handleInput(dt){ for(const k in edgeKeys){ if(edgeKeys[k]){ stepEdge[k]=true; edgeKeys[k]=false; } } if(stepEdge['ShiftRight']) stepEdge['ShiftLeft']=true; if(stepEdge['KeyP']) stepEdge['Escape']=true; }
+
+// ---- gamepad: poll once per frame, BEFORE handleInput, so pad edges land in edgeKeys in time ----
+function pollGamepad(){
+  ext.analogActive=false; ext.analogX=0; ext.analogY=0;
+  const pads=navigator.getGamepads?navigator.getGamepads():null; if(!pads) return;
+  let gp=(_padIndex>=0)?pads[_padIndex]:null;
+  if(!gp){ for(let i=0;i<pads.length;i++){ if(pads[i]&&pads[i].connected){ gp=pads[i]; _padIndex=i; break; } } }
+  if(!gp) return;
+  const b=gp.buttons, ax=gp.axes;
+  const down=i=>!!(b[i]&&(b[i].pressed||b[i].value>0.5));
+  // pad becomes the active input only on real activity (a button or stick past deadzone) — an idle
+  // connected pad must NOT hijack a keyboard/touch player or hide the touch UI.
+  let anyBtn=false; for(let i=0;i<b.length;i++){ if(down(i)){ anyBtn=true; break; } }
+  let sx=ax[PAD_AXIS_LX]||0, sy=ax[PAD_AXIS_LY]||0, mag=Math.hypot(sx,sy);
+  if(anyBtn||mag>PAD_DEADZONE) inputMode='pad';
+  if(inputMode!=='pad'){ for(let i=0;i<b.length;i++) _padPrev[i]=down(i); return; } // present but not active → keep clean edges, don't write rawKeys/ext
+  const rising=i=>{ const now=down(i), was=!!_padPrev[i]; _padPrev[i]=now; return now&&!was; };
+  // held → rawKeys (pad owns these while it is the active input)
+  rawKeys['KeyZ']=down(PAD_BTN_A)||down(PAD_BTN_X);
+  rawKeys['ShiftLeft']=down(PAD_BTN_LB)||down(PAD_BTN_RB)||down(PAD_BTN_LT)||down(PAD_BTN_RT);
+  rawKeys['ArrowUp']=down(PAD_BTN_DUP); rawKeys['ArrowDown']=down(PAD_BTN_DDOWN); rawKeys['ArrowLeft']=down(PAD_BTN_DLEFT); rawKeys['ArrowRight']=down(PAD_BTN_DRIGHT);
+  // edges → edgeKeys (state-gated so a single press maps to exactly one intended action)
+  const menu=(game.state===STATE.TITLE||game.state===STATE.GAMEOVER||game.state===STATE.STAGECLEAR);
+  if(rising(PAD_BTN_B)) edgeKeys['KeyX']=true;                                  // bomb
+  if(rising(PAD_BTN_A)&&menu){ edgeKeys['Enter']=true; edgeKeys['KeyZ']=true; } // confirm/start on menus
+  if(rising(PAD_BTN_START)){ if(game.state===STATE.PLAYING||game.state===STATE.PAUSED) edgeKeys['Escape']=true; else { edgeKeys['Enter']=true; edgeKeys['KeyZ']=true; } }
+  if(rising(PAD_BTN_SELECT)){ if(Audio&&Audio.unlock) Audio.unlock(); Audio.toggleMute(); }
+  // left stick → analog velocity vector (deadzone-rescaled, magnitude preserved up to 1)
+  if(mag>PAD_DEADZONE){ let n=(mag-PAD_DEADZONE)/(1-PAD_DEADZONE); if(n>1)n=1; const k=n/mag; ext.analogX=sx*k; ext.analogY=sy*k; ext.analogActive=true; }
+}
+
+// ---- touch: relative-drag move + on-canvas toggle/momentary buttons (Pointer Events, multi-touch) ----
+function eventToLogical(e){ const r=canvas.getBoundingClientRect(); return { x:(e.clientX-r.left)/r.width*CANVAS_W, y:(e.clientY-r.top)/r.height*CANVAS_H }; }
+function ptInRect(x,y,r){ return x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h; }
+function inPlayfield(x,y){ return x>=PF_X&&x<PF_W&&y>=PF_Y&&y<PF_H; }
+function onPointerDown(e){
+  const isTouch=(e.pointerType==='touch'||e.pointerType==='pen');
+  if(isTouch) inputMode='touch';                               // touch becomes the active input method
+  if(Audio&&Audio.unlock) Audio.unlock();                       // touch-first audio unlock (keydown path misses this)
+  if(e.pointerType==='touch') e.preventDefault();
+  const p=eventToLogical(e), st=game.state;
+  if(st===STATE.TITLE||st===STATE.GAMEOVER||st===STATE.STAGECLEAR){ edgeKeys['Enter']=true; if(st===STATE.TITLE) edgeKeys['KeyZ']=true; touchPointers.set(e.pointerId,{role:'menu'}); return; }
+  if(st===STATE.PAUSED){ edgeKeys['Escape']=true; touchPointers.set(e.pointerId,{role:'btn'}); return; }   // any tap resumes
+  if(inputMode==='touch'){
+    if(ptInRect(p.x,p.y,TOUCH_BTN.pause)){ edgeKeys['Escape']=true; touchPointers.set(e.pointerId,{role:'btn'}); return; }
+    if(ptInRect(p.x,p.y,TOUCH_BTN.shoot)){ touchShoot=!touchShoot; touchPointers.set(e.pointerId,{role:'btn'}); return; }
+    if(ptInRect(p.x,p.y,TOUCH_BTN.focus)){ touchFocus=!touchFocus; touchPointers.set(e.pointerId,{role:'btn'}); return; }
+    if(ptInRect(p.x,p.y,TOUCH_BTN.bomb)){ edgeKeys['KeyX']=true; touchPointers.set(e.pointerId,{role:'btn'}); return; }
+  }
+  if(isTouch&&st===STATE.PLAYING&&inPlayfield(p.x,p.y)&&movePointerId===-1){ movePointerId=e.pointerId; touchPointers.set(e.pointerId,{role:'move',lastX:p.x,lastY:p.y}); try{ canvas.setPointerCapture(e.pointerId); }catch(_){} }
+}
+function onPointerMove(e){ const rec=touchPointers.get(e.pointerId); if(!rec||rec.role!=='move'||game.state!==STATE.PLAYING) return; if(e.pointerType==='touch') e.preventDefault(); const p=eventToLogical(e); const s=focusHeld()?TOUCH_DRAG_SENS_FOCUS:TOUCH_DRAG_SENS; ext.dragDX+=(p.x-rec.lastX)*s; ext.dragDY+=(p.y-rec.lastY)*s; rec.lastX=p.x; rec.lastY=p.y; }
+function onPointerUp(e){ const rec=touchPointers.get(e.pointerId); if(rec){ if(rec.role==='move') movePointerId=-1; touchPointers.delete(e.pointerId); } try{ canvas.releasePointerCapture(e.pointerId); }catch(_){} }
+function attachTouch(el){
+  el.addEventListener('pointerdown',onPointerDown,{passive:false}); el.addEventListener('pointermove',onPointerMove,{passive:false});
+  el.addEventListener('pointerup',onPointerUp,{passive:false}); el.addEventListener('pointercancel',onPointerUp,{passive:false});
+  el.addEventListener('contextmenu',e=>e.preventDefault());
+  window.addEventListener('gamepadconnected',e=>{ _padIndex=e.gamepad.index; });
+  window.addEventListener('gamepaddisconnected',e=>{ if(e.gamepad.index===_padIndex){ _padIndex=-1; clearTransientInput(); rawKeys['KeyZ']=false; rawKeys['ShiftLeft']=false; rawKeys['ArrowUp']=rawKeys['ArrowDown']=rawKeys['ArrowLeft']=rawKeys['ArrowRight']=false; if(inputMode==='pad') inputMode=(typeof matchMedia==='function'&&matchMedia('(pointer:coarse)').matches)?'touch':'key'; } });
+}
 
 let player=null, game=null;
 function makePlayer(){ return { x:PLAYER_START.x, y:PLAYER_START.y, r:PLAYER_R, focus:false, state:'alive', dead:false, invuln:0, blink:false, fireCd:0, power:START_POWER, bombs:START_BOMBS, lives:START_LIVES, itemR:14, bombActive:0, bossDot:0, pendingDeath:0, respawnT:0, options:[], mvx:0, mvy:0 }; }
@@ -1220,14 +1316,15 @@ function playerUpdate(dt){
   if(player.bombActive>0) player.bombActive-=dt;
   if(player.state==='pendingdeath'){ player.pendingDeath-=dt; if(keyEdge('KeyX')&&player.bombs>0){ player.state='alive'; doBomb(true); return; } if(player.pendingDeath<=0){ finalizeDeath(); return; } }
   if(player.state==='dead'){ player.respawnT-=dt; if(player.respawnT<=0) respawnNow(); return; }
-  let dx=0,dy=0; if(moveLeft()) dx-=1; if(moveRight()) dx+=1; if(moveUp()) dy-=1; if(moveDown()) dy+=1; if(dx&&dy){ const inv=0.70710678; dx*=inv; dy*=inv; } player.mvx=dx; player.mvy=dy;
+  let dx=0,dy=0; if(moveLeft()) dx-=1; if(moveRight()) dx+=1; if(moveUp()) dy-=1; if(moveDown()) dy+=1; if(ext.analogActive){ dx+=ext.analogX; dy+=ext.analogY; } { const m=Math.hypot(dx,dy); if(m>1){ dx/=m; dy/=m; } } player.mvx=dx; player.mvy=dy;
   const moveMul=player.focus?PLAYER_FOCUS_MUL:(fireHeld()?1:PLAYER_FAST_MUL); const spd=PLAYER_SPEED*moveMul; player.x+=dx*spd*dt; player.y+=dy*spd*dt;
+  if(!ext.dragConsumed){ player.x+=ext.dragDX; player.y+=ext.dragDY; ext.dragConsumed=true; } // touch drag = direct displacement, applied once/frame
   player.x=clamp(player.x,PLAYER_MARGIN,PF_W-PLAYER_MARGIN); player.y=clamp(player.y,PLAYER_MARGIN,PF_H-PLAYER_MARGIN);
   layoutOptions();
   if(keyEdge('KeyX')) tryBomb();
   if(player.state==='alive') playerFire(dt);
 }
-function respawnNow(){ player.state='alive'; player.dead=false; player.x=PLAYER_START.x; player.y=PLAYER_START.y; player.invuln=RESPAWN_INVULN; player.fireCd=0; layoutOptions(); }
+function respawnNow(){ player.state='alive'; player.dead=false; player.x=PLAYER_START.x; player.y=PLAYER_START.y; player.invuln=RESPAWN_INVULN; player.fireCd=0; ext.dragDX=0; ext.dragDY=0; layoutOptions(); }
 
 function shotLevel(){ const p=player.power; let lvl=0; for(let i=1;i<POWER_BREAKS.length;i++) if(p>=POWER_BREAKS[i]) lvl=i; return lvl; }
 function optionCount(){ return [0,0,1,2,2,3,4][shotLevel()]; }
@@ -1432,6 +1529,7 @@ function* stageScript(){
   Render.init(cv);
   initGameSystems();
   attachInput(window);
+  attachTouch(cv);
   setState(STATE.TITLE);
   requestAnimationFrame(frame);
 })();
