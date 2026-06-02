@@ -41,6 +41,26 @@ const PLAYER_SPEED = 200, PLAYER_FOCUS_MUL = 0.45, PLAYER_FAST_MUL = 1.6, PLAYER
 const PLAYER_START = { x: 216, y: 496 };
 const FIRE_CADENCE = 0.055, SHOT_SPEED = 720, SHOT_DMG = 2, OPTION_DMG = 1.4, MUZZLE_PARTICLES = 2;
 
+// ---- graze power-up (temporary super-shot earned at graze milestones) ----
+// First fires at 50 cumulative graze; the gap then grows +10 each time (50,60,70,…), so the
+// cumulative thresholds are 50,110,180,260,… Lasts GRAZE_POWER_DURATION or until a hit pops it
+// (a hit ends the state instead of killing — no miss). Shot ignores power level entirely.
+const GRAZE_POWER_FIRST = 50, GRAZE_POWER_STEP = 10;        // first threshold; per-activation interval growth
+const GRAZE_POWER_DURATION = 8.0;                           // active seconds (refreshed if it re-triggers while active)
+const GRAZE_HIT_PENALTY = 1.0;                              // a hit during power-up subtracts this many seconds of remaining time (no release, no i-frames)
+const GRAZE_HUE = 140;                                      // signature colour for all power-up visuals (verdant)
+// non-focus: giant homing bullets (pooled playerShots with a steering update)
+const GRAZE_HOMING_CADENCE = 0.075, GRAZE_HOMING_COUNT = 2, GRAZE_HOMING_SPEED = 460;
+const GRAZE_HOMING_R = 13, GRAZE_HOMING_DMG = 30, GRAZE_HOMING_TURN = 7.5, GRAZE_HOMING_SPREAD = 1.1, GRAZE_HOMING_LIFE = 2.2;
+// focus: thick piercing laser — a per-tick column-damage pass (no pooled shots), drawn as a solid beam
+const GRAZE_LASER_HALFW = 30, GRAZE_LASER_DPS = 620, GRAZE_LASER_SFX_GAP = 0.12;  // HALFW drives both the beam render and the damage column
+// notional HP an endurance (耐久/survival) spell exposes to the power-up: pierce damage trims the remaining
+// survival timer by survivalTotal*(dmg/maxHp). Sized so a full 8s laser focus removes most of a 28s timer.
+const GRAZE_SURVIVAL_HP = 6000;
+const GRAZE_PIERCE = { pierce:true };                      // shared opts passed to damageEnemy by power-up shots
+const GRAZE_LASER_NOSE = 18;                               // laser emerges this far ahead of the player centre (a little past the nose)
+const GRAZE_ACTIVATE_CLEAR_R = 100;                        // radius of enemy-bullet clear when the power-up activates
+
 // ---- gamepad (standard mapping) ----
 const PAD_DEADZONE=0.20, PAD_AXIS_LX=0, PAD_AXIS_LY=1;
 const PAD_BTN_A=0, PAD_BTN_B=1, PAD_BTN_X=2, PAD_BTN_LB=4, PAD_BTN_RB=5, PAD_BTN_LT=6, PAD_BTN_RT=7;
@@ -134,7 +154,7 @@ function makePool(factory,n){
 function newBullet(){ return { x:0,y:0,vx:0,vy:0,ax:0,ay:0, r:DEFAULT_R, style:'orb', hue:0, alive:false, born:0,
   speed:0,dir:0,accel:0,av:0, grazed:false, fade:1, update:null, custom:false,
   delay:0,turn:0,turnAbs:false,speed2:null,bounces:0,fired:false,phase:0, _spr:null }; }
-function newShot(){ return { x:0,y:0,vx:0,vy:0,ax:0,ay:0, r:4, kind:'needle', style:'main', hue:330, alive:false, born:0, dmg:1, pierce:0, update:null }; }
+function newShot(){ return { x:0,y:0,vx:0,vy:0,ax:0,ay:0, r:4, kind:'needle', style:'main', hue:330, alive:false, born:0, dmg:1, pierce:0, update:null, life:0, pierceSpell:false }; }
 function newParticle(){ return { x:0,y:0,vx:0,vy:0,ax:0,ay:0, r:2, kind:'spark', hue:0, alive:false, born:0, age:0, life:0.5, rot:0, av:0, update:null }; }
 
 const enemyBullets = makePool(newBullet, ENEMYBULLET_CAP);
@@ -181,7 +201,9 @@ function integrateBullets(dt){
 }
 function integrateShots(dt){
   const it=playerShots.items, n=playerShots.count;
-  for(let i=0;i<n;i++){ const s=it[i]; s.x+=s.vx*dt; s.y+=s.vy*dt;
+  for(let i=0;i<n;i++){ const s=it[i];
+    if(s.update){ s.update(s,dt); } else { s.x+=s.vx*dt; s.y+=s.vy*dt; }
+    if(s.life>0 && T-s.born>=s.life){ s.alive=false; continue; }
     if(s.y<-BULLET_DESPAWN_MARGIN||s.x<-BULLET_DESPAWN_MARGIN||s.x>PF_W+BULLET_DESPAWN_MARGIN) s.alive=false; }
 }
 function integrateParticles(dt){
@@ -201,10 +223,12 @@ function collidePlayerBullets(){
 }
 function collideShotsEnemies(){
   const sh=playerShots.items, sn=playerShots.count;
-  for(let ei=0;ei<enemies.length;ei++){ const e=enemies[ei]; if(e.dead||e.invuln) continue;
+  for(let ei=0;ei<enemies.length;ei++){ const e=enemies[ei]; if(e.dead) continue;
+    const pierceable=e.boss&&e.survivalActive;          // endurance spell: only pierce-shots may connect
+    if(e.invuln&&!pierceable) continue;
     const ex=e.x,ey=e.y,er=e.r;
-    for(let i=0;i<sn;i++){ const s=sh[i]; if(!s.alive) continue; const rr=er+s.r;
-      if(dist2(s.x,s.y,ex,ey)<=rr*rr){ onEnemyHit(e,s,s.dmg); if(s.pierce>0) s.pierce--; else s.alive=false; if(e.dead) break; } } }
+    for(let i=0;i<sn;i++){ const s=sh[i]; if(!s.alive) continue; if(e.invuln&&!s.pierceSpell) continue; const rr=er+s.r;
+      if(dist2(s.x,s.y,ex,ey)<=rr*rr){ onEnemyHit(e,s); if(s.pierce>0) s.pierce--; else s.alive=false; if(e.dead) break; } } }
 }
 function collidePlayerEnemies(){
   if(!player||player.dead||player.invuln>0) return;
@@ -1087,7 +1111,9 @@ function drawCutin(dt){
 // ---- particles / bullets / shots / player / items / enemies ----
 function drawParticles(){ const it=particles.items,n=particles.count; ctx.save(); ctx.globalCompositeOperation='lighter'; for(let i=0;i<n;i++){ const p=it[i]; const k=p.age/p.life, fade=1-k; if(p.kind==='ring'){ const rr=p.r*(0.3+k*1.6); ctx.globalAlpha=fade*0.8; ctx.strokeStyle='hsl('+p.hue+',100%,70%)'; ctx.lineWidth=2*fade+0.5; ctx.beginPath(); ctx.arc(p.x,p.y,rr,0,TAU); ctx.stroke(); } else if(p.kind==='sparkle'){ ctx.globalAlpha=fade; ctx.fillStyle='hsl('+p.hue+',100%,85%)'; const s=p.r*(1+k); ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.age*8); ctx.fillRect(-s,-0.6,2*s,1.2); ctx.fillRect(-0.6,-s,1.2,2*s); ctx.restore(); } else { ctx.globalAlpha=fade; const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r); g.addColorStop(0,'rgba(255,255,255,0.9)'); g.addColorStop(0.5,'hsla('+p.hue+',100%,70%,0.7)'); g.addColorStop(1,'hsla('+p.hue+',100%,60%,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,TAU); ctx.fill(); } } ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over'; ctx.restore(); }
 function drawEnemyBullets(alpha){ const it=enemyBullets.items,n=enemyBullets.count; ctx.save(); ctx.globalCompositeOperation='lighter'; for(let i=0;i<n;i++){ const b=it[i]; const px=b.x+b.vx*alpha*STEP, py=b.y+b.vy*alpha*STEP; const spr=b._spr||getBulletSprite(b.style,b.hue); const sc=b.r/spr.baseR; const age=T-b.born; const a=age<SPAWN_FADE?(age/SPAWN_FADE):(b.fade!=null?b.fade:1); ctx.globalAlpha=a; if(spr.rot){ const dir=(b.dir!=null)?b.dir:Math.atan2(b.vy,b.vx); ctx.save(); ctx.translate(px,py); ctx.rotate(dir); ctx.scale(sc,sc); ctx.drawImage(spr.canvas,-spr.cx,-spr.cy); ctx.restore(); } else { const w=spr.canvas.width*sc, h=spr.canvas.height*sc; ctx.drawImage(spr.canvas,px-w/2,py-h/2,w,h); } } ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over'; ctx.restore(); }
-function drawPlayerShots(alpha){ const it=playerShots.items,n=playerShots.count; ctx.save(); ctx.globalCompositeOperation='lighter'; for(let i=0;i<n;i++){ const s=it[i]; const spr=getPlayerShotSprite(s.kind||'needle',s.hue||330); const px=s.x+s.vx*alpha*STEP, py=s.y+s.vy*alpha*STEP; if((s.kind||'needle')==='needle'){ ctx.save(); ctx.translate(px,py); ctx.rotate(Math.atan2(s.vy,s.vx)+HALFPI); ctx.drawImage(spr,-spr.width/2,-spr.height/2); ctx.restore(); } else ctx.drawImage(spr,px-spr.width/2,py-spr.height/2); } ctx.globalCompositeOperation='source-over'; ctx.restore(); }
+function drawPlayerShots(alpha){ const it=playerShots.items,n=playerShots.count; ctx.save(); ctx.globalCompositeOperation='lighter'; for(let i=0;i<n;i++){ const s=it[i]; const kind=s.kind||'needle'; const px=s.x+s.vx*alpha*STEP, py=s.y+s.vy*alpha*STEP;
+    if(kind==='homing'){ const R=s.r*1.7; const g=ctx.createRadialGradient(px,py,1,px,py,R); g.addColorStop(0,'rgba(255,255,255,0.95)'); g.addColorStop(0.4,'hsla('+s.hue+',100%,75%,0.85)'); g.addColorStop(1,'hsla('+s.hue+',100%,62%,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(px,py,R,0,TAU); ctx.fill(); ctx.fillStyle='rgba(255,255,255,0.92)'; ctx.beginPath(); ctx.arc(px,py,s.r*0.5,0,TAU); ctx.fill(); continue; }
+    const spr=getPlayerShotSprite(kind,s.hue||330); if(kind==='needle'){ ctx.save(); ctx.translate(px,py); ctx.rotate(Math.atan2(s.vy,s.vx)+HALFPI); ctx.drawImage(spr,-spr.width/2,-spr.height/2); ctx.restore(); } else ctx.drawImage(spr,px-spr.width/2,py-spr.height/2); } ctx.globalCompositeOperation='source-over'; ctx.restore(); }
 function drawEnemies(c,t,alpha){ for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(!e||e.dead||e.boss) continue; const x=e.x,y=e.y,hue=e.hue; c.save(); c.globalCompositeOperation='lighter'; const g=c.createRadialGradient(x,y,1,x,y,e.r*1.9); g.addColorStop(0,'hsla('+hue+',90%,75%,0.55)'); g.addColorStop(1,'hsla('+hue+',90%,60%,0)'); c.fillStyle=g; c.beginPath(); c.arc(x,y,e.r*1.9,0,TAU); c.fill(); c.restore(); c.save(); c.translate(x,y); const wf=Math.sin(t*12+e.born*7)*0.35+0.95; c.fillStyle='hsla('+hue+',80%,86%,0.5)'; c.beginPath(); c.ellipse(-e.r*0.7,0,e.r*0.7,e.r*1.1*wf,0.5,0,TAU); c.fill(); c.beginPath(); c.ellipse(e.r*0.7,0,e.r*0.7,e.r*1.1*wf,-0.5,0,TAU); c.fill(); c.fillStyle='hsl('+hue+',70%,93%)'; c.beginPath(); c.arc(0,0,e.r*0.6,0,TAU); c.fill(); c.fillStyle='hsl('+hue+',75%,55%)'; c.beginPath(); c.arc(0,-e.r*0.15,e.r*0.32,0,TAU); c.fill(); c.restore(); } }
 const ITEM_LABEL={ power:'P', bigpower:'P', point:'★', oneup:'♥', full:'F', bomb:'B', star:'★' };
 function drawItems(t){
@@ -1108,7 +1134,35 @@ function drawItems(t){
   }
   ctx.textAlign='left'; ctx.textBaseline='alphabetic';
 }
-function drawPlayer(t){ if(!player||player.dead) return; const x=player.x,y=player.y; let vis=1; if(player.invuln>0) vis=(Math.floor(player.invuln/RESPAWN_BLINK)&1)?0.35:1; ctx.save(); ctx.globalAlpha=vis; ctx.save(); ctx.globalCompositeOperation='lighter'; const eg=ctx.createRadialGradient(x,y+10,1,x,y+10,12+Math.sin(t*20)*2); eg.addColorStop(0,hexA(PALETTE.engine,0.9)); eg.addColorStop(1,hexA(PALETTE.engine,0)); ctx.fillStyle=eg; ctx.beginPath(); ctx.arc(x,y+10,12,0,TAU); ctx.fill(); ctx.restore(); ctx.fillStyle=PALETTE.ship; ctx.beginPath(); ctx.moveTo(x,y-11); ctx.lineTo(x-8,y+8); ctx.lineTo(x,y+4); ctx.lineTo(x+8,y+8); ctx.closePath(); ctx.fill(); ctx.fillStyle=PALETTE.shipTrim; ctx.beginPath(); ctx.moveTo(x,y-6); ctx.lineTo(x-4,y+5); ctx.lineTo(x+4,y+5); ctx.closePath(); ctx.fill(); if(player.options) for(const o of player.options){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.fillStyle=PALETTE.option; ctx.beginPath(); ctx.arc(x+o.x,y+o.y,3.4,0,TAU); ctx.fill(); ctx.restore(); } if(player.focus){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.translate(x,y); ctx.rotate(t*2.2); ctx.strokeStyle=PALETTE.hitRing; ctx.lineWidth=1.6; for(let s=0;s<3;s++){ ctx.rotate(TAU/3); ctx.beginPath(); ctx.arc(0,0,9,0.2,Math.PI*0.8); ctx.stroke(); } ctx.restore(); ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.arc(x,y,PLAYER_R,0,TAU); ctx.fill(); ctx.fillStyle=PALETTE.hitRing; ctx.beginPath(); ctx.arc(x,y,1.2,0,TAU); ctx.fill(); } ctx.globalAlpha=1; ctx.restore(); }
+function drawPlayer(t){ if(!player||player.dead) return; const x=player.x,y=player.y; let vis=1; if(player.invuln>0) vis=(Math.floor(player.invuln/RESPAWN_BLINK)&1)?0.35:1; ctx.save(); ctx.globalAlpha=vis; ctx.save(); ctx.globalCompositeOperation='lighter'; const eg=ctx.createRadialGradient(x,y+10,1,x,y+10,12+Math.sin(t*20)*2); eg.addColorStop(0,hexA(PALETTE.engine,0.9)); eg.addColorStop(1,hexA(PALETTE.engine,0)); ctx.fillStyle=eg; ctx.beginPath(); ctx.arc(x,y+10,12,0,TAU); ctx.fill(); ctx.restore(); ctx.fillStyle=PALETTE.ship; ctx.beginPath(); ctx.moveTo(x,y-11); ctx.lineTo(x-8,y+8); ctx.lineTo(x,y+4); ctx.lineTo(x+8,y+8); ctx.closePath(); ctx.fill(); ctx.fillStyle=PALETTE.shipTrim; ctx.beginPath(); ctx.moveTo(x,y-6); ctx.lineTo(x-4,y+5); ctx.lineTo(x+4,y+5); ctx.closePath(); ctx.fill(); if(player.options) for(const o of player.options){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.fillStyle=PALETTE.option; ctx.beginPath(); ctx.arc(x+o.x,y+o.y,3.4,0,TAU); ctx.fill(); ctx.restore(); } if(player.focus){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.translate(x,y); ctx.rotate(t*2.2); ctx.strokeStyle=PALETTE.hitRing; ctx.lineWidth=1.6; for(let s=0;s<3;s++){ ctx.rotate(TAU/3); ctx.beginPath(); ctx.arc(0,0,9,0.2,Math.PI*0.8); ctx.stroke(); } ctx.restore(); ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.arc(x,y,PLAYER_R,0,TAU); ctx.fill(); ctx.fillStyle=PALETTE.hitRing; ctx.beginPath(); ctx.arc(x,y,1.2,0,TAU); ctx.fill(); }
+  if(player.grazePowerT>0){ const frac=clamp(player.grazePowerT/GRAZE_POWER_DURATION,0,1); ctx.save(); ctx.translate(x,y); ctx.rotate(t*1.6);  // remaining-time ring — source-over (NO additive glow, so it won't impede dodging); identical in focus & non-focus
+    ctx.strokeStyle='hsla('+GRAZE_HUE+',95%,68%,0.9)'; ctx.lineWidth=2.5; ctx.lineCap='round'; ctx.beginPath(); ctx.arc(0,0,18,-HALFPI,-HALFPI+TAU*frac); ctx.stroke(); ctx.restore(); }
+  ctx.globalAlpha=1; ctx.restore(); }   // graze-power glow/halo intentionally NOT drawn (it obscured the hitbox); only the non-glowing timer ring above
+function drawGrazeLaser(t){ if(!player||player.dead||!(player.grazePowerT>0)||!player.focus) return; const x=player.x, y=player.y, top=0, base=y-GRAZE_LASER_NOSE, w=GRAZE_LASER_HALFW, flick=0.85+0.15*Math.sin(t*40), taper=Math.min(36,Math.max(0,base-top)*0.5), yt=base-taper;
+  // full-width for most of its length, then the bottom ~taper px converges to a point at `base` (a little ahead of
+  // the nose) so it reads as an emission rather than a flat-cropped bar. A tight bloom marks the emission point.
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  function beam(ww){ const tip=Math.max(2,ww*0.16); ctx.beginPath(); ctx.moveTo(x-ww,top); ctx.lineTo(x+ww,top); ctx.lineTo(x+ww,yt); ctx.lineTo(x+tip,base); ctx.lineTo(x-tip,base); ctx.lineTo(x-ww,yt); ctx.closePath(); }
+  const g=ctx.createLinearGradient(x-w*2.6,0,x+w*2.6,0); g.addColorStop(0,'hsla('+GRAZE_HUE+',100%,70%,0)'); g.addColorStop(0.5,'hsla('+GRAZE_HUE+',100%,72%,'+(0.5*flick)+')'); g.addColorStop(1,'hsla('+GRAZE_HUE+',100%,70%,0)'); ctx.fillStyle=g; beam(w*2.6); ctx.fill();
+  ctx.fillStyle='hsla('+GRAZE_HUE+',100%,82%,0.8)'; beam(w); ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,0.92)'; beam(w*0.45); ctx.fill();
+  const bg=ctx.createRadialGradient(x,base,1,x,base,w*0.7); bg.addColorStop(0,'rgba(255,255,255,0.95)'); bg.addColorStop(1,'hsla('+GRAZE_HUE+',100%,70%,0)'); ctx.fillStyle=bg; ctx.beginPath(); ctx.arc(x,base,w*0.7,0,TAU); ctx.fill();
+  ctx.restore(); }
+// beam itself is unchanged (original additive look). To keep enemy bullets readable where they overlap the
+// bright bar (additive bullet over an additive saturated beam washes out), lay a soft DARK backing under each on-beam
+// bullet just before the bullet pass. The beam's solid bar is FLAT max-bright out to ±half (hard-edged fillRects), so
+// the backing is uniform across the whole bar and tapers to 0 only across the dimming glow beyond it — giving stable
+// contrast at every offset (a centre-weighted taper left the bar edges under-shadowed → flickery visibility).
+function drawLaserBulletContrast(alpha){ if(!player||player.dead||!(player.grazePowerT>0)||!player.focus) return;
+  const px=player.x, py=player.y, half=GRAZE_LASER_HALFW, it=enemyBullets.items, n=enemyBullets.count;
+  ctx.save(); ctx.globalCompositeOperation='source-over';
+  for(let i=0;i<n;i++){ const b=it[i]; if(!b.alive) continue; const bx=b.x+b.vx*alpha*STEP, by=b.y+b.vy*alpha*STEP;
+    if(by>py) continue; const dx=Math.abs(bx-px), fade=half*1.8; if(dx>fade+b.r) continue;
+    const k=(dx<=half)?1:Math.max(0,1-(dx-half)/(fade-half));             // FLAT max across the solid bar (beam is uniformly max-bright out to ±half); taper to 0 only across the dimming glow beyond → stable contrast at every offset
+    const a=0.72*k; if(a<=0.03) continue;
+    const r=(b.r||4)*1.8, g=ctx.createRadialGradient(bx,by,0,bx,by,r); g.addColorStop(0,'rgba(6,3,14,'+a+')'); g.addColorStop(0.6,'rgba(6,3,14,'+(a*0.72)+')'); g.addColorStop(1,'rgba(6,3,14,0)');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(bx,by,r,0,TAU); ctx.fill(); }
+  ctx.restore(); }
 
 // ---- screen fx ----
 function reqFlash(intensity,hue){ cam.flash=Math.max(cam.flash,intensity==null?1:intensity); cam.flashHue=hue||0; }
@@ -1131,7 +1185,10 @@ function drawHUD(){ ctx.save(); ctx.translate(PF_W,0); ctx.fillStyle=PALETTE.hud
   label('Player'); y+=16; for(let i=0;i<MAX_LIVES&&i<6;i++){ ctx.fillStyle=(i<lives)?PALETTE.life:'rgba(255,93,143,0.18)'; icon_heart(lx+i*18,y); } y+=26;
   label('Bomb'); y+=16; for(let i=0;i<MAX_BOMBS&&i<6;i++){ ctx.fillStyle=(i<bombs)?PALETTE.bomb:'rgba(116,224,255,0.18)'; icon_star(lx+i*18,y); } y+=28;
   label('Power'); y+=8; const barw=HUD_W-44, ph=12, pf=Math.max(0,Math.min(1,pw/MAXPOWER)); ctx.fillStyle=PALETTE.powerBg; roundRect(lx,y,barw,ph,4); ctx.fill(); const pg=ctx.createLinearGradient(lx,0,lx+barw,0); pg.addColorStop(0,PALETTE.power0); pg.addColorStop(1,PALETTE.power1); ctx.fillStyle=pg; roundRect(lx,y,barw*pf,ph,4); ctx.fill(); ctx.fillStyle=game.fullpower?PALETTE.uiGold:PALETTE.uiText; ctx.font='9px sans-serif'; ctx.textAlign='right'; ctx.fillText(game.fullpower?'MAX':(pw/100).toFixed(2),lx+barw,y-3); ctx.textAlign='left'; y+=30;
-  label('Graze'); ctx.fillStyle=PALETTE.graze; ctx.font='bold 16px "Trebuchet MS",sans-serif'; ctx.textAlign='right'; ctx.fillText(''+(game.grazeCount||0),HUD_W-22,y+2); ctx.textAlign='left'; y+=26;
+  { const active=player&&player.grazePowerT>0; label('Graze'); ctx.fillStyle=active?'hsl('+GRAZE_HUE+',100%,72%)':PALETTE.graze; ctx.font='bold 16px "Trebuchet MS",sans-serif'; ctx.textAlign='right'; ctx.fillText(''+(game.grazeCount||0),HUD_W-22,y+2); ctx.textAlign='left';
+    // graze-power gauge: when active = remaining-time fraction (power hue); else = progress toward next milestone
+    const gx=lx, gw=HUD_W-44, gy=y+8, gh=5, prevTh=game.grazePowerThreshold-game.grazePowerInterval, prog=active?clamp(player.grazePowerT/GRAZE_POWER_DURATION,0,1):clamp((game.grazeCount-prevTh)/Math.max(1,game.grazePowerInterval),0,1);
+    ctx.fillStyle='rgba(120,255,140,0.14)'; roundRect(gx,gy,gw,gh,2.5); ctx.fill(); ctx.fillStyle=active?'hsl('+GRAZE_HUE+',100%,66%)':'rgba(185,255,106,0.85)'; roundRect(gx,gy,gw*prog,gh,2.5); ctx.fill(); } y+=30;
   label('Point'); ctx.fillStyle=PALETTE.uiText; ctx.font='bold 13px "Trebuchet MS",sans-serif'; ctx.textAlign='right'; ctx.fillText(pad(game.pointValue||0,7),HUD_W-22,y+2); ctx.textAlign='left';
   ctx.fillStyle=PALETTE.uiDim; ctx.font='9px monospace'; ctx.fillText('FPS '+(_fps|0),lx,PF_H-30); ctx.fillStyle='rgba(157,131,192,0.7)'; ctx.font='8px monospace'; ctx.fillText('Z fire  X bomb  Shift focus',lx,PF_H-18); ctx.fillText('M mute   P pause',lx,PF_H-9); ctx.restore();
   const b=game.boss; if(b&&!b.dead&&b.hpMax) drawBossHUD(b);
@@ -1155,7 +1212,7 @@ function RenderFrame(now,alpha){ const dt=_lastNow?Math.min(0.05,(now-_lastNow)/
   ctx.save(); ctx.beginPath(); ctx.rect(PF_X,PF_Y,PF_W,PF_H); ctx.clip();
   ctx.save(); ctx.translate(PF_X,PF_Y); drawBackground(T); drawScenery(); updateAndDrawPetals(paused?0:dt,T); const spellI=(game.boss&&game.boss.inSpell&&!game.boss.dead)?(game.spellIntensity!=null?game.spellIntensity:1):0; drawSpellBackground(T,spellI); if(game.state===STATE.PLAYING||game.state===STATE.PAUSED||game.boss){ ctx.fillStyle='rgba(22,9,38,0.36)'; ctx.fillRect(0,0,PF_W,PF_H); } if(game.state===STATE.PLAYING) drawPocLine(); ctx.restore();
   ctx.save(); ctx.translate(PF_X,PF_Y); drawCutin(paused?0:dt); ctx.restore();   // cut-in: above background, BELOW bullets/sprites (no shake — it's a backdrop)
-  ctx.save(); ctx.translate(PF_X+cam.shakeX,PF_Y+cam.shakeY); drawItems(T); drawPlayerShots(alpha); if(game.boss&&!game.boss.dead) drawBoss(game.boss,T); drawEnemies(ctx,T,alpha); drawParticles(); drawEnemyBullets(alpha); drawPlayer(T); drawWaves(dt); drawPops(dt); ctx.restore();
+  ctx.save(); ctx.translate(PF_X+cam.shakeX,PF_Y+cam.shakeY); drawGrazeLaser(T); drawItems(T); drawPlayerShots(alpha); if(game.boss&&!game.boss.dead) drawBoss(game.boss,T); drawEnemies(ctx,T,alpha); drawParticles(); drawLaserBulletContrast(alpha); drawEnemyBullets(alpha); drawPlayer(T); drawWaves(dt); drawPops(dt); ctx.restore();  // laser drawn first (back-most) so enemy bullets & items stay visible on top; contrast backing keeps on-beam bullets readable
   ctx.save(); ctx.translate(PF_X,PF_Y); drawBanner(paused?0:dt); drawFlash(); drawVignette(T); ctx.restore();
   ctx.restore();
   ctx.setTransform(dpr,0,0,dpr,0,0); drawHUD(); drawTouchControls(); drawOverlays();
@@ -1282,8 +1339,8 @@ function attachTouch(el){
 }
 
 let player=null, game=null;
-function makePlayer(){ return { x:PLAYER_START.x, y:PLAYER_START.y, r:PLAYER_R, focus:false, state:'alive', dead:false, invuln:0, blink:false, fireCd:0, power:START_POWER, bombs:START_BOMBS, lives:START_LIVES, itemR:14, bombActive:0, bossDot:0, pendingDeath:0, respawnT:0, options:[], mvx:0, mvy:0 }; }
-function makeGame(){ return { state:STATE.TITLE, score:0, hi:0, grazeCount:0, pointValue:POINT_MIN, pointTotal:0, extendsTaken:0, stateT:0, fullpower:false, paused:false, boss:null, spellIntensity:0, powerMax:MAXPOWER }; }
+function makePlayer(){ return { x:PLAYER_START.x, y:PLAYER_START.y, r:PLAYER_R, focus:false, state:'alive', dead:false, invuln:0, blink:false, fireCd:0, power:START_POWER, bombs:START_BOMBS, lives:START_LIVES, itemR:14, bombActive:0, bossDot:0, pendingDeath:0, respawnT:0, options:[], mvx:0, mvy:0, grazePowerT:0 }; }
+function makeGame(){ return { state:STATE.TITLE, score:0, hi:0, grazeCount:0, pointValue:POINT_MIN, pointTotal:0, extendsTaken:0, stateT:0, fullpower:false, paused:false, boss:null, spellIntensity:0, powerMax:MAXPOWER, grazePowerThreshold:GRAZE_POWER_FIRST, grazePowerInterval:GRAZE_POWER_FIRST }; }
 function initGameSystems(){ game=makeGame(); player=makePlayer(); loadHiScore(); setState(STATE.TITLE); }
 
 function updateGameSystems(dt){ game.stateT+=dt;
@@ -1304,9 +1361,9 @@ function setState(s){ const prev=game.state; game.state=s; game.stateT=0;
   else if(s===STATE.PAUSED){ game.paused=true; }
   else if(s===STATE.PLAYING){ game.paused=false; }
   else if(s===STATE.GAMEOVER){ game.paused=false; saveHiScore(); enemyBullets.clear(); Audio.playMusic('none'); }
-  else if(s===STATE.STAGECLEAR){ game.paused=false; saveHiScore(); enemyBullets.clear(); game.boss=null; Audio.playMusic('none'); }
+  else if(s===STATE.STAGECLEAR){ game.paused=false; saveHiScore(); enemyBullets.clear(); game.boss=null; if(player) endGrazePower(); Audio.playMusic('none'); }
 }
-function startGame(){ _cutin.active=false; game.score=0; game.grazeCount=0; game.pointTotal=0; game.extendsTaken=0; game.fullpower=false; game.pointValue=POINT_MIN; game.boss=null; game.spellIntensity=0; player=makePlayer(); layoutOptions(); items.length=0; enemyBullets.clear(); playerShots.clear(); particles.clear(); enemies.length=0; startStage(); setState(STATE.PLAYING); Audio.playMusic('stage'); }
+function startGame(){ _cutin.active=false; game.score=0; game.grazeCount=0; game.pointTotal=0; game.extendsTaken=0; game.fullpower=false; game.pointValue=POINT_MIN; game.boss=null; game.spellIntensity=0; game.grazePowerThreshold=GRAZE_POWER_FIRST; game.grazePowerInterval=GRAZE_POWER_FIRST; player=makePlayer(); layoutOptions(); items.length=0; enemyBullets.clear(); playerShots.clear(); particles.clear(); enemies.length=0; startStage(); setState(STATE.PLAYING); Audio.playMusic('stage'); }
 function togglePause(){ if(game.state===STATE.PLAYING) setState(STATE.PAUSED); else if(game.state===STATE.PAUSED) setState(STATE.PLAYING); }
 function onStageClear(){ setState(STATE.STAGECLEAR); }
 
@@ -1322,9 +1379,12 @@ function playerUpdate(dt){
   player.x=clamp(player.x,PLAYER_MARGIN,PF_W-PLAYER_MARGIN); player.y=clamp(player.y,PLAYER_MARGIN,PF_H-PLAYER_MARGIN);
   layoutOptions();
   if(keyEdge('KeyX')) tryBomb();
-  if(player.state==='alive') playerFire(dt);
+  if(player.state==='alive'){
+    if(player.grazePowerT>0){ player.grazePowerT-=dt; if(player.grazePowerT<=0){ endGrazePower(); } else firePowerShots(dt); }
+    else playerFire(dt);
+  }
 }
-function respawnNow(){ player.state='alive'; player.dead=false; player.x=PLAYER_START.x; player.y=PLAYER_START.y; player.invuln=RESPAWN_INVULN; player.fireCd=0; ext.dragDX=0; ext.dragDY=0; layoutOptions(); }
+function respawnNow(){ player.state='alive'; player.dead=false; player.x=PLAYER_START.x; player.y=PLAYER_START.y; player.invuln=RESPAWN_INVULN; player.fireCd=0; player.grazePowerT=0; ext.dragDX=0; ext.dragDY=0; layoutOptions(); }
 
 function shotLevel(){ const p=player.power; let lvl=0; for(let i=1;i<POWER_BREAKS.length;i++) if(p>=POWER_BREAKS[i]) lvl=i; return lvl; }
 function optionCount(){ return [0,0,1,2,2,3,4][shotLevel()]; }
@@ -1339,21 +1399,64 @@ function playerFire(dt){ if(player.fireCd>0) player.fireCd-=dt; if(!fireHeld()||
   for(let m=0;m<MUZZLE_PARTICLES;m++) spawnParticle(player.x+(rng()-0.5)*8,player.y-12,(rng()-0.5)*40,-120-rng()*60,{life:0.12,kind:'muzzle',hue:50,r:2});
   sfx.shoot&&sfx.shoot();
 }
-function fireShot(x,y,a,speed,dmg,style){ const b=playerShots.acquire(); if(!b) return; b.x=x; b.y=y; b.vx=Math.cos(a)*speed; b.vy=Math.sin(a)*speed; b.ax=0; b.ay=0; b.r=4; b.dmg=dmg; b.style=style; b.kind=(style==='option')?'orb':'needle'; b.hue=(style==='option')?200:330; b.pierce=0; b.alive=true; b.born=T; }
+function fireShot(x,y,a,speed,dmg,style){ const b=playerShots.acquire(); if(!b) return; b.x=x; b.y=y; b.vx=Math.cos(a)*speed; b.vy=Math.sin(a)*speed; b.ax=0; b.ay=0; b.r=4; b.dmg=dmg; b.style=style; b.kind=(style==='option')?'orb':'needle'; b.hue=(style==='option')?200:330; b.pierce=0; b.alive=true; b.born=T; b.update=null; b.life=0; b.pierceSpell=false; }
 function nearestEnemy(x,y){ let best=null,bd=1e9; for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(!e||e.dead) continue; const d=(e.x-x)*(e.x-x)+(e.y-y)*(e.y-y); if(d<bd){ bd=d; best=e; } } return best; }
+// homing only targets enemies with an effective hitbox — skip invulnerable ones (an entering/announcing "準備中" boss),
+// but a boss in a survival/耐久 spell IS targetable since the power-up's pierce damages it.
+function nearestHomingTarget(x,y){ let best=null,bd=1e9; for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(!e||e.dead) continue; if(e.invuln&&!(e.boss&&e.survivalActive)) continue; const d=(e.x-x)*(e.x-x)+(e.y-y)*(e.y-y); if(d<bd){ bd=d; best=e; } } return best; }
 function clampAngle(a,lo,hi){ while(a>Math.PI) a-=TAU; while(a<-Math.PI) a+=TAU; return a<lo?lo:(a>hi?hi:a); }
+
+// ---- graze power-up: activation + the super-shot (ignores power level; fires regardless of fireHeld) ----
+function activateGrazePower(){ player.grazePowerT=GRAZE_POWER_DURATION; player.fireCd=0; clearBulletsToSparkles(player.x,player.y,GRAZE_ACTIVATE_CLEAR_R); /* clear nearby enemy bullets on activation */ sfx.extend&&sfx.extend(); Render.flash(0.5,GRAZE_HUE); Render.shake(0.35); Render.popText(player.x,player.y-22,'POWER UP!',GRAZE_HUE); for(let i=0;i<16;i++){ const a=rng()*TAU,s=80+rng()*120; spawnParticle(player.x,player.y,Math.cos(a)*s,Math.sin(a)*s,{life:0.5,kind:'sparkle',hue:GRAZE_HUE,r:3}); } }
+// end the power-up AND despawn its in-flight shots, so a popped/ended state leaves no trailing pierce or stale render
+function endGrazePower(){ player.grazePowerT=0; player.fireCd=0; const it=playerShots.items; for(let i=0;i<playerShots.count;i++){ const s=it[i]; if(s.alive&&s.pierceSpell) s.alive=false; } }
+function firePowerShots(dt){
+  if(player.focus){                                    // FOCUS — thick piercing laser (continuous column damage + beam render)
+    grazeLaserDamage(dt);
+    player.fireCd-=dt; if(player.fireCd<=0){ player.fireCd+=GRAZE_LASER_SFX_GAP; sfx.shoot&&sfx.shoot(); spawnParticle(player.x+(rng()-0.5)*GRAZE_LASER_HALFW,player.y-14,(rng()-0.5)*30,-180,{life:0.12,kind:'muzzle',hue:GRAZE_HUE,r:2.4}); }
+  } else {                                             // NON-FOCUS — giant homing bullets
+    if(player.fireCd>0) player.fireCd-=dt;
+    if(player.fireCd<=0){ player.fireCd+=GRAZE_HOMING_CADENCE; spawnHomingShots(); sfx.shoot&&sfx.shoot(); }
+  }
+}
+function spawnHomingShots(){ const n=GRAZE_HOMING_COUNT;
+  for(let i=0;i<n;i++){ const t=(n>1)?(i/(n-1)-0.5):0, a=-HALFPI+t*GRAZE_HOMING_SPREAD+(rng()-0.5)*0.12;
+    const s=playerShots.acquire(); if(!s) return;
+    s.x=player.x+t*10; s.y=player.y-10; s.vx=Math.cos(a)*GRAZE_HOMING_SPEED; s.vy=Math.sin(a)*GRAZE_HOMING_SPEED; s.ax=0; s.ay=0;
+    s.r=GRAZE_HOMING_R; s.dmg=GRAZE_HOMING_DMG; s.style='powerHoming'; s.kind='homing'; s.hue=GRAZE_HUE; s.pierce=0; s.pierceSpell=true; s.update=updHomingShot; s.life=GRAZE_HOMING_LIFE; s.alive=true; s.born=T; }
+  spawnParticle(player.x,player.y-12,0,-140,{life:0.12,kind:'muzzle',hue:GRAZE_HUE,r:2.6});
+}
+function updHomingShot(s,dt){ const tgt=nearestHomingTarget(s.x,s.y);
+  if(tgt){ const want=Math.atan2(tgt.y-s.y,tgt.x-s.x), cur=Math.atan2(s.vy,s.vx); let da=want-cur; while(da>Math.PI)da-=TAU; while(da<-Math.PI)da+=TAU; const m=GRAZE_HOMING_TURN*dt; if(da>m)da=m; else if(da<-m)da=-m; const na=cur+da; s.vx=Math.cos(na)*GRAZE_HOMING_SPEED; s.vy=Math.sin(na)*GRAZE_HOMING_SPEED; }
+  s.x+=s.vx*dt; s.y+=s.vy*dt; }
+// continuous laser: damage every enemy in a vertical column above the player (pierces all; trims survival timers)
+function grazeLaserDamage(dt){ const px=player.x, py=player.y, halfW=GRAZE_LASER_HALFW, dmg=GRAZE_LASER_DPS*dt;
+  for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(!e||e.dead) continue;
+    const pierceable=e.boss&&e.survivalActive; if(e.invuln&&!pierceable) continue;
+    if(e.y>py) continue; if(Math.abs(e.x-px)>halfW+e.r) continue;
+    damageEnemy(e,dmg,GRAZE_PIERCE);
+    if(pierceable&&(rng()<0.25)) spawnParticle(e.x+(rng()-0.5)*e.r,e.y+(rng()-0.5)*e.r,(rng()-0.5)*60,(rng()-0.5)*60,{life:0.25,kind:'sparkle',hue:GRAZE_HUE,r:2.4}); } }
 
 function tryBomb(){ if(player.state!=='alive'||player.bombs<=0) return false; doBomb(false); return true; }
 function doBomb(isDeathbomb){ player.bombs--; player.invuln=Math.max(player.invuln,BOMB_INVULN); player.bombActive=BOMB_INVULN; player.bossDot=BOMB_DOT_TIME; Render.flash(BOMB_FLASH,55); Render.shake(0.6); Render.cancelWave(player.x,player.y,55,1.2); clearBulletsToSparkles(player.x,player.y,1e9); for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(e&&!e.boss&&!e.dead&&!e.invuln) damageEnemy(e,99999,true); } sfx.bomb&&sfx.bomb(); }
 function applyBossDot(dt){ if(player.bossDot>0){ player.bossDot-=dt; for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(e&&!e.dead&&!e.invuln) damageEnemy(e,BOMB_BOSS_DPS*dt,true); } } }
 function clearBulletsToSparkles(cx,cy,radius){ const r2=radius*radius; enemyBullets.forEachLive(b=>{ if(!b.alive) return; const d=(b.x-cx)*(b.x-cx)+(b.y-cy)*(b.y-cy); if(d<=r2){ b.alive=false; addScore(10); spawnParticle(b.x,b.y,(rng()-0.5)*60,(rng()-0.5)*60,{life:0.3,kind:'sparkle',hue:b.hue||55,r:2.6}); } }); }
 
-function onPlayerHit(srcBullet,enemy){ if(player.state!=='alive'||player.invuln>0) return; player.state='pendingdeath'; player.pendingDeath=DEATHBOMB_TIME; if(srcBullet) srcBullet.alive=false; }
-function finalizeDeath(){ player.state='dead'; player.dead=true; player.lives--; player.bombs=START_BOMBS; player.respawnT=0.55; sfx.death&&sfx.death(); Render.shake(0.7); Render.slowmo(0.4,0.5); clearBulletsToSparkles(player.x,player.y,DEATH_CLEAR_R); for(let i=0;i<26;i++){ const a=rng()*TAU, s=60+rng()*160; spawnParticle(player.x,player.y,Math.cos(a)*s,Math.sin(a)*s,{life:0.5,kind:'death',hue:330,r:3}); } player.power=Math.max(0,player.power-Math.floor(player.power*0.25)-15); game.fullpower=(player.power>=MAXPOWER); dropItems('power',DEATH_POWER_DROP,player.x,player.y-10,80); if(player.lives<0){ player.state='gameover'; setState(STATE.GAMEOVER); } }
+function onPlayerHit(srcBullet,enemy){ if(player.state!=='alive'||player.invuln>0) return;
+  if(player.grazePowerT>0){ // a hit during power-up does NOT release it and grants NO i-frames — it only trims the remaining time (no miss). The bullet is consumed so one distinct bullet = one -1s (no per-frame re-hit).
+    player.grazePowerT=Math.max(0,player.grazePowerT-GRAZE_HIT_PENALTY); if(srcBullet) srcBullet.alive=false;
+    sfx.graze&&sfx.graze(); Render.flash(0.22,GRAZE_HUE); Render.shake(0.22); Render.popText(player.x,player.y-18,'-1s',GRAZE_HUE);
+    for(let i=0;i<8;i++){ const a=rng()*TAU,s=50+rng()*80; spawnParticle(player.x,player.y,Math.cos(a)*s,Math.sin(a)*s,{life:0.3,kind:'sparkle',hue:GRAZE_HUE,r:2.2}); }
+    if(player.grazePowerT<=0) endGrazePower();   // a hit that drains it to 0 ends the power-up → clean up trailing shots
+    return; }
+  player.state='pendingdeath'; player.pendingDeath=DEATHBOMB_TIME; if(srcBullet) srcBullet.alive=false; }
+function finalizeDeath(){ player.state='dead'; player.dead=true; endGrazePower(); player.lives--; player.bombs=START_BOMBS; player.respawnT=0.55; sfx.death&&sfx.death(); Render.shake(0.7); Render.slowmo(0.4,0.5); clearBulletsToSparkles(player.x,player.y,DEATH_CLEAR_R); for(let i=0;i<26;i++){ const a=rng()*TAU, s=60+rng()*160; spawnParticle(player.x,player.y,Math.cos(a)*s,Math.sin(a)*s,{life:0.5,kind:'death',hue:330,r:3}); } player.power=Math.max(0,player.power-Math.floor(player.power*0.25)-15); game.fullpower=(player.power>=MAXPOWER); dropItems('power',DEATH_POWER_DROP,player.x,player.y-10,80); if(player.lives<0){ player.state='gameover'; setState(STATE.GAMEOVER); } }
 function addInvuln(seconds){ player.invuln=Math.max(player.invuln,seconds); }
 
 function addScore(n){ game.score+=n; while(game.extendsTaken<EXTEND_THRESHOLDS.length&&game.score>=EXTEND_THRESHOLDS[game.extendsTaken]){ game.extendsTaken++; grantExtend('score'); } if(game.score>game.hi) game.hi=game.score; }
-function addGraze(n){ n=n||1; game.grazeCount+=n; addScore(GRAZE_SCORE*n); sfx.graze&&sfx.graze(); }
+function addGraze(n){ n=n||1; game.grazeCount+=n; addScore(GRAZE_SCORE*n); sfx.graze&&sfx.graze();
+  // graze-milestone power-up: each crossed threshold (re)activates; interval grows +10 each time.
+  while(player&&player.state==='alive'&&game.grazeCount>=game.grazePowerThreshold){ activateGrazePower(); game.grazePowerInterval+=GRAZE_POWER_STEP; game.grazePowerThreshold+=game.grazePowerInterval; } }
 function onGraze(bullet){ if(player.invuln>0) return; addGraze(1); spawnParticle(bullet.x,bullet.y,(rng()-0.5)*40,-30,{life:0.18,kind:'graze',hue:55,r:2}); Render.popText(bullet.x,bullet.y,'+'+GRAZE_SCORE,90); }
 function grantExtend(reason){ if(player.lives>=MAX_LIVES) return; player.lives++; sfx.extend&&sfx.extend(); Render.flash(0.4,150); }
 function onSpellCaptured(bonus){ const gained=bonus||SPELL_CAPTURE_BONUS; addScore(gained); sfx.capture&&sfx.capture(); Render.flash(0.5,280); Render.popText(PF_W/2,PF_H*0.4,'+'+gained,280); }
@@ -1388,7 +1491,7 @@ function updateItems(dt){ const pAlive=(player.state==='alive'||player.state==='
 }
 function pointItemValue(yAtCollect){ const top=POC_LINE_Y, bot=PF_H; let t=(yAtCollect-top)/(bot-top); t=t<0?0:(t>1?1:t); return Math.round(POINT_BASE-t*(POINT_BASE-POINT_MIN)); }
 function collectItem(it){ switch(it.kind){ case 'power': addPower(POWER_PER_ITEM); break; case 'bigpower': addPower(POWER_PER_BIG); break; case 'full': addPower(MAXPOWER); break; case 'oneup': grantExtend('item'); break; case 'bomb': player.bombs=Math.min(MAX_BOMBS,player.bombs+1); break; case 'point': { const v=pointItemValue(it.y); game.pointValue=v; game.pointTotal++; addScore(v); break; } case 'star': addScore(500); break; } sfx.item&&sfx.item(it.kind); spawnParticle(it.x,it.y,0,-40,{life:0.25,kind:'pickup',hue:it.hue,r:3}); }
-function onEnemyHit(e,shot,dmg){ damageEnemy(e,dmg,false); }
+function onEnemyHit(e,shot){ damageEnemy(e,shot.dmg,shot.pierceSpell?GRAZE_PIERCE:null); }
 
 // ============================ STAGE / ENEMIES =======================
 const SPAWN_MARGIN=40, OFFSCREEN_PAD=32;
@@ -1440,7 +1543,12 @@ function* spawnWave(gen){ yield* gen; }
 // ---- enemy ----
 function spawnEnemy(spec){ const _hp=(spec.hp||1)*(spec.boss?1:ENEMY_HP_MUL); const e={ x:spec.x, y:spec.y, vx:0, vy:0, hp:_hp, maxHp:_hp, r:spec.r||R_POP_MED, hue:spec.hue!=null?spec.hue:200, boss:!!spec.boss, bodyDamage:!!spec.bodyDamage, score:spec.score||1000, drops:spec.drops||[], dead:false, invuln:false, born:T, _spec:spec, _steered:false }; enemies.push(e); if(spec.coro) Director.fork(()=>spec.coro(e),e); return e; }
 function enemyIntegrate(e,dt){ if(e._steered){ e._steered=false; return; } e.x+=e.vx*dt; e.y+=e.vy*dt; }
-function damageEnemy(e,dmg,fromBomb){ if(!e||e.dead||e.invuln) return false; e.hp-=dmg; if(e.hp<=0&&!e.boss){ killEnemy(e); return true; } return false; }
+function damageEnemy(e,dmg,opts){ if(!e||e.dead) return false;
+  // endurance (耐久/survival) spell: invulnerable to normal damage; only pierce-shots act, by trimming the
+  // remaining timer in proportion to the HP fraction dealt. Bombs are not pierce-flagged → cannot break it.
+  if(e.boss&&e.survivalActive){ if(opts&&opts.pierce){ if(e.survivalTotal>0&&e.maxHp>0) e.timer=Math.max(0,e.timer-e.survivalTotal*(dmg/e.maxHp)); e.hp=Math.max(0,e.hp-dmg); } return false; }   // pierce drains BOTH the HP bar and the survival timer (HP fraction removed == time fraction removed)
+  if(e.invuln) return false;
+  e.hp-=dmg; if(e.hp<=0&&!e.boss){ killEnemy(e); return true; } return false; }
 function killEnemy(e){ if(e.dead) return; e.dead=true; sfx.enemyDeath&&sfx.enemyDeath(); spawnDeathPuff(e.x,e.y,e.hue); if(e._spec&&e._spec.cancelOnDeath) cancelBullets({x:e.x,y:e.y,radius:70,frac:e._spec.cancelOnDeath,toItems:false}); if(e.drops) for(const d of e.drops) dropItem(e.x+rng.range(-8,8),e.y+rng.range(-6,6),d); if(e._spec&&e._spec.onDeath) e._spec.onDeath(e); addScore(e.score||0); }
 function despawnEnemy(e){ e.dead=true; }
 
@@ -1462,7 +1570,7 @@ function waveStream(opts){ return (function*(){ const n=opts.n||10, x=opts.x||PF
 function waveTurrets(opts){ return (function*(){ const xs=opts.xs||[PF_W*0.28,PF_W*0.72], y=opts.y||130; for(let i=0;i<xs.length;i++){ spawnEnemy({ x:xs[i], y:-SPAWN_MARGIN, hp:HP_POP_HEAVY, r:R_POP_HEAVY, hue:280, score:2500, drops:['power','power','point'], cancelOnDeath:0.4, coro:function*(e){ yield* moveTo(e,xs[i],y,1.0,EASE.out); yield* holdFire(e,function*(en){ yield* fireSpiralTurret(en,{da:i?-0.33:0.33,period:0.07,arms:2,speed:125,a0:i*Math.PI}); },opts.hold||5.0); yield* exitOff(e,i?Math.PI*0.85:Math.PI*0.15,140); } }); } yield; })(); }
 
 // ---- boss: descriptor-driven phase machine ----
-function makeBoss(spec){ const b=spawnEnemy({ x:spec.enterFrom?spec.enterFrom.x:PF_W/2, y:spec.enterFrom?spec.enterFrom.y:-60, hp:1, r:spec.r!=null?spec.r:(BOSS_HIT_R[spec.design]||18), hue:spec.hue!=null?spec.hue:320, boss:true, score:spec.score||50000, drops:[], coro:null }); b.invuln=true; b.phaseTotal=spec.phases.length; b.phaseIndex=0; b.phasesLeft=spec.phases.length; b.spellName=''; b.inSpell=false; b.timer=null; b.hpMax=1; b.design=spec.design; return b; }
+function makeBoss(spec){ const b=spawnEnemy({ x:spec.enterFrom?spec.enterFrom.x:PF_W/2, y:spec.enterFrom?spec.enterFrom.y:-60, hp:1, r:spec.r!=null?spec.r:(BOSS_HIT_R[spec.design]||18), hue:spec.hue!=null?spec.hue:320, boss:true, score:spec.score||50000, drops:[], coro:null }); b.invuln=true; b.phaseTotal=spec.phases.length; b.phaseIndex=0; b.phasesLeft=spec.phases.length; b.spellName=''; b.inSpell=false; b.timer=null; b.hpMax=1; b.design=spec.design; b.survivalActive=false; b.survivalTotal=0; return b; }
 function* runBoss(spec){ const boss=makeBoss(spec); hud.setBoss(boss); yield* moveTo(boss,spec.enterTo.x,spec.enterTo.y,BOSS_ENTER,EASE.inOut); boss.invuln=false;
   for(let pi=0;pi<spec.phases.length;pi++){ const ph=spec.phases[pi]; boss.phaseIndex=pi; boss.phasesLeft=spec.phases.length-pi; yield* runPhase(boss,ph,pi);
     sfx.bomb&&sfx.bomb(); cancelBullets({all:true,toItems:CANCEL_TO_ITEM}); screenFlash('#ffffff',0.35); shake(6,0.3);
@@ -1474,13 +1582,18 @@ function* runBoss(spec){ const boss=makeBoss(spec); hud.setBoss(boss); yield* mo
 function* runPhase(boss,ph,pi){
   if(ph.kind==='spell'){ sfx.spell&&sfx.spell(); hud.setSpell(ph.name); banner(ph.name); cutin({ announce:SPELL_ANNOUNCE }); boss.invuln=true; yield* waitT(SPELL_ANNOUNCE); boss.invuln=false; }
   else hud.clearSpell();
-  const survival=ph.survival||0; boss.hp=boss.maxHp=(ph.hp||1)*ENEMY_HP_MUL; boss.hpMax=boss.maxHp;
+  const survival=ph.survival||0;
+  // survival phases expose a notional HP pool (GRAZE_SURVIVAL_HP) so the graze power-up's pierce can trim the timer.
+  boss.maxHp=boss.hpMax=(survival>0)?(ph.hp!=null?ph.hp*ENEMY_HP_MUL:GRAZE_SURVIVAL_HP):((ph.hp||1)*ENEMY_HP_MUL);
+  boss.hp=boss.maxHp;
   const g=Director.beginGroup();
   Director.fork(()=>ph.emitter(boss),boss);
   if(ph.onEnter) ph.onEnter(boss);
-  const t0=T;
-  if(survival>0){ boss.invuln=true; boss.timer=survival; while(T-t0<survival){ boss.timer=Math.max(0,survival-(T-t0)); yield; } }
-  else { boss.timer=null; while(boss.hp>0) yield; }
+  if(survival>0){ // TIMER-driven (not wall-clock) so pierce damage that trims boss.timer actually shortens the phase
+    boss.invuln=true; boss.survivalActive=true; boss.survivalTotal=survival; boss.timer=survival; let prev=T;
+    while(boss.timer>0&&boss.hp>0){ yield; const now=T; boss.timer=Math.max(0,boss.timer-(now-prev)); prev=now; }   // ends on timer expiry OR pierce draining HP to 0
+    boss.survivalActive=false; }
+  else { boss.survivalActive=false; boss.timer=null; while(boss.hp>0) yield; }
   Director.endGroup(g);
 }
 function* bossDefeat(boss,spec){ sfx.bomb&&sfx.bomb(); boss.invuln=true; slowmo(SLOWMO_DEFEAT,SLOWMO_DEFEAT_DUR); shake(10,1.4); for(let i=0;i<6;i++){ cancelBullets({x:boss.x,y:boss.y,radius:60+i*60,frac:1.0,toItems:true}); spawnDeathPuff(boss.x+rng.range(-30,30),boss.y+rng.range(-20,20),(boss.hue+i*40)%360); yield* waitT(0.12); } screenFlash('#ffffff',0.9); for(const d of (spec.drops||[])) dropItem(boss.x+rng.range(-40,40),boss.y+rng.range(-20,20),d); hud.clearBoss(); boss.dead=true; yield* waitT(1.2); }
