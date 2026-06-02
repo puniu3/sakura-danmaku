@@ -53,7 +53,7 @@ const GRAZE_HUE = 140;                                      // signature colour 
 const GRAZE_HOMING_CADENCE = 0.075, GRAZE_HOMING_COUNT = 2, GRAZE_HOMING_SPEED = 460;
 const GRAZE_HOMING_R = 13, GRAZE_HOMING_DMG = 30, GRAZE_HOMING_TURN = 7.5, GRAZE_HOMING_SPREAD = 1.1, GRAZE_HOMING_LIFE = 2.2;
 // focus: thick piercing laser — a per-tick column-damage pass (no pooled shots), drawn as a solid beam
-const GRAZE_LASER_HALFW = 30, GRAZE_LASER_DPS = 620, GRAZE_LASER_SFX_GAP = 0.12;  // HALFW drives both the beam render and the damage column
+const GRAZE_LASER_HALFW = 30, GRAZE_LASER_DPS = 620;  // HALFW drives both the beam render and the damage column
 // notional HP an endurance (耐久/survival) spell exposes to the power-up: pierce damage trims the remaining
 // survival timer by survivalTotal*(dmg/maxHp). Sized so a full 8s laser focus removes most of a 28s timer.
 const GRAZE_SURVIVAL_HP = 6000;
@@ -861,12 +861,18 @@ const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS };
   let hiddenPaused=false;
   function suspendForHidden(){ if(ctx&&ctx.state==='running'&&!muted){ ctx.suspend(); hiddenPaused=true; } }
   function resumeFromHidden(){ hiddenPaused=false; tryResume(); }
-  return { unlock, toggleMute, setMuted, isMuted, sfxShoot, sfxEnemyHit, sfxEnemyDeath, sfxGraze, sfxBomb, sfxPlayerDeath, sfxSpellDeclare, sfxItemGet, sfxExtend, sfxBossWarn, playMusic, suspendForHidden, resumeFromHidden };
+  // power-up shot: a slightly punchier twin of sfxShoot (same family, just louder + a little body). Fired at the homing cadence
+  // for both the focus laser and the non-focus homing, so the short power-up reads as a stronger, denser version of the normal shot.
+  function sfxPowerShot(){ if(!ctx) return; const t=now(); const base=720*Math.pow(2,rnd(-0.08,0.08));
+    tone({t0:t,type:'sine',f0:base*1.35,f1:base,glideExp:true,peak:0.10,atk:0.001,dec:0.016,sus:0.3,rel:0.06,dur:0.075});
+    tone({t0:t,type:'triangle',f0:base*0.5,f1:base*0.42,glideExp:true,peak:0.05,atk:0.001,dec:0.02,sus:0.25,rel:0.05,dur:0.07});   // sub body adds weight without raising the pitch
+    noise({t0:t,filter:'bandpass',filterFreq:base*2.4,filterFreq1:base*1.2,q:2.5,peak:0.028,atk:0.0006,rel:0.03,dur:0.03}); }
+  return { unlock, toggleMute, setMuted, isMuted, sfxShoot, sfxEnemyHit, sfxEnemyDeath, sfxGraze, sfxBomb, sfxPlayerDeath, sfxSpellDeclare, sfxItemGet, sfxExtend, sfxBossWarn, sfxPowerShot, playMusic, suspendForHidden, resumeFromHidden };
 })();
 
 // sfx shim (method-name facade used by systems/stage)
 const sfx = {
-  shoot:()=>Audio.sfxShoot(), bomb:()=>Audio.sfxBomb(), deathbomb:()=>Audio.sfxBomb(),
+  shoot:()=>Audio.sfxShoot(), powerShot:()=>Audio.sfxPowerShot(), bomb:()=>Audio.sfxBomb(), deathbomb:()=>Audio.sfxBomb(),
   death:()=>Audio.sfxPlayerDeath(), graze:()=>Audio.sfxGraze(),
   item:(k)=>Audio.sfxItemGet(), powerup:()=>Audio.sfxItemGet(), extend:()=>Audio.sfxExtend(),
   capture:()=>Audio.sfxSpellDeclare(), enemyHit:()=>Audio.sfxEnemyHit(), enemyDeath:()=>Audio.sfxEnemyDeath(),
@@ -1413,10 +1419,10 @@ function endGrazePower(){ player.grazePowerT=0; player.fireCd=0; const it=player
 function firePowerShots(dt){
   if(player.focus){                                    // FOCUS — thick piercing laser (continuous column damage + beam render)
     grazeLaserDamage(dt);
-    player.fireCd-=dt; if(player.fireCd<=0){ player.fireCd+=GRAZE_LASER_SFX_GAP; sfx.shoot&&sfx.shoot(); spawnParticle(player.x+(rng()-0.5)*GRAZE_LASER_HALFW,player.y-14,(rng()-0.5)*30,-180,{life:0.12,kind:'muzzle',hue:GRAZE_HUE,r:2.4}); }
+    player.fireCd-=dt; if(player.fireCd<=0){ player.fireCd+=GRAZE_HOMING_CADENCE; sfx.powerShot&&sfx.powerShot(); spawnParticle(player.x+(rng()-0.5)*GRAZE_LASER_HALFW,player.y-14,(rng()-0.5)*30,-180,{life:0.12,kind:'muzzle',hue:GRAZE_HUE,r:2.4}); }   // laser SFX/muzzle ticks at the homing cadence (same pace as the homing shots)
   } else {                                             // NON-FOCUS — giant homing bullets
     if(player.fireCd>0) player.fireCd-=dt;
-    if(player.fireCd<=0){ player.fireCd+=GRAZE_HOMING_CADENCE; spawnHomingShots(); sfx.shoot&&sfx.shoot(); }
+    if(player.fireCd<=0){ player.fireCd+=GRAZE_HOMING_CADENCE; spawnHomingShots(); sfx.powerShot&&sfx.powerShot(); }
   }
 }
 function spawnHomingShots(){ const n=GRAZE_HOMING_COUNT;
