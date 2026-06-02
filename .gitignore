@@ -10,3 +10,6 @@ bgm-demo.html
 # Cut-in placeholder art — swap in real generated assets; the cut-in degrades
 # gracefully (loading/missing fallback) when it is absent.
 character.png
+
+# Portrait cut-in decks — visual-4choice provenance, kept locally, not tracked
+design/portraits/
