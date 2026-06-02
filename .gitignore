@@ -13,3 +13,6 @@ character.png
 
 # Portrait cut-in decks — visual-4choice provenance, kept locally, not tracked
 design/portraits/
+
+# Claude Code local config (memory, settings) — machine-local, not for the repo
+.claude/
