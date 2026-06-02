@@ -42,10 +42,10 @@ const PLAYER_START = { x: 216, y: 496 };
 const FIRE_CADENCE = 0.055, SHOT_SPEED = 720, SHOT_DMG = 2, OPTION_DMG = 1.4, MUZZLE_PARTICLES = 2;
 
 // ---- graze power-up (temporary super-shot earned at graze milestones) ----
-// First fires at 50 cumulative graze; the gap then grows +10 each time (50,60,70,…), so the
-// cumulative thresholds are 50,110,180,260,… Lasts GRAZE_POWER_DURATION or until a hit pops it
+// First fires at 20 cumulative graze; the gap then grows +20 each time (20,40,60,…), so the
+// cumulative thresholds are 20,60,120,200,… Lasts GRAZE_POWER_DURATION or until a hit pops it
 // (a hit ends the state instead of killing — no miss). Shot ignores power level entirely.
-const GRAZE_POWER_FIRST = 50, GRAZE_POWER_STEP = 10;        // first threshold; per-activation interval growth
+const GRAZE_POWER_FIRST = 20, GRAZE_POWER_STEP = 20;        // first threshold; per-activation interval growth
 const GRAZE_POWER_DURATION = 8.0;                           // active seconds (refreshed if it re-triggers while active)
 const GRAZE_HIT_PENALTY = 1.0;                              // a hit during power-up subtracts this many seconds of remaining time (no release, no i-frames)
 const GRAZE_HUE = 140;                                      // signature colour for all power-up visuals (verdant)
@@ -1414,8 +1414,9 @@ function clampAngle(a,lo,hi){ while(a>Math.PI) a-=TAU; while(a<-Math.PI) a+=TAU;
 
 // ---- graze power-up: activation + the super-shot (ignores power level; fires regardless of fireHeld) ----
 function activateGrazePower(){ player.grazePowerT=GRAZE_POWER_DURATION; player.fireCd=0; clearBulletsToSparkles(player.x,player.y,GRAZE_ACTIVATE_CLEAR_R); /* clear nearby enemy bullets on activation */ sfx.extend&&sfx.extend(); Render.flash(0.5,GRAZE_HUE); Render.shake(0.35); Render.popText(player.x,player.y-22,'POWER UP!',GRAZE_HUE); for(let i=0;i<16;i++){ const a=rng()*TAU,s=80+rng()*120; spawnParticle(player.x,player.y,Math.cos(a)*s,Math.sin(a)*s,{life:0.5,kind:'sparkle',hue:GRAZE_HUE,r:3}); } }
-// end the power-up AND despawn its in-flight shots, so a popped/ended state leaves no trailing pierce or stale render
-function endGrazePower(){ player.grazePowerT=0; player.fireCd=0; const it=playerShots.items; for(let i=0;i<playerShots.count;i++){ const s=it[i]; if(s.alive&&s.pierceSpell) s.alive=false; } }
+// end the power-up. Homing shots are intentionally LEFT in flight — they persist until they hit or expire (GRAZE_HOMING_LIFE).
+// Only the laser stops, since it's gated on grazePowerT>0. (In-flight homing keeps its pierceSpell flag, so it can still trim a survival timer until it lands.)
+function endGrazePower(){ player.grazePowerT=0; player.fireCd=0; }
 function firePowerShots(dt){
   if(player.focus){                                    // FOCUS — thick piercing laser (continuous column damage + beam render)
     grazeLaserDamage(dt);
