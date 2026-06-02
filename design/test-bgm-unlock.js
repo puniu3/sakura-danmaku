@@ -10,7 +10,7 @@ function grab(name) {
   for (const l of src) { const m = l.match(re); if (m) return m[1]; }
   throw new Error('function not found in index.html: ' + name);
 }
-const FNS = ['startPump','stopPump','rampMusic','playMusic','applyMuteToCtx','unlock'].map(grab).join('\n');
+const FNS = ['tryResume','startPump','stopPump','rampMusic','playMusic','applyMuteToCtx','unlock'].map(grab).join('\n');
 
 function run(useFix) {
   let ctx = null;
