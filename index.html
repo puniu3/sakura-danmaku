@@ -1086,8 +1086,8 @@ function drawBossGeneric(c,t){ c.save(); c.globalCompositeOperation='lighter'; f
 // hitbox radius per design — covers the SOLID silhouette (opaque petals/leaves/core); the translucent
 // 'lighter' flame/halo is aura, excluded. +shot.r(4) = effective hit radius. Sized so anything that
 // visually lands registers (player-favourable over-coverage is fine). Keep in sync with the scales below.
-const BOSS_HIT_R = { wisp:32, mandala:60 };
-function drawBoss(boss,t){ const x=boss.x,y=boss.y+Math.sin(t*1.4)*2; ctx.save(); ctx.translate(x,y); const d=boss.design; if(d==='wisp'){ ctx.scale(0.55,0.55); drawBossWisp(ctx,t); } else if(d==='mandala'){ ctx.scale(0.60,0.60); drawBossMandala(ctx,t); } else drawBossGeneric(ctx,t); ctx.restore(); }
+// (hit radius + render scale per design now live together in BOSS_DESIGNS — see THEMES section.)
+function drawBoss(boss,t){ const x=boss.x,y=boss.y+Math.sin(t*1.4)*2; ctx.save(); ctx.translate(x,y); const D=BOSS_DESIGNS[boss.design]; if(D){ ctx.scale(D.scale,D.scale); D.draw(ctx,t); } else drawBossGeneric(ctx,t); ctx.restore(); }
 function drawBanner(dt){ if(!_banner.active) return; _banner.t+=dt; const tt=_banner.t; let x; if(tt<0.35) x=PF_W*(1-easeOut(tt/0.35)); else if(tt<1.6) x=0; else if(tt<2.0) x=-PF_W*easeIn((tt-1.6)/0.4); else { _banner.active=false; return; } ctx.save(); ctx.translate(x,0); const by=PF_H*0.34; ctx.fillStyle=PALETTE.banner; ctx.fillRect(0,by,PF_W,46); ctx.fillStyle=hexA(PALETTE.bossRim,0.9); ctx.fillRect(0,by,PF_W,2); ctx.fillRect(0,by+44,PF_W,2); ctx.fillStyle=PALETTE.uiText; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.font='bold 19px "Trebuchet MS",sans-serif'; ctx.fillText(_banner.name,PF_W/2,by+24); ctx.restore(); }
 function triggerBanner(name){ _banner={active:true,t:0,name:name||''}; }
 
@@ -1237,6 +1237,13 @@ const THEMES = {
              laneShoulder:'rgba(198,182,156,0.5)', laneBed:'#f3e6cf', lanePave:'rgba(255,250,240,0.32)' } },
 };
 let activeTheme = THEMES.spring;
+// boss visual designs: draw fn + render scale + hitbox radius, one record per design id. Collapses
+// the old drawBoss string-dispatch, the inline per-design scale literals, and BOSS_HIT_R (and the
+// makeBoss spec.r escape) into a single source. New bosses append a record (draw fn lives in RENDER).
+const BOSS_DESIGNS = {
+  wisp:    { draw:drawBossWisp,    scale:0.55, hitR:32 },
+  mandala: { draw:drawBossMandala, scale:0.60, hitR:60 },
+};
 function bakePetals(theme){ const out=[]; theme.petal.forEach(col=>{ const W=24,cv=document.createElement('canvas'); cv.width=W; cv.height=W; const c=cv.getContext('2d'); c.translate(W/2,W/2); c.fillStyle=col; c.beginPath(); c.moveTo(0,-9); c.bezierCurveTo(7,-6,7,6,0,9); c.bezierCurveTo(-7,6,-7,-6,0,-9); c.fill(); c.strokeStyle=theme.petalEdge; c.lineWidth=0.8; c.beginPath(); c.moveTo(0,-8); c.lineTo(0,7); c.stroke(); out.push(cv); }); _petalSprite=out; }
 function setTheme(key){ const t=THEMES[key]; if(!t) return; activeTheme=t; _skyCache.d=999; bakePetals(t); buildScenery(); }
 
@@ -1607,7 +1614,7 @@ function waveStream(opts){ return (function*(){ const n=opts.n||10, x=opts.x||PF
 function waveTurrets(opts){ return (function*(){ const xs=opts.xs||[PF_W*0.28,PF_W*0.72], y=opts.y||130; for(let i=0;i<xs.length;i++){ spawnEnemy({ x:xs[i], y:-SPAWN_MARGIN, hp:HP_POP_HEAVY, r:R_POP_HEAVY, hue:280, score:2500, drops:['power','power','point'], cancelOnDeath:0.4, coro:function*(e){ yield* moveTo(e,xs[i],y,1.0,EASE.out); yield* holdFire(e,function*(en){ yield* fireSpiralTurret(en,{da:i?-0.33:0.33,period:0.07,arms:2,speed:125,a0:i*Math.PI}); },opts.hold||5.0); yield* exitOff(e,i?Math.PI*0.85:Math.PI*0.15,140); } }); } yield; })(); }
 
 // ---- boss: descriptor-driven phase machine ----
-function makeBoss(spec){ const b=spawnEnemy({ x:spec.enterFrom?spec.enterFrom.x:PF_W/2, y:spec.enterFrom?spec.enterFrom.y:-60, hp:1, r:spec.r!=null?spec.r:(BOSS_HIT_R[spec.design]||18), hue:spec.hue!=null?spec.hue:320, boss:true, score:spec.score||50000, drops:[], coro:null }); b.invuln=true; b.phaseTotal=spec.phases.length; b.phaseIndex=0; b.phasesLeft=spec.phases.length; b.spellName=''; b.inSpell=false; b.timer=null; b.hpMax=1; b.design=spec.design; b.survivalActive=false; b.survivalTotal=0; return b; }
+function makeBoss(spec){ const _bd=BOSS_DESIGNS[spec.design]; const b=spawnEnemy({ x:spec.enterFrom?spec.enterFrom.x:PF_W/2, y:spec.enterFrom?spec.enterFrom.y:-60, hp:1, r:_bd?_bd.hitR:18, hue:spec.hue!=null?spec.hue:320, boss:true, score:spec.score||50000, drops:[], coro:null }); b.invuln=true; b.phaseTotal=spec.phases.length; b.phaseIndex=0; b.phasesLeft=spec.phases.length; b.spellName=''; b.inSpell=false; b.timer=null; b.hpMax=1; b.design=spec.design; b.survivalActive=false; b.survivalTotal=0; return b; }
 function* runBoss(spec){ const boss=makeBoss(spec); hud.setBoss(boss); yield* moveTo(boss,spec.enterTo.x,spec.enterTo.y,BOSS_ENTER,EASE.inOut); boss.invuln=false;
   for(let pi=0;pi<spec.phases.length;pi++){ const ph=spec.phases[pi]; boss.phaseIndex=pi; boss.phasesLeft=spec.phases.length-pi; yield* runPhase(boss,ph,pi);
     sfx.bomb&&sfx.bomb(); cancelBullets({all:true,toItems:CANCEL_TO_ITEM}); screenFlash('#ffffff',0.35); shake(6,0.3);
@@ -1708,6 +1715,8 @@ function* stageScript(){
       b.invuln=false; b.x=PF_W/2; b.y=140; b.survivalActive=false; game.boss=b; player.invuln=1e9;
       const g=Director.beginGroup(); Director.fork(function(){ return emitterFn(b); }, b);
       const out=[]; for(let i=0;i<ticks;i++){ simStep(STEP); out.push(sig()); } Director.endGroup(g); return out; },
+    // Spawn a boss in PLAYING state for a visual render check (?dev=1; uses the boss's own design).
+    showBoss: function(spec){ freshState(); game.state=STATE.PLAYING; const b=makeBoss(spec); b.invuln=false; b.x=PF_W/2; b.y=140; game.boss=b; player.invuln=1e9; return { design:b.design, r:b.r }; },
     // Compact fingerprint of a signature series (rolling hash + sparse samples) for cross-build A/B.
     fp: function(arr){ let h=0,sum=0; for(let i=0;i<arr.length;i++){ const s=arr[i]; h=(Math.imul(h,31)+s.nb)>>>0; h=(Math.imul(h,31)+s.cs)>>>0; h=(Math.imul(h,31)+s.ne)>>>0; sum+=s.nb; } const samp=[]; for(let i=0;i<arr.length;i+=Math.max(1,(arr.length/16)|0)) samp.push([i,arr[i].nb,arr[i].ne,arr[i].cs]); return { len:arr.length, h:h>>>0, sum:sum, last:arr[arr.length-1], samp:samp }; },
     fpStage: function(ticks){ return this.fp(this.goldenStage(ticks)); },
