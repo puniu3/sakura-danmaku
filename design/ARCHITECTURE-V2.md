@@ -37,18 +37,26 @@ Web Audio（音声ファイル0・全合成）／単人 + 4方向+shot+bomb+focu
 
 ## 2. 以後の作業計画（2026-06-03 再シーケンス：デバッグモード → 10 → 11 → 12 → 8）
 
-### Step A — デバッグ「途中の面から開始」モード（最優先）
-ステージ 2–6 のオーサリングを高速に試すための dev アフォーダンス。**シームは既に存在**:
-`startRun(diff, fromStage)` は 0-indexed の開始ステージを受ける。実装は boot で `?stage=N`（1-indexed）と
-任意の `?diff=` を解釈し、あれば title を飛ばして `startRun(diff, N-1)` を呼ぶだけ。定義済みの `STAGES`
-エントリにジャンプ（6面揃う前から機能）。
-- これは**ステージ単位**の開始。ボス内の**中間フェーズ直行**（seek/heal, §3/#1）は別物で不要。
-- 出荷で URL ハックを嫌うなら `?dev` 配下に gate してよい（任意）。`__dbg` ハーネスとは独立の通常プレイ機能。
+### Step A — デバッグ「途中の面から開始」モード ✅ DONE（2026-06-04）
+`boot()` 末尾で `?stage=N`（1-indexed）+ 任意 `?diff=easy|normal|hard|lunatic` を解釈し、範囲内なら
+title を飛ばして `startRun(diff, N-1)`。`?golden` 下では無効（ハーネスがクロックを所有）。範囲外Nは無視。
+これは**ステージ単位**の開始（ボス内中間フェーズ直行 §3/#1 とは別物・未実装）。
 
-### Phase 10 — Stage 2 フルオーサリング
-新 `THEMES` エントリ + **新 BGM 2本**（`bgm-tracks.js` の `TRACKS` に `stage2`/`boss2` を追記 → audition →
-`node build-game.js` で `/*BGM:GEN*/` 再 inline）+ spell library から新ボス + `STAGES[1]`。`playMusic` は
-`trackOf` 経由なので新トラックキーを自動許可（whitelist 変更不要）。デバッグモードで `?stage=2` 即確認。
+### Phase 10 — Stage 2 フルオーサリング ✅ DONE（2026-06-04, golden 1面バイト一致維持）
+"Twilight Petal Lane"（宵闇）。実装物:
+- `THEMES.dusk`（藍→菫→薔薇の夕暮れ）／`BOSS_DESIGNS.phantom` + `drawBossPhantom`（大型の亡霊「Tasokare」）。
+- `WAVES.drifters`（正弦漂移の幽霊）+ `WAVES.wraith`（重敵＝追尾ソウルオーブ環。道中の特徴＋3体トリオの山場）。
+  既存 wave 4種は `opts.hue` を後付け（既定値維持で 1面不変）。
+- `BOSSES.tasokareIntro`（中ボス枠で出現・通常1+スペル1で**撤退**）+ `BOSSES.tasokare`（再登場・5フェーズ、
+  耐久ラスワ含む）。同 design/hue/name で同一キャラ。第1スペルは中ボス版の使い回しを避け複雑化版に。
+- **新エンジンシーム（汎用・Stage 3–6 で再利用）**:
+  - `bossRetreat` + `runBoss` の `spec.retreat` 分岐（撤退＝爆散せず飛び去る。撤退中も `game.boss` を生かし描画継続）。
+  - **遅延ステージ送り** `run._advanceTo` を `simStep` が `tickStage` 直後に処理。コルーチン内 `Director.start`
+    再入で新ステージのコルーチンが `update()` 圧縮に落ちる不具合を回避（直接 `enterStage` を呼ばない）。
+  - `{stageEnd}` timeline verb（中継。1面終端を terminal な `{stageClear}` から分離）。
+- **新 BGM 2本** "Yoiyami Lane"(stage2) / "Tasokare's Lament"(boss2) を D harmonic minor で**独立した曲**として
+  作曲（音色/グルーヴ/テンポ/モチーフを 1面から分離。`SCALES` に `Dharm`/`Fharm` 追加）。**中ボス戦は道中BGMのまま**
+  進行し、boss2 への切替は最終ボスのみ。`bgm-tracks.js`→audition→`build-game.js` で `/*BGM:GEN*/` 再 inline。
 
 ### Phase 11 — Stage 3–6（1ステージずつ）
 各 = `STAGES[N]` データ + 1テーマ + 1–2 BGM。`?stage=N` で個別プレビュー。各追加後に出荷可能。

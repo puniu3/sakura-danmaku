@@ -252,6 +252,7 @@ function simStep(dt){
   updateGameSystems(dt);
   if(game.state===STATE.PLAYING){
     tickStage(dt);
+    if(run && run._advanceTo!=null){ const ns=run._advanceTo; run._advanceTo=null; enterStage(ns); }   // deferred stage handoff — safe here (Director.update's coro loop has finished); the rest of this tick runs on the freshly-reset (empty) stage state
     for(let i=enemies.length-1;i>=0;i--){ const e=enemies[i]; if(e.dead){ swapRemove(enemies,i); } else { enemyIntegrate(e,dt); } }
     integrateBullets(dt);
     integrateShots(dt);
@@ -591,6 +592,8 @@ const SCALES = {
   Amin:  [0,2,4,5,7,9,11],   // A natural minor: A B C D E F G
   Aharm: [0,2,4,5,8,9,11],   // A harmonic minor: A B C D E F G#
   Charm: [0,2,3,5,7,8,11],   // C harmonic minor: C D Eb F G Ab B
+  Dharm: [1,2,4,5,7,9,10],   // D harmonic minor: D E F G A Bb C#   (Stage 2)
+  Fharm: [0,1,4,5,7,8,10],   // F harmonic minor: F G Ab Bb C Db E   (Stage 2 boss climax lift)
 };
 function parseChord(sym) {
   let bass = null, s = sym;
@@ -882,7 +885,103 @@ const GAMEOVER = {
   arrangement: ['A'],
 };
 
-const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER };
+// ================================================================ STAGE 2
+// "Yoiyami Lane" — D harmonic minor, 108 BPM. An INDEPENDENT tune (not a Stage-1 reskin): where the
+// Stage-1 hook is a busy downbeat stepwise march, this motif breathes — syncopated off-beat entries,
+// sustained notes, and the harmonic-minor augmented-2nd shimmer (b6 Bb ↔ #7 C#) for a twilight colour.
+const S2_HOOK = [
+  [0,74],[6,77],[10,76],            // D … F E  — a sighing off-beat fall
+  [16,81],[22,82],[26,85],[28,82],  // A → Bb → C#6 → Bb  (the augmented-2nd shimmer)
+  [32,79],[40,77],[44,76],          // G F E  — slow, spacious descent
+  [48,74],[54,73],[58,74],          // D → C# → D  (leading-tone resolution)
+];
+const S2_HOOK2 = [ // variation tail, hangs on A (the V) for the half-cadence
+  [0,74],[6,77],[10,79],
+  [16,82],[20,85],[28,82],
+  [32,81],[40,77],
+  [48,79],[56,81],[60,81],
+];
+const S2_B = [ // 8-bar contrasting lift — lyrical and breathing, not a run
+  [0,85],[8,86],[12,82],
+  [16,81],[24,77],[28,79],
+  [32,76],[40,77],[48,81],[56,85],
+  [64,86],[72,82],[80,79],[88,77],
+  [96,79],[104,81],[112,82],[120,85],
+];
+const S2_BRIDGE = [ [0,69],[8,74],[16,77],[24,82],[32,85],[40,82],[48,79],[56,77] ];
+const S2_OUTRO = [ [0,82],[8,81],[16,79],[24,77],[32,76],[40,74],[48,74] ];
+const STAGE2 = {
+  title: 'Yoiyami Lane', keyName: 'D harmonic minor', bpm: 108, gain: 0.55,
+  // DISTINCT timbre from Stage 1 (no saw bite on the lead): a cool sine-shimmer lead, a lush dark
+  // slow pad pushed forward, a music-box bell arp, and a round sine bass. With midGroove + a walking
+  // bass + the slower tempo this reads as a floating twilight piece, not the bright Stage-1 march.
+  voices: {
+    lead: { layers:[ { type:'triangle', octave:0, detune:0, gain:1.0 }, { type:'sine', octave:1, detune:4, gain:0.4 }, { type:'sine', octave:0, detune:-6, gain:0.5 } ], atk:0.014, dec:0.11, sus:0.5, rel:0.24, maxGate:6 },
+    arp:  { layers:[ { type:'triangle', octave:1, detune:0, gain:1.0 } ], atk:0.002, dec:0.04, sus:0.12, rel:0.08, filter:'lowpass', filterFreq:3400, maxGate:1 },
+    bass: { layers:[ { type:'sine', octave:0, detune:0, gain:1.0 }, { type:'triangle', octave:0, detune:0, gain:0.4 } ], atk:0.006, dec:0.07, sus:0.62, rel:0.12, filter:'lowpass', filterFreq:620, maxGate:4 },
+    pad:  { octave:0, voices:3, detune:13, type:'sawtooth', atk:0.22, dec:0.22, sus:0.8, rel:0.7, filter:'lowpass', filterFreq:1050 } },
+  gains: { lead:0.125, harm:0.065, counter:0.07, arp:0.055, bass:0.15, sub:0.13, pad:0.08 },
+  sections: {
+    intro: makeSection({ bars:4, scale:'Dharm', chords:['Dm','Dm','Bb','A7'], bassStyle:'half', arpRate:2, groove:'introTick', sub:true, crash:true }),
+    A:     makeSection({ bars:8, scale:'Dharm', chords:['Dm','Bb','F','A7','Dm','Gm','A7','Dm'], lead:cat(S2_HOOK, off(64,S2_HOOK2)), bassStyle:'walk8', arpRate:2, groove:'midGroove', sub:true }),
+    A2:    makeSection({ bars:8, scale:'Dharm', chords:['Dm','Bb','F','A7','Dm','Gm','A7','Dm'], lead:cat(S2_HOOK, off(64,S2_HOOK2)), harm:true, bassStyle:'walk8', arpRate:2, groove:'midGroove', sub:true }),
+    B:     makeSection({ bars:8, scale:'Dharm', chords:['Bb','F','Gm','Dm','Bb','F','A7','A7'], lead:S2_B, counter:true, bassStyle:'walk8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
+    bridge:makeSection({ bars:4, scale:'Dharm', chords:['Gm','A7','Dm','A7'], lead:S2_BRIDGE, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
+    A2b:   makeSection({ bars:8, scale:'Dharm', chords:['Dm','Bb','F','A7','Dm','Gm','A7','Dm'], lead:cat(S2_HOOK, off(64,S2_HOOK2)), harm:true, counter:true, bassStyle:'walk8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
+    outro: makeSection({ bars:4, scale:'Dharm', chords:['Dm','Bb','Gm','A7'], lead:S2_OUTRO, bassStyle:'walk8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
+  },
+  arrangement: ['intro','A','A2','B','bridge','A2b','outro'],
+};
+
+// ================================================================ STAGE 2 BOSS
+// "Tasokare's Lament" — D harmonic minor, key-lift to F harmonic minor, 164 BPM. An INDEPENDENT theme
+// (not the Stage-1 boss reshaped): where that boss is warm and tuneful-stepwise, this hook is angular —
+// wide 4th/5th leaps and the augmented-2nd — over a recurring descending lament cadence. Menacing, not pretty.
+const B2_HOOK = [
+  [0,74],[2,81],[4,82],[8,85],[10,82],[12,79],[14,77],   // D↑A Bb (leap) → C#6 Bb G F  — wide leaps, then fall
+  [16,76],[18,74],[20,81],[24,82],[26,77],[28,76],[30,74], // E D A(leap) Bb F E D  — angular
+];
+const B2_CLOSE = [ [0,82],[4,81],[8,79],[12,77],[16,76],[20,74],[24,73],[28,74] ]; // descending lament: Bb A G F E D C# D
+const B2_B = [ // dramatic lift, D harmonic minor
+  [0,86],[6,82],[10,85],[16,81],[24,77],
+  [32,79],[40,82],[48,85],[56,86],
+  [64,85],[72,82],[80,79],[88,77],
+  [96,81],[104,85],[112,82],[120,86],
+];
+const B2_BRIDGE = [ // sinking lament to A, then a leading-tone climb back
+  [0,81],[8,77],[16,74],[24,70],
+  [32,69],[40,73],[48,74],[56,77],
+  [64,79],[72,82],[80,85],[88,82],
+  [96,81],[104,77],[112,74],[120,73],
+];
+const B2_OUTRO = [ [0,74],[2,81],[6,85],[12,82],[16,79],[24,77],[32,74],[48,74] ];
+const BOSS2 = {
+  title: "Tasokare's Lament", keyName: 'D harmonic minor → F', bpm: 164, gain: 0.62,
+  // DISTINCT timbre from the Stage 1 boss (which is warm triangle-led): a cold saw+hollow-square lead,
+  // a sharp chiptune-ghost square arp, and a grittier bass. With a galloping bass + midGallop groove +
+  // the faster tempo it reads as a relentless ghost-chase, not the Stage-1 boss's tuneful warm drive.
+  voices: {
+    lead: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:0.9, filter:'lowpass', filterFreq:2600 }, { type:'square', octave:0, detune:8, gain:0.55, filter:'lowpass', filterFreq:2200 }, { type:'sawtooth', octave:1, detune:0, gain:0.2 } ], atk:0.004, dec:0.05, sus:0.45, rel:0.12, maxGate:6 },
+    harm: { layers:[ { type:'sawtooth', octave:0, detune:-6, gain:1.0 } ], atk:0.006, dec:0.05, sus:0.42, rel:0.13, filter:'lowpass', filterFreq:2400, maxGate:6 },
+    counter: { layers:[ { type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:1800 } ], atk:0.005, dec:0.05, sus:0.38, rel:0.11, maxGate:5 },
+    arp: { layers:[ { type:'square', octave:0, detune:9, gain:1.0 } ], atk:0.002, dec:0.022, sus:0.13, rel:0.05, filter:'lowpass', filterFreq:3600, maxGate:1 },
+    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.05, sus:0.58, rel:0.08, filter:'lowpass', filterFreq:1050, maxGate:3 },
+    pad: { octave:0, voices:3, detune:12, type:'sawtooth', atk:0.07, dec:0.12, sus:0.66, rel:0.4, filter:'lowpass', filterFreq:1300 } },
+  gains: { lead:0.14, harm:0.075, counter:0.085, arp:0.065, bass:0.17, sub:0.14, pad:0.055, kick:1.1, snare:1.05, crash:1.05 },
+  sections: {
+    intro:  makeSection({ bars:8, scale:'Dharm', chords:['Dm','Dm','A7','A7','Gm','Gm','A7','A7'], lead:cat(B2_HOOK, off(64,B2_HOOK)), harm:true, bassStyle:'half', arpRate:2, groove:'fourLite', sub:true, crash:true }),
+    A1:     makeSection({ bars:8, scale:'Dharm', chords:['Dm','Bb','F','A7','Dm','Bb','Gm','A7'], lead:cat(B2_HOOK, off(32,B2_HOOK), off(64,B2_HOOK), off(96,B2_CLOSE)), bassStyle:'gallop', arpRate:1, groove:'midGallop', sub:true, crash:true }),
+    A2:     makeSection({ bars:8, scale:'Dharm', chords:['Dm','Bb','F','A7','Dm','Gm','A7','Dm'], lead:cat(B2_HOOK, off(32,B2_HOOK), off(64,B2_HOOK), off(96,B2_CLOSE)), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'midGallop', sub:true, crash:true }),
+    B:      makeSection({ bars:8, scale:'Dharm', chords:['Bb','F','Gm','Dm','Bb','F','A7','Dm'], lead:B2_B, harm:true, counter:true, bassStyle:'pump8', arpRate:1, groove:'midGallop', sub:true, crash:true }),
+    bridge: makeSection({ bars:8, scale:'Dharm', chords:['Gm','Gm','Dm','A7','Bb','Bb','A7','A7'], lead:B2_BRIDGE, bassStyle:'half', arpRate:2, groove:'bossBridge', sub:true }),
+    climax: makeSection({ bars:8, scale:'Fharm', chords:['Fm','Db','Ab','C7','Fm','Db','Bbm','C7'], lead:cat(transpose(B2_HOOK,3), off(32,transpose(B2_HOOK,3)), off(64,transpose(B2_HOOK,3)), off(96,transpose(B2_CLOSE,3))), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
+    A3:     makeSection({ bars:8, scale:'Dharm', chords:['Dm','Bb','F','A7','Dm','Gm','A7','Dm'], lead:cat(B2_HOOK, off(32,B2_HOOK), off(64,B2_HOOK), off(96,B2_CLOSE)), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
+    outro:  makeSection({ bars:4, scale:'Dharm', chords:['Gm','A7','Dm','D'], lead:B2_OUTRO, bassStyle:'half', arpRate:2, groove:'midGallop', sub:true, crash:true }),
+  },
+  arrangement: ['intro','A1','A2','B','bridge','climax','A3','outro'],
+};
+
+const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER, stage2: STAGE2, boss2: BOSS2 };
   /*END:BGM:GEN*/
 
   function trackOf(n){ return (TRACKS && TRACKS[n]) ? TRACKS[n] : null; }
@@ -1121,6 +1220,31 @@ function drawBossMandala(c,t){ const breath=Math.sin(t*1.0);
   const pulse=0.85+0.15*Math.sin(t*2.6); c.save(); c.globalCompositeOperation='lighter'; c.scale(pulse,pulse); bossGlow(c,30,48,95,82,0.95); c.restore();
   c.fillStyle='#fff6fb'; c.beginPath(); c.arc(0,0,10,0,TAU); c.fill(); c.fillStyle='hsla(330,90%,76%,0.92)'; c.beginPath(); c.arc(0,0,5,0,TAU); c.fill();
 }
+// STAGE 2 BOSS — "Tasokare", the twilight phantom (大ボス scale): a tall flowing spectral robe with a
+// tattered, widening hem, a crown of six orbiting hitodama (soul-flames), a big cold halo, and a veiled
+// head with eerie glowing eyes. Cold spectral blue (H=212) so she reads as an imposing 亡霊 against the
+// dusk sky. Centred on the origin = the gameplay hit point (drawBoss translates+scales); hitR covers the
+// opaque robe/head core. The 'lighter' halo / hem veils / flames / eye-glow are aura.
+function drawBossPhantom(c,t){ const H=212;
+  const pulse=0.9+0.08*Math.sin(t*2.4);
+  c.save(); c.globalCompositeOperation='lighter'; c.scale(pulse,pulse); bossGlow(c,76,H,72,56,0.42); c.restore();   // large cold halo
+  for(let i=0;i<6;i++){ const a=t*0.8+i/6*TAU, x=Math.cos(a)*62, y=Math.sin(a)*30-30, fh=(H+i*14+t*24)%360, sc=0.7+0.35*Math.sin(a);   // crown of hitodama
+    c.save(); c.translate(x,y); c.scale(sc,sc); c.globalCompositeOperation='lighter'; bossGlow(c,16,fh,90,74,0.8);
+    c.fillStyle='hsla('+fh+',96%,88%,0.95)'; c.beginPath(); c.moveTo(0,-8); c.quadraticCurveTo(6,2,0,8); c.quadraticCurveTo(-6,2,0,-8); c.fill(); c.restore(); }
+  c.save(); c.globalCompositeOperation='lighter';            // flowing tattered robe/hem below, wavering + widening
+  for(let k=3;k>=1;k--){ const ph=t*1.5; c.fillStyle='hsla('+H+',72%,'+(62+k*5)+'%,'+(0.12*k)+')';
+    c.beginPath(); c.moveTo(-22,-16);
+    for(let i=0;i<=12;i++){ const u=i/12, x=-34+72*u+Math.sin(ph+u*6+k)*5, y=-16+70*u+Math.sin(ph*1.2+u*7+k*1.4)*10*(0.3+u); c.lineTo(x,y); }
+    c.lineTo(22,-16); c.quadraticCurveTo(0,-6,-22,-16); c.fill(); }
+  c.restore();
+  c.fillStyle='hsla('+H+',30%,90%,0.95)';                    // opaque robe + head (solid silhouette; hitR covers this)
+  c.beginPath(); c.moveTo(0,-46); c.bezierCurveTo(20,-44,25,-20,22,-2); c.bezierCurveTo(27,20,16,42,0,46); c.bezierCurveTo(-16,42,-27,20,-22,-2); c.bezierCurveTo(-25,-20,-20,-44,0,-46); c.fill();
+  c.strokeStyle='hsla('+H+',80%,86%,0.45)'; c.lineWidth=1.4; c.stroke();
+  c.fillStyle='hsla('+H+',55%,38%,0.34)'; c.beginPath(); c.ellipse(0,-27,16,17,0,0,TAU); c.fill();   // veil shadow over the face
+  c.save(); c.globalCompositeOperation='lighter'; const eg=0.65+0.35*Math.sin(t*3.3);   // eerie glowing eyes
+  for(const sx of [-6.5,6.5]){ c.save(); c.translate(sx,-28); bossGlow(c,9,H,96,82,0.7*eg); c.fillStyle='hsla('+H+',96%,'+(68+eg*20)+'%,0.96)'; c.beginPath(); c.ellipse(0,0,2.6,4.4,sx<0?0.3:-0.3,0,TAU); c.fill(); c.restore(); }
+  bossGlow(c,16,H,70,92,0.8); c.restore();                   // core glow at the gameplay centre
+}
 // generic fallback (original ellipse-with-wings) — drawn at origin; used when boss.design is unset
 function drawBossGeneric(c,t){ c.save(); c.globalCompositeOperation='lighter'; for(let k=0;k<2;k++){ c.save(); c.rotate(t*BOSS_AURA_SPIN*(k?-1:1)+k); const col=k?PALETTE.auraB:PALETTE.auraA; const g=c.createRadialGradient(0,0,6,0,0,46+k*10); g.addColorStop(0,hexA(col,0.5)); g.addColorStop(1,hexA(col,0)); c.fillStyle=g; for(let p=0;p<6;p++){ c.rotate(Math.PI/3); c.beginPath(); c.ellipse(20,0,26,9,0,0,TAU); c.fill(); } c.restore(); } c.restore(); c.fillStyle=PALETTE.bossBody; c.beginPath(); c.ellipse(0,4,16,22,0,0,TAU); c.fill(); c.beginPath(); c.arc(0,-16,9,0,TAU); c.fill(); c.strokeStyle=PALETTE.bossRim; c.lineWidth=1.6; c.beginPath(); c.ellipse(0,4,16,22,0,0,TAU); c.stroke(); c.beginPath(); c.arc(0,-16,9,0,TAU); c.stroke(); c.fillStyle=hexA(PALETTE.bossRim,0.5); c.beginPath(); c.moveTo(-16,-2); c.quadraticCurveTo(-40,-18,-30,12); c.quadraticCurveTo(-22,2,-16,6); c.fill(); c.beginPath(); c.moveTo(16,-2); c.quadraticCurveTo(40,-18,30,12); c.quadraticCurveTo(22,2,16,6); c.fill(); }
 // hitbox radius per design — covers the SOLID silhouette (opaque petals/leaves/core); the translucent
@@ -1309,6 +1433,13 @@ const THEMES = {
     petal:['#ffd5e6','#ffb3d1','#f58fb6'], petalEdge:'#ffe9f2',
     ground:{ base:'#d8edc9', tones:['#cfe6c4','#f3d4e0','#e6dcf2','#f6eccf','#d2e8c2'], seam:'rgba(201,183,154,0.42)',
              laneShoulder:'rgba(198,182,156,0.5)', laneBed:'#f3e6cf', lanePave:'rgba(255,250,240,0.32)' } },
+  // Stage 2 — twilight: indigo→violet→rose-dusk sky, violet/red-violet petals, cool dusk-green ground
+  // with dusky-violet flagstones. (cloud is vestigial — defined for shape parity, never read.)
+  dusk: { name:'Twilight Petal Lane',
+    sky:{ top:'#3a2a5e', mid:'#8a5a8f', bot:'#f0a6a0' }, cloud:'rgba(255,224,236,0.30)',
+    petal:['#c98fd6','#e88fb6','#a86fc0'], petalEdge:'#f3e0ff',
+    ground:{ base:'#b9c4a8', tones:['#aebd9e','#c9a6c8','#a89cc8','#d4b6c2','#b3c0a4'], seam:'rgba(58,42,94,0.42)',
+             laneShoulder:'rgba(78,60,104,0.5)', laneBed:'#d8c2d6', lanePave:'rgba(244,228,240,0.30)' } },
 };
 let activeTheme = THEMES.spring;
 // boss visual designs: draw fn + render scale + hitbox radius, one record per design id. Collapses
@@ -1317,6 +1448,7 @@ let activeTheme = THEMES.spring;
 const BOSS_DESIGNS = {
   wisp:    { draw:drawBossWisp,    scale:0.55, hitR:32 },
   mandala: { draw:drawBossMandala, scale:0.60, hitR:60 },
+  phantom: { draw:drawBossPhantom, scale:1.0,  hitR:40 },
 };
 function bakePetals(theme){ const out=[]; theme.petal.forEach(col=>{ const W=24,cv=document.createElement('canvas'); cv.width=W; cv.height=W; const c=cv.getContext('2d'); c.translate(W/2,W/2); c.fillStyle=col; c.beginPath(); c.moveTo(0,-9); c.bezierCurveTo(7,-6,7,6,0,9); c.bezierCurveTo(-7,6,-7,-6,0,-9); c.fill(); c.strokeStyle=theme.petalEdge; c.lineWidth=0.8; c.beginPath(); c.moveTo(0,-8); c.lineTo(0,7); c.stroke(); out.push(cv); }); _petalSprite=out; }
 function setTheme(key){ const t=THEMES[key]; if(!t) return; activeTheme=t; _skyCache.d=999; bakePetals(t); buildScenery(); }
@@ -1525,7 +1657,11 @@ function enterStage(i){
   const st=STAGES[i], sm=(st&&st.music&&st.music.stage)||'stage';
   startStage(); setState(STATE.PLAYING); Audio.playMusic(sm);
 }
-function advanceStage(){ if(run && run.stage < STAGES.length-1) enterStage(run.stage+1); else onStageClear(); }
+// next-stage entry is DEFERRED (processed in simStep right after Director.update): calling
+// enterStage()->startStage()->Director.start() from INSIDE the running stage coro would clear+repush
+// the coro array mid-iteration, and update()'s trailing length-compaction would drop the freshly
+// started Stage N+1 coro. Setting a flag and entering the stage at a safe point avoids that.
+function advanceStage(){ if(run && run.stage < STAGES.length-1){ run._advanceTo=run.stage+1; } else onStageClear(); }
 function startGame(){ startRun('normal', 0); }
 function togglePause(){ if(game.state===STATE.PLAYING) setState(STATE.PAUSED); else if(game.state===STATE.PAUSED) setState(STATE.PLAYING); }
 function onStageClear(){ setState(STATE.STAGECLEAR); }
@@ -1740,13 +1876,24 @@ function* fireRings(e,opts){ const period=opts.period||1.4; while(true){ ring(e,
 function* fireSpiralTurret(e,opts){ const period=opts.period||0.06, da=opts.da||0.31; let a=opts.a0||0; while(true){ spiral(e,{angle:a,arms:opts.arms||2,speed:opts.speed||130,hue:(e.hue+(T*40))%360,style:opts.style||'small'}); a+=da; yield* waitT(period); } }
 
 // ---- wave generators ----
-function waveSideSweep(opts){ return (function*(){ const n=opts.n||6, side=opts.side||'left', y=opts.y||90; const fromX=side==='left'?-SPAWN_MARGIN:PF_W+SPAWN_MARGIN, toX=side==='left'?PF_W+SPAWN_MARGIN:-SPAWN_MARGIN; for(let i=0;i<n;i++){ spawnEnemy({ x:fromX, y, hp:HP_POP_LIGHT, r:R_POP_LIGHT, hue:205, score:800, drops:i%3===0?['power']:['point'], coro:function*(e){ yield* moveTo(e,side==='left'?40:PF_W-40,y,0.7,EASE.out); const fc=Director.fork(()=>fireAimedBursts(e,{period:1.0,n:1,speed:150,hue:205,style:'mid'}),e); yield* moveTo(e,toX,y+60,3.2,EASE.linear); Director.kill(fc); despawnEnemy(e); } }); yield* waitT(opts.spacing||0.18); } })(); }
-function waveVFormation(opts){ return (function*(){ const half=opts.half||4, apexX=opts.apexX||PF_W/2, apexY=opts.apexY||80, dx=opts.dx||30, dy=opts.dy||26; for(let s=-1;s<=1;s+=2){ for(let i=(s<0?half:0); s<0?i>=1:i<=half; i+=(s<0?-1:1)){ const tx=apexX+s*i*dx, ty=apexY+i*dy; spawnEnemy({ x:apexX, y:-SPAWN_MARGIN, hp:HP_POP_MED, r:R_POP_MED, hue:350, score:1200, drops:['power','point'], coro:function*(e){ yield* moveTo(e,tx,ty,0.9,EASE.out); yield* holdFire(e,function*(en){ yield* fireRings(en,{period:1.1,count:12,speed:110,hue:350,aim:true}); },2.4); yield* exitOff(e,Math.PI*0.5+(s*0.25)); } }); yield* waitT(0.08); } } })(); }
-function waveStream(opts){ return (function*(){ const n=opts.n||10, x=opts.x||PF_W*0.5; for(let i=0;i<n;i++){ const cx=x+Math.sin(i*0.6)*(opts.amp||60); spawnEnemy({ x:cx, y:-SPAWN_MARGIN, hp:HP_POP_MED, r:R_POP_MED, hue:130, score:900, drops:i%2?['point']:['power'], coro:function*(e){ const fc=Director.fork(()=>fireAimedBursts(e,{period:1.3,n:3,spread:0.25,speed:140,hue:130}),e); yield* moveTo(e,cx+rng.range(-30,30),PF_H+SPAWN_MARGIN,4.0,EASE.linear); Director.kill(fc); despawnEnemy(e); } }); yield* waitT(opts.spacing||0.45); } })(); }
-function waveTurrets(opts){ return (function*(){ const xs=opts.xs||[PF_W*0.28,PF_W*0.72], y=opts.y||130; for(let i=0;i<xs.length;i++){ spawnEnemy({ x:xs[i], y:-SPAWN_MARGIN, hp:HP_POP_HEAVY, r:R_POP_HEAVY, hue:280, score:2500, drops:['power','power','point'], cancelOnDeath:0.4, coro:function*(e){ yield* moveTo(e,xs[i],y,1.0,EASE.out); yield* holdFire(e,function*(en){ yield* fireSpiralTurret(en,{da:i?-0.33:0.33,period:0.07,arms:2,speed:125,a0:i*Math.PI}); },opts.hold||5.0); yield* exitOff(e,i?Math.PI*0.85:Math.PI*0.15,140); } }); } yield; })(); }
+function waveSideSweep(opts){ return (function*(){ const n=opts.n||6, side=opts.side||'left', y=opts.y||90, hue=opts.hue!=null?opts.hue:205; const fromX=side==='left'?-SPAWN_MARGIN:PF_W+SPAWN_MARGIN, toX=side==='left'?PF_W+SPAWN_MARGIN:-SPAWN_MARGIN; for(let i=0;i<n;i++){ spawnEnemy({ x:fromX, y, hp:HP_POP_LIGHT, r:R_POP_LIGHT, hue:hue, score:800, drops:i%3===0?['power']:['point'], coro:function*(e){ yield* moveTo(e,side==='left'?40:PF_W-40,y,0.7,EASE.out); const fc=Director.fork(()=>fireAimedBursts(e,{period:1.0,n:1,speed:150,hue:hue,style:'mid'}),e); yield* moveTo(e,toX,y+60,3.2,EASE.linear); Director.kill(fc); despawnEnemy(e); } }); yield* waitT(opts.spacing||0.18); } })(); }
+function waveVFormation(opts){ return (function*(){ const half=opts.half||4, apexX=opts.apexX||PF_W/2, apexY=opts.apexY||80, dx=opts.dx||30, dy=opts.dy||26, hue=opts.hue!=null?opts.hue:350; for(let s=-1;s<=1;s+=2){ for(let i=(s<0?half:0); s<0?i>=1:i<=half; i+=(s<0?-1:1)){ const tx=apexX+s*i*dx, ty=apexY+i*dy; spawnEnemy({ x:apexX, y:-SPAWN_MARGIN, hp:HP_POP_MED, r:R_POP_MED, hue:hue, score:1200, drops:['power','point'], coro:function*(e){ yield* moveTo(e,tx,ty,0.9,EASE.out); yield* holdFire(e,function*(en){ yield* fireRings(en,{period:1.1,count:12,speed:110,hue:hue,aim:true}); },2.4); yield* exitOff(e,Math.PI*0.5+(s*0.25)); } }); yield* waitT(0.08); } } })(); }
+function waveStream(opts){ return (function*(){ const n=opts.n||10, x=opts.x||PF_W*0.5, hue=opts.hue!=null?opts.hue:130; for(let i=0;i<n;i++){ const cx=x+Math.sin(i*0.6)*(opts.amp||60); spawnEnemy({ x:cx, y:-SPAWN_MARGIN, hp:HP_POP_MED, r:R_POP_MED, hue:hue, score:900, drops:i%2?['point']:['power'], coro:function*(e){ const fc=Director.fork(()=>fireAimedBursts(e,{period:1.3,n:3,spread:0.25,speed:140,hue:hue}),e); yield* moveTo(e,cx+rng.range(-30,30),PF_H+SPAWN_MARGIN,4.0,EASE.linear); Director.kill(fc); despawnEnemy(e); } }); yield* waitT(opts.spacing||0.45); } })(); }
+function waveTurrets(opts){ return (function*(){ const xs=opts.xs||[PF_W*0.28,PF_W*0.72], y=opts.y||130, hue=opts.hue!=null?opts.hue:280; for(let i=0;i<xs.length;i++){ spawnEnemy({ x:xs[i], y:-SPAWN_MARGIN, hp:HP_POP_HEAVY, r:R_POP_HEAVY, hue:hue, score:2500, drops:['power','power','point'], cancelOnDeath:0.4, coro:function*(e){ yield* moveTo(e,xs[i],y,1.0,EASE.out); yield* holdFire(e,function*(en){ yield* fireSpiralTurret(en,{da:i?-0.33:0.33,period:0.07,arms:2,speed:125,a0:i*Math.PI}); },opts.hold||5.0); yield* exitOff(e,i?Math.PI*0.85:Math.PI*0.15,140); } }); } yield; })(); }
 // wave registry: friendly name -> factory(opts) -> generator. The stage timeline (Phase 7 STAGES data)
 // references waves by name; runStage resolves them here. The "id-referenced generator registry" for waves.
-const WAVES = { sideSweep:waveSideSweep, vFormation:waveVFormation, stream:waveStream, turrets:waveTurrets };
+// Stage 2 ghost-flavoured road wave: wisps drift straight down in a slow sine sway, lobbing slow
+// aimed shots, then dissipate off the bottom. Manual integrate (sets _steered) like exitOff.
+function waveDrifters(opts){ return (function*(){ const n=opts.n||8, x=opts.x!=null?opts.x:PF_W*0.5, amp=opts.amp||50, hue=opts.hue!=null?opts.hue:212; for(let i=0;i<n;i++){ spawnEnemy({ x:x, y:-SPAWN_MARGIN, hp:HP_POP_MED, r:R_POP_MED, hue:hue, score:1000, drops:i%2?['point']:['power'], coro:function*(e){ const baseX=e.x, t0=T; const fc=Director.fork(()=>fireAimedBursts(e,{period:1.5,n:1,speed:125,hue:hue,style:'mid'}),e); while(e.y<PF_H+SPAWN_MARGIN){ e.y+=52*STEP; e.x=baseX+Math.sin((T-t0)*1.5+i*0.7)*amp; e._steered=true; yield; } Director.kill(fc); despawnEnemy(e); } }); yield* waitT(opts.spacing||0.5); } })(); }
+// Stage 2 heavy ghost "wraith": drifts to an anchor and HOLDS, firing a ghost pattern — a delayed-turn
+// soul-orb ring (drifts out, then homes) layered with aimed lobs — then withdraws. Tanky + cancelOnDeath.
+// This is the road's danmaku identity and the building block of its 山場 (spawn 3 to overlap their rings).
+function waveWraith(opts){ return (function*(){ const xs=opts.xs||[PF_W*0.5], y=opts.y||112, hold=opts.hold||5.0, hue=opts.hue!=null?opts.hue:212;
+  for(let i=0;i<xs.length;i++){ spawnEnemy({ x:xs[i], y:-SPAWN_MARGIN, hp:HP_POP_HEAVY*1.4, r:R_POP_HEAVY+2, hue:hue, score:3000, drops:['power','power','point'], cancelOnDeath:0.5, coro:function*(e){
+    yield* moveTo(e,xs[i],y,1.1,EASE.out);
+    yield* holdFire(e,function*(en){ let k=0; while(true){ if(k%2===0) pat.delayedTurn(en,{count:10,spread:TAU,baseAngle:T*0.6,speed:80,delay:0.95,turnAim:true,speed2:150,hue:hue,style:'orb'}); aimedShot(en,{n:3,spread:0.35,speed:128,hue:hueShift(hue,40),style:'mid'}); k++; yield* waitT(1.0); } },hold);
+    yield* exitOff(e,(i%2)?Math.PI*0.85:Math.PI*0.15,150); } }); yield* waitT(opts.spacing!=null?opts.spacing:0.4); } })(); }
+const WAVES = { sideSweep:waveSideSweep, vFormation:waveVFormation, stream:waveStream, turrets:waveTurrets, drifters:waveDrifters, wraith:waveWraith };
 
 // ---- boss: descriptor-driven phase machine ----
 function makeBoss(spec){ const _bd=BOSS_DESIGNS[spec.design]; const b=spawnEnemy({ x:spec.enterFrom?spec.enterFrom.x:PF_W/2, y:spec.enterFrom?spec.enterFrom.y:-60, hp:1, r:_bd?_bd.hitR:18, hue:spec.hue!=null?spec.hue:320, boss:true, score:spec.score||50000, drops:[], coro:null }); b.invuln=true; b.phaseTotal=spec.phases.length; b.phaseIndex=0; b.phasesLeft=spec.phases.length; b.spellName=''; b.inSpell=false; b.timer=null; b.hpMax=1; b.design=spec.design; b.survivalActive=false; b.survivalTotal=0; return b; }
@@ -1756,7 +1903,20 @@ function* runBoss(spec){ const boss=makeBoss(spec); hud.setBoss(boss); yield* mo
     if(ph.kind==='spell'&&ph.bonus) onSpellCaptured(ph.bonus);
     for(const d of (ph.drops||[])) dropItem(boss.x+rng.range(-20,20),boss.y+rng.range(-10,10),d);
     boss.invuln=true; boss.timer=null; hud.clearSpell(); yield* waitT(PHASE_HEAL); boss.invuln=false; }
-  yield* bossDefeat(boss,spec);
+  if(spec.retreat) yield* bossRetreat(boss,spec); else yield* bossDefeat(boss,spec);
+}
+// Boss WITHDRAWS instead of dying — the stage boss's early "midboss" appearance flees after its
+// nonspell+spell are beaten, to return for the full fight. No death explosion, no slowmo. The field
+// clears, the ghost flickers and drifts off the top, THEN the HUD bar releases. game.boss stays live
+// (and boss.dead false) through the whole fly-off so drawBoss keeps rendering it (drawEnemies skips
+// bosses; drawBoss is gated on game.boss && !game.boss.dead). retreatDrops is separate from the phase
+// drops the per-phase tail already paid out, so beating it off doesn't double-drop.
+function* bossRetreat(boss,spec){ boss.invuln=true; boss.survivalActive=false; sfx.capture&&sfx.capture();
+  cancelBullets({all:true,toItems:CANCEL_TO_ITEM}); screenFlash('#ffffff',0.35); Render.flash(0.5,boss.hue);
+  for(const d of (spec.retreatDrops||[])) dropItem(boss.x+rng.range(-24,24),boss.y+rng.range(-12,12),d);
+  for(let i=0;i<3;i++){ for(let k=0;k<10;k++){ const a=rng()*TAU,s=40+rng()*90; spawnParticle(boss.x,boss.y,Math.cos(a)*s,Math.sin(a)*s,{life:0.55,kind:'sparkle',hue:hueShift(boss.hue,rng.range(-24,24)),r:2.6}); } yield* waitT(0.14); }
+  yield* moveTo(boss,boss.x+rng.range(-30,30),-100,1.3,EASE.in);
+  hud.clearBoss(); boss.dead=true; yield* waitT(0.4);
 }
 function* runPhase(boss,ph,pi){
   if(ph.kind==='spell'){ sfx.spell&&sfx.spell(); hud.setSpell(ph.name); banner(ph.name); cutin({ announce:SPELL_ANNOUNCE, hue:ph.cutinHue }); boss.invuln=true; yield* waitT(SPELL_ANNOUNCE); boss.invuln=false; }
@@ -1793,9 +1953,37 @@ const FINALBOSS_SPEC = { name:'Flower King', design:'mandala', hue:300, enterFro
       { kind:'spell', name:'"Eternal Spring — Last Word"', survival:FB_SURVIVAL_TIME, bonus:5000000, drops:[], body:'raw', raw:function*(b){ let a=0,wave=0; Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:10,speed:60,gravity:42.5,hue:(330+T*30)%360,style:'petal'}); yield* waitT(0.3); } },b); Director.fork(function*(){ while(true){ burst(b,{count:40,speed:130,hue:(T*60)%360,style:'orb'}); yield* waitT(2.2); } },b); while(true){ spiral(b,{angle:a,arms:6,speed:140+wave*4,hue:(T*70)%360,style:'small'}); spiral(b,{angle:-a*1.4,arms:6,speed:140+wave*4,hue:(120+T*70)%360,style:'small'}); a+=0.21; wave+=0.05; yield* waitT(0.035); } } }
     ] };
 
+// ---- STAGE 2 boss "Tasokare", the twilight phantom — appears TWICE: an early retreating encounter
+// (TASOKARE_INTRO_SPEC: 1 nonspell + 1 spell, retreat:true → flees to return) and the full final
+// fight (TASOKARE_SPEC). Same design/hue/name so it reads as one character. Ghost vocabulary:
+// delayed-turn pursuit bullets (drift, then home), drifting soul-orbs, irregular scatter. ----
+// _sway: an onEnter helper that forks a left↔right glide for the phase (inherits the phase epoch, so
+// endGroup tears it down at phase end — same lifetime contract as the existing MIDBOSS sway).
+const _sway=(cx0,cx1,y,dur)=>function(b){ Director.fork(function*(){ while(true){ yield* moveTo(b,cx0,y,dur,EASE.inOut); yield* moveTo(b,cx1,y,dur,EASE.inOut); } },b); };
+const TASOKARE_INTRO_SPEC = { name:'Tasokare', design:'phantom', hue:212, enterFrom:{x:PF_W/2,y:-70}, enterTo:{x:PF_W/2,y:150}, score:90000, retreat:true, retreatDrops:[],
+    phases:[
+      { kind:'nonspell', hp:900, body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ aimedShot(b,{n:5,spread:0.6,speed:140,hue:285,style:'mid'}); yield* waitT(1.05); } },b); while(true){ ring(b,{count:18,speed:90,accel:55,hue:210,style:'orb'}); yield* waitT(1.6); } }, onEnter:_sway(PF_W*0.34,PF_W*0.66,150,2.0) },
+      { kind:'spell', name:'Spirit Sign "Twilight Pursuit"', hp:1150, bonus:300000, drops:['point','point','point','power'], body:'raw', raw:function*(b){ let off=0; while(true){ pat.delayedTurn(b,{count:14,spread:TAU,baseAngle:off,speed:88,delay:0.9,turnAim:true,speed2:165,hue:205,style:'orb'}); off+=0.5; yield* waitT(1.5); pat.aimedSpread(b,{count:7,spread:0.5,speed:150,hue:280,style:'pellet'}); yield* waitT(0.9); } } }
+    ] };
+const TASOKARE_SPEC = { name:'Tasokare', design:'phantom', hue:212, enterFrom:{x:PF_W/2,y:-80}, enterTo:{x:PF_W/2,y:140}, score:600000, drops:['full','oneup','bigpower','point','point','point','point','point'],
+    phases:[
+      { kind:'nonspell', hp:1400, body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ aimedShot(b,{n:7,spread:0.7,speed:150,hue:285,style:'mid'}); yield* waitT(0.85); } },b); while(true){ ring(b,{count:22,speed:95,accel:55,hue:210,style:'orb'}); yield* waitT(1.3); } }, onEnter:_sway(PF_W*0.3,PF_W*0.7,140,1.9) },
+      // a COMPLEXIFIED evolution of the midboss pursuit (same delayed-turn family, escalated): the
+      // homing soul-orb ring is now woven with a second ring that veers to a fixed sweep, over a slow
+      // counter-rotating base ring — a pursuing lattice rather than the single homing ring of the intro.
+      { kind:'spell', name:'Phantom Sign "Twilight Labyrinth"', hp:1900, bonus:700000, drops:['point','point','power'], body:'raw', raw:function*(b){ let off=0, base=0;
+        Director.fork(function*(){ while(true){ ring(b,{count:14,speed:72,hue:282,style:'pellet',rot:base}); base-=0.20; yield* waitT(0.95); } },b);
+        while(true){ pat.delayedTurn(b,{count:16,spread:TAU,baseAngle:off,speed:90,delay:0.85,turnAim:true,speed2:178,hue:205,style:'orb'});
+          pat.delayedTurn(b,{count:16,spread:TAU,baseAngle:off+0.20,speed:112,delay:0.6,turn:1.15,speed2:150,hue:190,style:'pellet'});
+          off+=0.42; yield* waitT(1.3); } } },
+      { kind:'nonspell', hp:1600, body:'raw', raw:function*(b){ let a=0; Director.fork(function*(){ while(true){ yield* moveTo(b,PF_W*0.3,135,1.6,EASE.inOut); yield* moveTo(b,PF_W*0.7,135,1.6,EASE.inOut); } },b); Director.fork(function*(){ while(true){ burst(b,{count:22,speed:120,hue:(195+T*40)%360,style:'orb'}); yield* waitT(1.9); } },b); while(true){ spiral(b,{angle:a,arms:3,speed:128,hue:(210+T*50)%360,style:'small'}); spiral(b,{angle:-a*1.3,arms:3,speed:128,hue:(258+T*50)%360,style:'small'}); a+=0.32; yield* waitT(0.05); } } },
+      { kind:'spell', name:'Twilight Sign "Hitodama Drift"', hp:2000, bonus:900000, drops:['point','point','point'], body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:10,speed:55,gravity:40,hue:(200+T*30)%360,style:'orb'}); yield* waitT(0.5); } },b); while(true){ pat.randomScatter(b,{count:18,baseAngle:HALFPI,spread:Math.PI*1.25,speedMin:70,speedMax:150,jitterHue:30,hue:215,style:'pellet'}); yield* waitT(0.7); ring(b,{count:16,speed:100,accel:70,hue:280,style:'orb'}); yield* waitT(0.7); } } },
+      { kind:'spell', name:'"Twilight Hour — Last Word"', survival:26, bonus:3000000, drops:[], body:'raw', raw:function*(b){ let a=0,wave=0; Director.fork(function*(){ while(true){ pat.delayedTurn(b,{count:16,spread:TAU,baseAngle:a*2,speed:80,delay:0.8,turnAim:true,speed2:160,hue:205,style:'orb'}); yield* waitT(1.7); } },b); Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:9,speed:60,gravity:42,hue:(195+T*40)%360,style:'orb'}); yield* waitT(0.36); } },b); while(true){ spiral(b,{angle:a,arms:5,speed:135+wave*3,hue:(210+T*60)%360,style:'small'}); spiral(b,{angle:-a*1.4,arms:5,speed:135+wave*3,hue:(258+T*60)%360,style:'small'}); a+=0.22; wave+=0.04; yield* waitT(0.04); } } }
+    ] };
+
 // ---- THE STAGE TIMELINE (declarative data + interpreter) ----
 // Boss registry: id -> spec. (Phase 8/9: resolveBoss(id, rank, diff) will apply difficulty here.)
-const BOSSES = { ariel:MIDBOSS_SPEC, flowerKing:FINALBOSS_SPEC };
+const BOSSES = { ariel:MIDBOSS_SPEC, flowerKing:FINALBOSS_SPEC, tasokareIntro:TASOKARE_INTRO_SPEC, tasokare:TASOKARE_SPEC };
 
 // A stage is ONE data object; runStage() compiles its timeline into the existing Director
 // coroutines. STAGES[0] is a 1:1 transcription of the former imperative stageScript — same waves,
@@ -1821,6 +2009,32 @@ const STAGES = [
       // final boss
       {banner:'WARNING'}, {sfx:'warn'}, {flash:{color:'#ff3366',i:0.4}}, {shake:{mag:4,dur:0.6}}, {music:'boss'}, {wait:2.0},
       {boss:'flowerKing'},
+      {stageEnd:true},                 // hand off to Stage 2 (was {stageClear:true}; now no longer the terminal stage)
+    ] },
+  // STAGE 2 — "Twilight Petal Lane". The stage boss (Tasokare) makes an early RETREATING appearance
+  // in the midboss slot (1 nonspell + 1 spell → flees), then the 道中, then returns for the full fight.
+  { id:2, title:'Stage 2', theme:'dusk',
+    music:{ stage:'stage2', boss:'boss2' },     // the midboss appearance stays on the 道中 track — only the FINAL boss switches to boss2
+    timeline:[
+      {banner:'Stage 2'}, {wait:INTRO_FADE},
+      // opening: ghostly drifters converging from both sides (sine-sway wisps)
+      {parallel:[ {wave:'drifters', opts:{n:6,x:PF_W*0.28,amp:64,spacing:0.5,hue:200}},
+                  {wave:'drifters', opts:{n:6,x:PF_W*0.72,amp:64,spacing:0.5,hue:280}, delay:0.35} ]}, {waitClear:true}, {wait:WAVE_GAP},
+      // a wraith PAIR introduces the heavy ghost enemy (homing soul-orb rings — the road's signature)
+      {wave:'wraith', opts:{xs:[PF_W*0.30,PF_W*0.70],y:118,hold:4.5,spacing:0.5,hue:208}}, {waitClear:true}, {wait:1.0},
+      // the boss's early (retreating) appearance — NO music switch (the 道中 track underscores it)
+      {banner:'WARNING'}, {sfx:'warn'},
+      {boss:'tasokareIntro'},
+      {wait:CALM_BEFORE_BOSS},
+      // the road builds: a wide drifting sweep
+      {parallel:[ {wave:'drifters', opts:{n:9,x:PF_W*0.5,amp:130,spacing:0.32,hue:265}},
+                  {wave:'sideSweep', opts:{n:7,side:'right',y:80,spacing:0.13,hue:210}, delay:1.2} ]}, {waitClear:true}, {wait:WAVE_GAP},
+      // ── 山場 ── a wraith TRIO holds centre + flanks; the overlapping homing-ring danmaku is the road's peak
+      {banner:'Twilight Throng'},
+      {wave:'wraith', opts:{xs:[PF_W*0.5,PF_W*0.22,PF_W*0.78],y:116,hold:7.0,spacing:0.45,hue:214}}, {waitClear:true}, {wait:1.6},
+      // final boss (full fight) — the one real music switch to boss2
+      {banner:'WARNING'}, {sfx:'warn'}, {flash:{color:'#9a6cff',i:0.4}}, {shake:{mag:4,dur:0.6}}, {music:'boss'}, {wait:2.0},
+      {boss:'tasokare'},
       {stageClear:true},
     ] },
 ];
@@ -1840,7 +2054,8 @@ function* runStage(stage){
     else if(e.sfx!=null)    { sfx[e.sfx] && sfx[e.sfx](); }
     else if(e.flash)        screenFlash(e.flash.color, e.flash.i);
     else if(e.shake)        shake(e.shake.mag, e.shake.dur);
-    else if(e.stageClear)   { screenFlash('#ffffff',1.0); banner('STAGE CLEAR'); Audio.playMusic('none'); yield* waitT(3.0); advanceStage(); return; }
+    else if(e.stageEnd)     { screenFlash('#ffffff',0.8); banner('STAGE CLEAR'); Audio.fadeOutMusic(1.4); yield* waitT(2.8); advanceStage(); return; }   // mid-campaign handoff: advance to the next stage (deferred via run._advanceTo) WITHOUT the terminal all-clear; next stage's music starts in enterStage
+    else if(e.stageClear)   { screenFlash('#ffffff',1.0); banner('STAGE CLEAR'); Audio.playMusic('none'); yield* waitT(3.0); advanceStage(); return; }   // terminal: last stage of the run -> advanceStage()->onStageClear()->STAGECLEAR
   }
 }
 
@@ -1895,6 +2110,15 @@ function* runStage(stage){
   attachInput(window);
   attachTouch(cv);
   setState(STATE.TITLE);
+  // debug "start from any stage" (ARCHITECTURE-V2 Step A): ?stage=N (1-indexed) [+ ?diff=easy|normal|
+  // hard|lunatic] skips the title and jumps straight into that stage via the campaign seam
+  // startRun(diff, N-1). Inert under ?golden (the headless harness owns the clock below). Out-of-range
+  // N is ignored (stays on TITLE); an unknown diff falls back to normal inside startRun.
+  if(typeof location!=='undefined' && !/[?&]golden=1/.test(location.search)){
+    const sm=location.search.match(/[?&]stage=(\d+)/);
+    if(sm){ const n=(parseInt(sm[1],10)||1)-1, dm=location.search.match(/[?&]diff=(easy|normal|hard|lunatic)/), d=dm?dm[1]:'normal';
+      if(n>=0 && n<STAGES.length) startRun(d,n); }
+  }
   // ?golden=1 freezes the rAF loop so the headless structural-golden harness owns the sim clock
   // (no background petal-wrap rng consumption / state churn). Normal & ?dev=1 boots are unaffected.
   if(typeof location==='undefined' || !/[?&]golden=1/.test(location.search)) requestAnimationFrame(frame);

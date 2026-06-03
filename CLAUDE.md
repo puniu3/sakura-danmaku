@@ -5,12 +5,13 @@ non-obvious architecture and the rules that keep the single-file game coherent.
 
 ## What this is
 
-A Touhou-style vertical bullet-hell shmup shipped as **one file: `index.html`** (~1,833 lines,
-one `<script>`). Canvas2D rendering, fully procedural Web Audio (SFX + 3-track BGM), **no assets,
-no build step to play**. Originally assembled from six reconciled subsystems (see
-`design/RECONCILIATION.md` for the original assembly), it has since been refactored to a
-**6-stage-ready architecture (V2, Phases 0–9 landed; see *V2 status & roadmap* below)**: registries
-+ declarative stage data, while staying a single double-click-to-run file.
+A Touhou-style vertical bullet-hell shmup shipped as **one file: `index.html`** (~2,130 lines,
+one `<script>`). Canvas2D rendering, fully procedural Web Audio (SFX + 5-track BGM: stage/midboss/boss
++ stage2/boss2, plus a game-over lament), **no assets, no build step to play**. Originally assembled from
+six reconciled subsystems (see `design/RECONCILIATION.md` for the original assembly), it has since been
+refactored to a **6-stage-ready architecture (V2; Phases 0–9 + Stage 2 landed; see *V2 status & roadmap*
+below)**: registries + declarative stage data, **now with 2 of 6 stages authored**, while staying a single
+double-click-to-run file.
 
 ## Golden rules
 
@@ -138,19 +139,29 @@ campaign spine + versioned save + `DIFFICULTY`→`BALANCE` + `pool.shrink`, and 
 **Phase 8's interactive SCREENS were deferred by plan** (the structural spine + reserved STATE slots
 exist; the UIs do not).
 
-**NEXT (resequenced 2026-06-03), in this order:**
-1. **Debug "start from any stage" mode** (do this first — makes authoring 2–6 fast). Seam is ready:
-   `startRun(diff, fromStage)` takes a 0-indexed start stage. Implement: at boot, parse `?stage=N`
-   (1-indexed) + optional `?diff=`; if present, skip the title and `startRun(diff, N-1)`. Works with
-   whatever `STAGES` entries exist. This is **stage** entry only — mid-**phase** seek/heal (within a
-   boss) is a separate, harder feature (ARCHITECTURE-V2 §11/#11) and not needed.
-2. **Phase 10 — Stage 2** full authoring: new `THEMES` entry + 2 BGM tracks (bgm-tracks → audition →
-   `build-game.js`) + a boss from the spell library + `STAGES[1]`.
-3. **Phase 11 — Stages 3–6**, one at a time (each = `STAGES[N]` + theme + 1–2 BGM), previewed via the
+**ALSO DONE — Step A (`?stage` debug) + Phase 10 (Stage 2)** (2026-06-04, golden-verified Stage-1 byte-identical):
+- **Debug stage-start**: `boot()` parses `?stage=N` (1-indexed) + optional `?diff=` → skips the title and
+  `startRun(diff, N-1)`. Inert under `?golden`. Preview any authored stage with `?stage=N`.
+- **Stage 2** ("Twilight Petal Lane", dusk): `THEMES.dusk`; `BOSS_DESIGNS.phantom`+`drawBossPhantom` (the
+  large twilight phantom **Tasokare**); `WAVES.drifters`/`WAVES.wraith` (wraith fires homing soul-orb rings
+  — the road's identity + a 3-wraith 山場); `BOSSES.tasokareIntro` (midboss-slot: 1 nonspell+1 spell →
+  **retreats**) + `BOSSES.tasokare` (returns, 5 phases incl. a survival last-word; its 1st spell is a
+  complexified — not reused — pursuit). 2 BGM `stage2`/`boss2` (D harm, composed as INDEPENDENT tunes;
+  `SCALES.Dharm`/`Fharm` added).
+- **New reusable engine seams** (for Stages 3–6): (a) **boss retreat** — `spec.retreat` → `bossRetreat`
+  (flies off, no death explosion; keeps `game.boss` live through the fly-off so `drawBoss` renders it);
+  (b) **deferred stage-advance** — `advanceStage` sets `run._advanceTo`, processed in `simStep` right after
+  `tickStage` (calling `enterStage`→`Director.start` from INSIDE the running stage coro would clobber the new
+  coro via `update()`'s compaction); (c) **`{stageEnd}`** timeline verb (mid-campaign handoff; `{stageClear}`
+  stays terminal). The 4 base waves gained `opts.hue` (default-preserving → Stage 1 unchanged). The midboss
+  appearance keeps the **道中 (`stage`) music**; only the final boss switches to `boss2`.
+
+**NEXT, in this order:**
+1. **Phase 11 — Stages 3–6**, one at a time (each = `STAGES[N]` + theme + 1–2 BGM), previewed via the
    debug `?stage=N` mode.
-4. **Phase 12 — perf & polish**: dev bullet-count/frame-time HUD; on worst Lunatic card cap-enforce /
+2. **Phase 12 — perf & polish**: dev bullet-count/frame-time HUD; on worst Lunatic card cap-enforce /
    off-screen cull / draw-batch / cheaper compact; `STAGE_INTERMISSION` `pool.shrink`; results/all-clear.
-5. **Phase 8 (deferred) LAST**: difficulty-select / continue / results / name-entry screens +
+3. **Phase 8 (deferred) LAST**: difficulty-select / continue / results / name-entry screens +
    reusable menu-cursor + touch-menu nav, wired onto the reserved STATE slots and the `run` spine.
 
 ## Dev / preview (this machine)

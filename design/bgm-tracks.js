@@ -15,6 +15,8 @@ const SCALES = {
   Amin:  [0,2,4,5,7,9,11],   // A natural minor: A B C D E F G
   Aharm: [0,2,4,5,8,9,11],   // A harmonic minor: A B C D E F G#
   Charm: [0,2,3,5,7,8,11],   // C harmonic minor: C D Eb F G Ab B
+  Dharm: [1,2,4,5,7,9,10],   // D harmonic minor: D E F G A Bb C#   (Stage 2)
+  Fharm: [0,1,4,5,7,8,10],   // F harmonic minor: F G Ab Bb C Db E   (Stage 2 boss climax lift)
 };
 function parseChord(sym) {
   let bass = null, s = sym;
@@ -306,7 +308,103 @@ const GAMEOVER = {
   arrangement: ['A'],
 };
 
-const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER };
+// ================================================================ STAGE 2
+// "Yoiyami Lane" — D harmonic minor, 108 BPM. An INDEPENDENT tune (not a Stage-1 reskin): where the
+// Stage-1 hook is a busy downbeat stepwise march, this motif breathes — syncopated off-beat entries,
+// sustained notes, and the harmonic-minor augmented-2nd shimmer (b6 Bb ↔ #7 C#) for a twilight colour.
+const S2_HOOK = [
+  [0,74],[6,77],[10,76],            // D … F E  — a sighing off-beat fall
+  [16,81],[22,82],[26,85],[28,82],  // A → Bb → C#6 → Bb  (the augmented-2nd shimmer)
+  [32,79],[40,77],[44,76],          // G F E  — slow, spacious descent
+  [48,74],[54,73],[58,74],          // D → C# → D  (leading-tone resolution)
+];
+const S2_HOOK2 = [ // variation tail, hangs on A (the V) for the half-cadence
+  [0,74],[6,77],[10,79],
+  [16,82],[20,85],[28,82],
+  [32,81],[40,77],
+  [48,79],[56,81],[60,81],
+];
+const S2_B = [ // 8-bar contrasting lift — lyrical and breathing, not a run
+  [0,85],[8,86],[12,82],
+  [16,81],[24,77],[28,79],
+  [32,76],[40,77],[48,81],[56,85],
+  [64,86],[72,82],[80,79],[88,77],
+  [96,79],[104,81],[112,82],[120,85],
+];
+const S2_BRIDGE = [ [0,69],[8,74],[16,77],[24,82],[32,85],[40,82],[48,79],[56,77] ];
+const S2_OUTRO = [ [0,82],[8,81],[16,79],[24,77],[32,76],[40,74],[48,74] ];
+const STAGE2 = {
+  title: 'Yoiyami Lane', keyName: 'D harmonic minor', bpm: 108, gain: 0.55,
+  // DISTINCT timbre from Stage 1 (no saw bite on the lead): a cool sine-shimmer lead, a lush dark
+  // slow pad pushed forward, a music-box bell arp, and a round sine bass. With midGroove + a walking
+  // bass + the slower tempo this reads as a floating twilight piece, not the bright Stage-1 march.
+  voices: {
+    lead: { layers:[ { type:'triangle', octave:0, detune:0, gain:1.0 }, { type:'sine', octave:1, detune:4, gain:0.4 }, { type:'sine', octave:0, detune:-6, gain:0.5 } ], atk:0.014, dec:0.11, sus:0.5, rel:0.24, maxGate:6 },
+    arp:  { layers:[ { type:'triangle', octave:1, detune:0, gain:1.0 } ], atk:0.002, dec:0.04, sus:0.12, rel:0.08, filter:'lowpass', filterFreq:3400, maxGate:1 },
+    bass: { layers:[ { type:'sine', octave:0, detune:0, gain:1.0 }, { type:'triangle', octave:0, detune:0, gain:0.4 } ], atk:0.006, dec:0.07, sus:0.62, rel:0.12, filter:'lowpass', filterFreq:620, maxGate:4 },
+    pad:  { octave:0, voices:3, detune:13, type:'sawtooth', atk:0.22, dec:0.22, sus:0.8, rel:0.7, filter:'lowpass', filterFreq:1050 } },
+  gains: { lead:0.125, harm:0.065, counter:0.07, arp:0.055, bass:0.15, sub:0.13, pad:0.08 },
+  sections: {
+    intro: makeSection({ bars:4, scale:'Dharm', chords:['Dm','Dm','Bb','A7'], bassStyle:'half', arpRate:2, groove:'introTick', sub:true, crash:true }),
+    A:     makeSection({ bars:8, scale:'Dharm', chords:['Dm','Bb','F','A7','Dm','Gm','A7','Dm'], lead:cat(S2_HOOK, off(64,S2_HOOK2)), bassStyle:'walk8', arpRate:2, groove:'midGroove', sub:true }),
+    A2:    makeSection({ bars:8, scale:'Dharm', chords:['Dm','Bb','F','A7','Dm','Gm','A7','Dm'], lead:cat(S2_HOOK, off(64,S2_HOOK2)), harm:true, bassStyle:'walk8', arpRate:2, groove:'midGroove', sub:true }),
+    B:     makeSection({ bars:8, scale:'Dharm', chords:['Bb','F','Gm','Dm','Bb','F','A7','A7'], lead:S2_B, counter:true, bassStyle:'walk8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
+    bridge:makeSection({ bars:4, scale:'Dharm', chords:['Gm','A7','Dm','A7'], lead:S2_BRIDGE, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
+    A2b:   makeSection({ bars:8, scale:'Dharm', chords:['Dm','Bb','F','A7','Dm','Gm','A7','Dm'], lead:cat(S2_HOOK, off(64,S2_HOOK2)), harm:true, counter:true, bassStyle:'walk8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
+    outro: makeSection({ bars:4, scale:'Dharm', chords:['Dm','Bb','Gm','A7'], lead:S2_OUTRO, bassStyle:'walk8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
+  },
+  arrangement: ['intro','A','A2','B','bridge','A2b','outro'],
+};
+
+// ================================================================ STAGE 2 BOSS
+// "Tasokare's Lament" — D harmonic minor, key-lift to F harmonic minor, 164 BPM. An INDEPENDENT theme
+// (not the Stage-1 boss reshaped): where that boss is warm and tuneful-stepwise, this hook is angular —
+// wide 4th/5th leaps and the augmented-2nd — over a recurring descending lament cadence. Menacing, not pretty.
+const B2_HOOK = [
+  [0,74],[2,81],[4,82],[8,85],[10,82],[12,79],[14,77],   // D↑A Bb (leap) → C#6 Bb G F  — wide leaps, then fall
+  [16,76],[18,74],[20,81],[24,82],[26,77],[28,76],[30,74], // E D A(leap) Bb F E D  — angular
+];
+const B2_CLOSE = [ [0,82],[4,81],[8,79],[12,77],[16,76],[20,74],[24,73],[28,74] ]; // descending lament: Bb A G F E D C# D
+const B2_B = [ // dramatic lift, D harmonic minor
+  [0,86],[6,82],[10,85],[16,81],[24,77],
+  [32,79],[40,82],[48,85],[56,86],
+  [64,85],[72,82],[80,79],[88,77],
+  [96,81],[104,85],[112,82],[120,86],
+];
+const B2_BRIDGE = [ // sinking lament to A, then a leading-tone climb back
+  [0,81],[8,77],[16,74],[24,70],
+  [32,69],[40,73],[48,74],[56,77],
+  [64,79],[72,82],[80,85],[88,82],
+  [96,81],[104,77],[112,74],[120,73],
+];
+const B2_OUTRO = [ [0,74],[2,81],[6,85],[12,82],[16,79],[24,77],[32,74],[48,74] ];
+const BOSS2 = {
+  title: "Tasokare's Lament", keyName: 'D harmonic minor → F', bpm: 164, gain: 0.62,
+  // DISTINCT timbre from the Stage 1 boss (which is warm triangle-led): a cold saw+hollow-square lead,
+  // a sharp chiptune-ghost square arp, and a grittier bass. With a galloping bass + midGallop groove +
+  // the faster tempo it reads as a relentless ghost-chase, not the Stage-1 boss's tuneful warm drive.
+  voices: {
+    lead: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:0.9, filter:'lowpass', filterFreq:2600 }, { type:'square', octave:0, detune:8, gain:0.55, filter:'lowpass', filterFreq:2200 }, { type:'sawtooth', octave:1, detune:0, gain:0.2 } ], atk:0.004, dec:0.05, sus:0.45, rel:0.12, maxGate:6 },
+    harm: { layers:[ { type:'sawtooth', octave:0, detune:-6, gain:1.0 } ], atk:0.006, dec:0.05, sus:0.42, rel:0.13, filter:'lowpass', filterFreq:2400, maxGate:6 },
+    counter: { layers:[ { type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:1800 } ], atk:0.005, dec:0.05, sus:0.38, rel:0.11, maxGate:5 },
+    arp: { layers:[ { type:'square', octave:0, detune:9, gain:1.0 } ], atk:0.002, dec:0.022, sus:0.13, rel:0.05, filter:'lowpass', filterFreq:3600, maxGate:1 },
+    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.05, sus:0.58, rel:0.08, filter:'lowpass', filterFreq:1050, maxGate:3 },
+    pad: { octave:0, voices:3, detune:12, type:'sawtooth', atk:0.07, dec:0.12, sus:0.66, rel:0.4, filter:'lowpass', filterFreq:1300 } },
+  gains: { lead:0.14, harm:0.075, counter:0.085, arp:0.065, bass:0.17, sub:0.14, pad:0.055, kick:1.1, snare:1.05, crash:1.05 },
+  sections: {
+    intro:  makeSection({ bars:8, scale:'Dharm', chords:['Dm','Dm','A7','A7','Gm','Gm','A7','A7'], lead:cat(B2_HOOK, off(64,B2_HOOK)), harm:true, bassStyle:'half', arpRate:2, groove:'fourLite', sub:true, crash:true }),
+    A1:     makeSection({ bars:8, scale:'Dharm', chords:['Dm','Bb','F','A7','Dm','Bb','Gm','A7'], lead:cat(B2_HOOK, off(32,B2_HOOK), off(64,B2_HOOK), off(96,B2_CLOSE)), bassStyle:'gallop', arpRate:1, groove:'midGallop', sub:true, crash:true }),
+    A2:     makeSection({ bars:8, scale:'Dharm', chords:['Dm','Bb','F','A7','Dm','Gm','A7','Dm'], lead:cat(B2_HOOK, off(32,B2_HOOK), off(64,B2_HOOK), off(96,B2_CLOSE)), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'midGallop', sub:true, crash:true }),
+    B:      makeSection({ bars:8, scale:'Dharm', chords:['Bb','F','Gm','Dm','Bb','F','A7','Dm'], lead:B2_B, harm:true, counter:true, bassStyle:'pump8', arpRate:1, groove:'midGallop', sub:true, crash:true }),
+    bridge: makeSection({ bars:8, scale:'Dharm', chords:['Gm','Gm','Dm','A7','Bb','Bb','A7','A7'], lead:B2_BRIDGE, bassStyle:'half', arpRate:2, groove:'bossBridge', sub:true }),
+    climax: makeSection({ bars:8, scale:'Fharm', chords:['Fm','Db','Ab','C7','Fm','Db','Bbm','C7'], lead:cat(transpose(B2_HOOK,3), off(32,transpose(B2_HOOK,3)), off(64,transpose(B2_HOOK,3)), off(96,transpose(B2_CLOSE,3))), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
+    A3:     makeSection({ bars:8, scale:'Dharm', chords:['Dm','Bb','F','A7','Dm','Gm','A7','Dm'], lead:cat(B2_HOOK, off(32,B2_HOOK), off(64,B2_HOOK), off(96,B2_CLOSE)), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
+    outro:  makeSection({ bars:4, scale:'Dharm', chords:['Gm','A7','Dm','D'], lead:B2_OUTRO, bassStyle:'half', arpRate:2, groove:'midGallop', sub:true, crash:true }),
+  },
+  arrangement: ['intro','A1','A2','B','bridge','climax','A3','outro'],
+};
+
+const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER, stage2: STAGE2, boss2: BOSS2 };
 
 // ---------------------------------------------------------------- validation (Node only)
 function validateTracks() {
