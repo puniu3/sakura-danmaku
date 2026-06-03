@@ -98,7 +98,9 @@ const ITEM_MAGNET_ACC = 2400, ITEM_MAGNET_MAXSPD = 1100, ITEM_MAGNET_TURN = 9, I
 const POC_LINE_Y = 140;
 const ITEM_HUE = { power:15, point:205, bigpower:15, oneup:340, full:280, star:55, bomb:200 };
 
-const STATE = { TITLE:0, PLAYING:1, PAUSED:2, GAMEOVER:3, STAGECLEAR:4 };
+const STATE = { TITLE:0, PLAYING:1, PAUSED:2, GAMEOVER:3, STAGECLEAR:4,
+  // reserved for the multi-stage campaign flow (screens wired when stages 2-6 land; unused at 1 stage).
+  DIFFICULTY_SELECT:5, STAGE_INTERMISSION:6, CONTINUE:7, RESULTS:8, NAME_ENTRY:9 };
 const GAMEOVER_AUTORET = 12.0;
 const GAME_KEYS = new Set(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','ShiftLeft','ShiftRight','KeyZ','KeyX','Escape','KeyP','Enter','KeyM']);
 
@@ -145,6 +147,7 @@ function makePool(factory,n){
     compact(){ const it=this.items; let n2=this.count,i=0; while(i<n2){ if(it[i].alive){ i++; } else { n2--; if(i!==n2){ const tmp=it[i]; it[i]=it[n2]; it[n2]=tmp; } } } this.count=n2; },
     forEachLive(fn){ const it=this.items; for(let i=0;i<this.count;i++) fn(it[i],i); },
     clear(){ for(let i=0;i<this.count;i++) this.items[i].alive=false; this.count=0; },
+    shrink(toCap){ toCap=Math.max(toCap|0,this.count); if(this.items.length>toCap) this.items.length=toCap; this.cap=this.items.length; },   // release backing capacity down to toCap (never below live count); for STAGE_INTERMISSION
     _grow(){ const add=Math.max(64,this.items.length>>1); for(let k=0;k<add;k++){ const o=this.factory(); o.alive=false; this.items.push(o); } this.cap=this.items.length; },
   };
   pool.spawn=pool.acquire; pool.alloc=pool.acquire; pool.forEach=pool.forEachLive; pool.list=pool.items;
@@ -1391,7 +1394,15 @@ function attachTouch(el){
   window.addEventListener('gamepaddisconnected',e=>{ if(e.gamepad.index===_padIndex){ _padIndex=-1; clearTransientInput(); rawKeys['KeyZ']=false; rawKeys['ShiftLeft']=false; rawKeys['ArrowUp']=rawKeys['ArrowDown']=rawKeys['ArrowLeft']=rawKeys['ArrowRight']=false; if(inputMode==='pad') inputMode=(typeof matchMedia==='function'&&matchMedia('(pointer:coarse)').matches)?'touch':'key'; } });
 }
 
-let player=null, game=null;
+let player=null, game=null, run=null;
+// difficulty knobs. normal = identity, so default play is byte-for-byte unchanged. lives/bombs are the
+// starting loadout; the hp/count/speed multipliers are applied by the resolve step (Phase 9 balance).
+const DIFFICULTY = {
+  easy:   { countMul:0.7, spdMul:0.85, hpMul:0.8,  lives:4, bombs:3 },
+  normal: { countMul:1.0, spdMul:1.0,  hpMul:1.0,  lives:3, bombs:2 },
+  hard:   { countMul:1.2, spdMul:1.08, hpMul:1.15, lives:3, bombs:2 },
+  lunatic:{ countMul:1.4, spdMul:1.15, hpMul:1.3,  lives:2, bombs:2 },
+};
 function makePlayer(){ return { x:PLAYER_START.x, y:PLAYER_START.y, r:PLAYER_R, focus:false, state:'alive', dead:false, invuln:0, blink:false, fireCd:0, power:START_POWER, bombs:START_BOMBS, lives:START_LIVES, itemR:14, bombActive:0, bossDot:0, pendingDeath:0, respawnT:0, options:[], mvx:0, mvy:0, grazePowerT:0 }; }
 function makeGame(){ return { state:STATE.TITLE, score:0, hi:0, grazeCount:0, pointValue:POINT_MIN, pointTotal:0, extendsTaken:0, stateT:0, fullpower:false, paused:false, boss:null, spellIntensity:0, powerMax:MAXPOWER, grazePowerThreshold:GRAZE_POWER_FIRST, grazePowerInterval:GRAZE_POWER_FIRST }; }
 function initGameSystems(){ game=makeGame(); player=makePlayer(); loadHiScore(); setState(STATE.TITLE); }
@@ -1416,7 +1427,25 @@ function setState(s){ const prev=game.state; game.state=s; game.stateT=0;
   else if(s===STATE.GAMEOVER){ game.paused=false; saveHiScore(); enemyBullets.clear(); Audio.playMusic('none'); }
   else if(s===STATE.STAGECLEAR){ game.paused=false; saveHiScore(); enemyBullets.clear(); game.boss=null; if(player) endGrazePower(); Audio.playMusic('none'); }
 }
-function startGame(){ _cutin.active=false; game.score=0; game.grazeCount=0; game.pointTotal=0; game.extendsTaken=0; game.fullpower=false; game.pointValue=POINT_MIN; game.boss=null; game.spellIntensity=0; game.grazePowerThreshold=GRAZE_POWER_FIRST; game.grazePowerInterval=GRAZE_POWER_FIRST; player=makePlayer(); layoutOptions(); items.length=0; enemyBullets.clear(); playerShots.clear(); particles.clear(); enemies.length=0; startStage(); setState(STATE.PLAYING); Audio.playMusic('stage'); }
+// run = one campaign playthrough. startRun resets the whole loadout (score/lives/bombs/power);
+// enterStage does the per-stage spawn reset and CARRIES the run loadout; advanceStage steps the
+// campaign. With one stage, the last stage's clear is terminal — identical to today. (Phase 10+
+// wires STAGE_INTERMISSION / RESULTS / CONTINUE around these seams.)
+function startRun(diff, fromStage){
+  run = { difficulty:(diff||'normal'), stage:(fromStage||0), continuesUsed:0, practice:false };
+  const D = DIFFICULTY[run.difficulty] || DIFFICULTY.normal;
+  _cutin.active=false; game.score=0; game.grazeCount=0; game.pointTotal=0; game.extendsTaken=0; game.fullpower=false; game.pointValue=POINT_MIN; game.boss=null; game.spellIntensity=0; game.grazePowerThreshold=GRAZE_POWER_FIRST; game.grazePowerInterval=GRAZE_POWER_FIRST;
+  player=makePlayer(); player.lives=D.lives; player.bombs=D.bombs;
+  enterStage(run.stage);
+}
+function enterStage(i){
+  run.stage=i; game.boss=null; if(player) endGrazePower();
+  layoutOptions(); items.length=0; enemyBullets.clear(); playerShots.clear(); particles.clear(); enemies.length=0;
+  const st=STAGES[i], sm=(st&&st.music&&st.music.stage)||'stage';
+  startStage(); setState(STATE.PLAYING); Audio.playMusic(sm);
+}
+function advanceStage(){ if(run && run.stage < STAGES.length-1) enterStage(run.stage+1); else onStageClear(); }
+function startGame(){ startRun('normal', 0); }
 function togglePause(){ if(game.state===STATE.PLAYING) setState(STATE.PAUSED); else if(game.state===STATE.PAUSED) setState(STATE.PLAYING); }
 function onStageClear(){ setState(STATE.STAGECLEAR); }
 
@@ -1515,9 +1544,20 @@ function onGraze(bullet){ if(player.invuln>0) return; addGraze(1); spawnParticle
 function grantExtend(reason){ if(player.lives>=MAX_LIVES) return; player.lives++; sfx.extend&&sfx.extend(); Render.flash(0.4,150); }
 function onSpellCaptured(bonus){ const gained=bonus||SPELL_CAPTURE_BONUS; addScore(gained); sfx.capture&&sfx.capture(); Render.flash(0.5,280); Render.popText(PF_W/2,PF_H*0.4,'+'+gained,280); }
 
-const HISCORE_KEY='danmaku_hiscore_v1';
-function loadHiScore(){ try{ const v=localStorage.getItem(HISCORE_KEY); game.hi=v?parseInt(v,10)||0:0; }catch(e){ game.hi=0; } }
-function saveHiScore(){ try{ if(game.score>game.hi) game.hi=game.score; localStorage.setItem(HISCORE_KEY,String(game.hi)); }catch(e){} }
+const HISCORE_KEY='danmaku_hiscore_v1';            // legacy v1 int (kept one release for migration)
+const SAVE_KEY='danmaku_save_v2';
+let save=null;
+// migrate any prior save to v2, folding the legacy v1 int hi-score into hiByDiff.normal.
+// read-old-before-write-new + never-lower, so returning players never lose their hi-score.
+function migrateSave(old){ const s=(old&&typeof old==='object')?old:{}; s.ver=2;
+  if(!s.hiByDiff||typeof s.hiByDiff!=='object') s.hiByDiff={};
+  for(const k of ['easy','normal','hard','lunatic']) if(typeof s.hiByDiff[k]!=='number') s.hiByDiff[k]=0;
+  if(!s.furthestStage) s.furthestStage={}; if(!s.clears) s.clears={}; if(typeof s.lastName!=='string') s.lastName='';
+  try{ const v1=localStorage.getItem(HISCORE_KEY); if(v1!=null){ const n=parseInt(v1,10)||0; if(n>s.hiByDiff.normal) s.hiByDiff.normal=n; } }catch(e){}
+  return s; }
+function loadSave(){ let s=null; try{ const raw=localStorage.getItem(SAVE_KEY); if(raw) s=JSON.parse(raw); }catch(e){ s=null; } return migrateSave(s); }
+function loadHiScore(){ save=loadSave(); const d=(run&&run.difficulty)||'normal'; game.hi=save.hiByDiff[d]||0; }
+function saveHiScore(){ if(!save) save=loadSave(); const d=(run&&run.difficulty)||'normal'; if(game.score>game.hi) game.hi=game.score; if(game.hi>(save.hiByDiff[d]||0)) save.hiByDiff[d]=game.hi; try{ localStorage.setItem(SAVE_KEY,JSON.stringify(save)); }catch(e){} }
 
 function spawnItem(kind,x,y,vx,vy){ items.push({ kind, x, y, vx:vx||0, vy:(vy!=null?vy:-60), r:ITEM_R, hue:ITEM_HUE[kind]!=null?ITEM_HUE[kind]:55, magnet:false, dead:false, born:T }); }
 function dropItems(kind,count,x,y,spread){ for(let i=0;i<count;i++){ const a=(-HALFPI)+(rng()-0.5)*1.6, s=60+rng()*90; spawnItem(kind,x+(rng()-0.5)*spread,y,Math.cos(a)*s,Math.sin(a)*s); } }
@@ -1584,7 +1624,7 @@ const Director=(function(){
   return { start, fork, kill, clear, update, beginGroup, endGroup, get count(){ return coros.length; } };
 })();
 function tickStage(dt){ Director.update(dt); }
-function startStage(){ Director.start(()=>runStage(STAGES[0])); }   // Phase 8: STAGES[run.stage]
+function startStage(){ Director.start(()=>runStage(STAGES[run.stage])); }
 function abortStage(){ if(typeof Director!=='undefined') Director.clear(); }
 
 // ---- wait primitives ----
@@ -1718,7 +1758,7 @@ function* runStage(stage){
     else if(e.sfx!=null)    { sfx[e.sfx] && sfx[e.sfx](); }
     else if(e.flash)        screenFlash(e.flash.color, e.flash.i);
     else if(e.shake)        shake(e.shake.mag, e.shake.dur);
-    else if(e.stageClear)   { screenFlash('#ffffff',1.0); banner('STAGE CLEAR'); Audio.playMusic('none'); yield* waitT(3.0); onStageClear(); return; }
+    else if(e.stageClear)   { screenFlash('#ffffff',1.0); banner('STAGE CLEAR'); Audio.playMusic('none'); yield* waitT(3.0); advanceStage(); return; }
   }
 }
 

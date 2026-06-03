@@ -37,9 +37,31 @@ try {
   check('BGM:GEN region in sync with bgm-engine.js + bgm-tracks.js (build-game --check)', false, 'build-game --check exited non-zero');
 }
 
+// (Phase 8) save migration unit test: extract the real migrateSave() source and exercise it with a
+// stub localStorage. Guards the "returning players never lose their hi-score" property.
+(function testMigration() {
+  const m = html.match(/function migrateSave\(old\)\{[\s\S]*?return s; \}/);
+  if (!m) { check('migrateSave() source extractable', false); return; }
+  check('migrateSave() source extractable', true);
+  function makeStub(v1) { return { getItem: k => (k === 'danmaku_hiscore_v1' ? v1 : null) }; }
+  let migrateSave;
+  try {
+    migrateSave = new Function('localStorage', 'HISCORE_KEY', m[0] + '; return migrateSave;')(makeStub(null), 'danmaku_hiscore_v1');
+  } catch (e) { check('migrateSave() evaluable', false, '' + e); return; }
+  // fresh player, no prior save, legacy v1 int present -> folds into hiByDiff.normal
+  const fromV1 = new Function('localStorage', 'HISCORE_KEY', m[0] + '; return migrateSave;')(makeStub('123456'), 'danmaku_hiscore_v1')(null);
+  check('migrate(v1 int) -> hiByDiff.normal', fromV1.ver === 2 && fromV1.hiByDiff.normal === 123456);
+  // already-v2 with a higher normal is not lowered by an older v1
+  const keepHigher = new Function('localStorage', 'HISCORE_KEY', m[0] + '; return migrateSave;')(makeStub('100'), 'danmaku_hiscore_v1')({ ver: 2, hiByDiff: { easy: 0, normal: 9999, hard: 0, lunatic: 0 } });
+  check('migrate never lowers an existing hi-score', keepHigher.hiByDiff.normal === 9999);
+  // no data at all -> clean v2 shell
+  const empty = migrateSave(null);
+  check('migrate(null) -> clean v2 shell', empty.ver === 2 && empty.hiByDiff.normal === 0 && typeof empty.lastName === 'string');
+})();
+check('pool.shrink API present', /shrink\(toCap\)\{/.test(html));
+check('run spine present (startRun/enterStage/advanceStage)', /function startRun\(/.test(html) && /function enterStage\(/.test(html) && /function advanceStage\(/.test(html));
+
 // --- placeholder framing for assertions added in later phases ---
-// (Phase 7) CONTENT region: src/content build output === /*BUILD:CONTENT*/…/*END:CONTENT*/ slice.
-// (Phase 8) save migration: migrate(v1-int) preserves the hi-score under hiByDiff.normal.
 // (Phase 9) every $ref resolves; every wave/theme/spell id is defined.
 
 if (failures) { console.error('\n' + failures + ' check(s) failed.'); process.exit(1); }
