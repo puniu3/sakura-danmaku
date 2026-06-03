@@ -1816,7 +1816,7 @@ function saveHiScore(){ if(!save) save=loadSave(); const d=(run&&run.difficulty)
 function spawnItem(kind,x,y,vx,vy){ items.push({ kind, x, y, vx:vx||0, vy:(vy!=null?vy:-60), r:ITEM_R, hue:ITEM_HUE[kind]!=null?ITEM_HUE[kind]:55, magnet:false, dead:false, born:T }); }
 function dropItems(kind,count,x,y,spread){ for(let i=0;i<count;i++){ const a=(-HALFPI)+(rng()-0.5)*1.6, s=60+rng()*90; spawnItem(kind,x+(rng()-0.5)*spread,y,Math.cos(a)*s,Math.sin(a)*s); } }
 function dropItem(x,y,kind){ spawnItem(kind,x,y,rng.range(-30,30),-rng.range(40,90)); }
-function updateItems(dt){ const pAlive=(player.state==='alive'||player.state==='pendingdeath'); const magnetAll=game.fullpower||(pAlive&&player.y<=POC_LINE_Y);
+function updateItems(dt){ const pAlive=(player.state==='alive'||player.state==='pendingdeath'); const magnetAll=(pAlive&&player.y<=POC_LINE_Y);
   for(let i=items.length-1;i>=0;i--){ const it=items[i];
     if(!it.magnet){ if(magnetAll&&pAlive) it.magnet=true; }
     if(it.magnet&&pAlive){
@@ -1838,7 +1838,8 @@ function updateItems(dt){ const pAlive=(player.state==='alive'||player.state==='
   }
 }
 function pointItemValue(yAtCollect){ const top=POC_LINE_Y, bot=PF_H; let t=(yAtCollect-top)/(bot-top); t=t<0?0:(t>1?1:t); return Math.round(POINT_BASE-t*(POINT_BASE-POINT_MIN)); }
-function collectItem(it){ switch(it.kind){ case 'power': addPower(POWER_PER_ITEM); break; case 'bigpower': addPower(POWER_PER_BIG); break; case 'full': addPower(MAXPOWER); break; case 'oneup': grantExtend('item'); break; case 'bomb': player.bombs=Math.min(MAX_BOMBS,player.bombs+1); break; case 'point': { game.pointTotal++; addScore(pointItemValue(it.y)); break; } case 'star': addScore(500); break; } sfx.item&&sfx.item(it.kind); spawnParticle(it.x,it.y,0,-40,{life:0.25,kind:'pickup',hue:it.hue,r:3}); }
+function takePoint(it){ game.pointTotal++; addScore(pointItemValue(it.y)); }   // a point item: score by collect-height + bump the point counter
+function collectItem(it){ switch(it.kind){ case 'power': game.fullpower?takePoint(it):addPower(POWER_PER_ITEM); break; case 'bigpower': game.fullpower?takePoint(it):addPower(POWER_PER_BIG); break; case 'full': game.fullpower?takePoint(it):addPower(MAXPOWER); break; case 'oneup': grantExtend('item'); break; case 'bomb': player.bombs=Math.min(MAX_BOMBS,player.bombs+1); break; case 'point': takePoint(it); break; case 'star': addScore(500); break; } sfx.item&&sfx.item(it.kind); spawnParticle(it.x,it.y,0,-40,{life:0.25,kind:'pickup',hue:it.hue,r:3}); }
 function onEnemyHit(e,shot){ damageEnemy(e,shot.dmg,shot.pierceSpell?GRAZE_PIERCE:null); }
 
 // ============================ STAGE / ENEMIES =======================
