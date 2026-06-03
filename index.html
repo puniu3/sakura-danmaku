@@ -1653,6 +1653,7 @@ function startRun(diff, fromStage){
 }
 function enterStage(i){
   run.stage=i; game.boss=null; if(player) endGrazePower();
+  game.grazeCount=0; game.grazePowerThreshold=GRAZE_POWER_FIRST; game.grazePowerInterval=GRAZE_POWER_FIRST;   // each stage restarts the graze→power-up milestone ladder, so the grown threshold doesn't starve later stages of power-ups (no-op on the fresh-run first entry; startRun already set these)
   layoutOptions(); items.length=0; enemyBullets.clear(); playerShots.clear(); particles.clear(); enemies.length=0;
   const st=STAGES[i], sm=(st&&st.music&&st.music.stage)||'stage';
   startStage(); setState(STATE.PLAYING); Audio.playMusic(sm);
@@ -2117,7 +2118,7 @@ function* runStage(stage){
   if(typeof location!=='undefined' && !/[?&]golden=1/.test(location.search)){
     const sm=location.search.match(/[?&]stage=(\d+)/);
     if(sm){ const n=(parseInt(sm[1],10)||1)-1, dm=location.search.match(/[?&]diff=(easy|normal|hard|lunatic)/), d=dm?dm[1]:'normal';
-      if(n>=0 && n<STAGES.length) startRun(d,n); }
+      if(n>=0 && n<STAGES.length){ startRun(d,n); addPower(MAXPOWER); } }   // debug mid-campaign start → begin at full power (skip the natural stage-1 power ramp you'd otherwise have built up)
   }
   // ?golden=1 freezes the rAF loop so the headless structural-golden harness owns the sim clock
   // (no background petal-wrap rng consumption / state churn). Normal & ?dev=1 boots are unaffected.
