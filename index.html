@@ -1584,7 +1584,7 @@ const Director=(function(){
   return { start, fork, kill, clear, update, beginGroup, endGroup, get count(){ return coros.length; } };
 })();
 function tickStage(dt){ Director.update(dt); }
-function startStage(){ Director.start(stageScript); }
+function startStage(){ Director.start(()=>runStage(STAGES[0])); }   // Phase 8: STAGES[run.stage]
 function abortStage(){ if(typeof Director!=='undefined') Director.clear(); }
 
 // ---- wait primitives ----
@@ -1672,30 +1672,54 @@ const FINALBOSS_SPEC = { name:'Flower King', design:'mandala', hue:300, enterFro
       { kind:'spell', name:'"Eternal Spring — Last Word"', survival:FB_SURVIVAL_TIME, bonus:5000000, drops:[], body:'raw', raw:function*(b){ let a=0,wave=0; Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:10,speed:60,gravity:42.5,hue:(330+T*30)%360,style:'petal'}); yield* waitT(0.3); } },b); Director.fork(function*(){ while(true){ burst(b,{count:40,speed:130,hue:(T*60)%360,style:'orb'}); yield* waitT(2.2); } },b); while(true){ spiral(b,{angle:a,arms:6,speed:140+wave*4,hue:(T*70)%360,style:'small'}); spiral(b,{angle:-a*1.4,arms:6,speed:140+wave*4,hue:(120+T*70)%360,style:'small'}); a+=0.21; wave+=0.05; yield* waitT(0.035); } } }
     ] };
 
-// ---- THE STAGE TIMELINE ----
-function* stageScript(){
-  banner('Stage 1'); yield* waitT(INTRO_FADE);
-  yield* spawnWave(waveSideSweep({n:6,side:'left',y:90,spacing:0.16})); yield* waitT(2.4);
-  yield* spawnWave(waveSideSweep({n:6,side:'right',y:150,spacing:0.16})); yield* waitClear({minHp:0}); yield* waitT(WAVE_GAP);
-  yield* spawnWave(waveVFormation({half:4,apexX:PF_W/2,apexY:80})); yield* waitT(3.2);
-  yield* parallel( WAVES.stream({n:8,x:PF_W*0.33,amp:50,spacing:0.5}), delayed(0.25, WAVES.stream({n:8,x:PF_W*0.66,amp:50,spacing:0.5})) ); yield* waitClear(); yield* waitT(WAVE_GAP);
-  yield* spawnWave(waveTurrets({xs:[PF_W*0.28,PF_W*0.72],y:130,hold:5.0})); yield* waitClear({minHp:0}); yield* waitT(WAVE_GAP);
-  yield* spawnWave(waveSideSweep({n:8,side:'left',y:70,spacing:0.10})); yield* spawnWave(waveSideSweep({n:8,side:'right',y:110,spacing:0.10})); yield* waitClear(); yield* waitT(1.5);
+// ---- THE STAGE TIMELINE (declarative data + interpreter) ----
+// Boss registry: id -> spec. (Phase 8/9: resolveBoss(id, rank, diff) will apply difficulty here.)
+const BOSSES = { ariel:MIDBOSS_SPEC, flowerKing:FINALBOSS_SPEC };
 
-  // ===== MIDBOSS =====
-  banner('WARNING'); sfx.warn&&sfx.warn(); Audio.playMusic('midboss');
-  yield* runBoss(MIDBOSS_SPEC);
+// A stage is ONE data object; runStage() compiles its timeline into the existing Director
+// coroutines. STAGES[0] is a 1:1 transcription of the former imperative stageScript — same waves,
+// same waits, same waitClears, same boss-intro effects, same stage-clear sequence (the structural
+// golden verifies all bullet/timing behaviour through to the midboss). New stages append an entry.
+const STAGES = [
+  { id:1, title:'Stage 1', theme:'spring',
+    music:{ stage:'stage', midboss:'midboss', boss:'boss' },
+    timeline:[
+      {banner:'Stage 1'}, {wait:INTRO_FADE},
+      {wave:'sideSweep', opts:{n:6,side:'left',y:90,spacing:0.16}}, {wait:2.4},
+      {wave:'sideSweep', opts:{n:6,side:'right',y:150,spacing:0.16}}, {waitClear:true}, {wait:WAVE_GAP},
+      {wave:'vFormation', opts:{half:4,apexX:PF_W/2,apexY:80}}, {wait:3.2},
+      {parallel:[ {wave:'stream', opts:{n:8,x:PF_W*0.33,amp:50,spacing:0.5}},
+                  {wave:'stream', opts:{n:8,x:PF_W*0.66,amp:50,spacing:0.5}, delay:0.25} ]}, {waitClear:true}, {wait:WAVE_GAP},
+      {wave:'turrets', opts:{xs:[PF_W*0.28,PF_W*0.72],y:130,hold:5.0}}, {waitClear:true}, {wait:WAVE_GAP},
+      {wave:'sideSweep', opts:{n:8,side:'left',y:70,spacing:0.10}},
+      {wave:'sideSweep', opts:{n:8,side:'right',y:110,spacing:0.10}}, {waitClear:true}, {wait:1.5},
+      // midboss
+      {banner:'WARNING'}, {sfx:'warn'}, {music:'midboss'},
+      {boss:'ariel'},
+      {music:'stage'}, {wait:CALM_BEFORE_BOSS},
+      // final boss
+      {banner:'WARNING'}, {sfx:'warn'}, {flash:{color:'#ff3366',i:0.4}}, {shake:{mag:4,dur:0.6}}, {music:'boss'}, {wait:2.0},
+      {boss:'flowerKing'},
+      {stageClear:true},
+    ] },
+];
 
-  // ===== CALM (back to stage music after the midboss falls) =====
-  Audio.playMusic('stage');
-  yield* waitT(CALM_BEFORE_BOSS);
-
-  // ===== FINAL BOSS =====
-  banner('WARNING'); sfx.warn&&sfx.warn(); screenFlash('#ff3366',0.4); shake(4,0.6); Audio.playMusic('boss'); yield* waitT(2.0);
-  yield* runBoss(FINALBOSS_SPEC);
-
-  // ===== STAGE CLEAR =====
-  screenFlash('#ffffff',1.0); banner('STAGE CLEAR'); Audio.playMusic('none'); yield* waitT(3.0); onStageClear();
+function* runStage(stage){
+  if(stage.theme) setTheme(stage.theme);
+  const M=stage.music||{}, music=name=>(M[name]!=null?M[name]:name);
+  for(const e of stage.timeline){
+    if(e.wave!=null)        yield* spawnWave(WAVES[e.wave](e.opts||{}));
+    else if(e.parallel)     yield* parallel(...e.parallel.map(p=> p.delay ? delayed(p.delay, WAVES[p.wave](p.opts||{})) : WAVES[p.wave](p.opts||{}) ));
+    else if(e.boss!=null)   yield* runBoss(BOSSES[e.boss]);
+    else if(e.wait!=null)   yield* waitT(e.wait);
+    else if(e.waitClear)    yield* waitClear({minHp:e.minHp||0});
+    else if(e.music!=null)  Audio.playMusic(music(e.music));
+    else if(e.banner!=null) banner(e.banner);
+    else if(e.sfx!=null)    { sfx[e.sfx] && sfx[e.sfx](); }
+    else if(e.flash)        screenFlash(e.flash.color, e.flash.i);
+    else if(e.shake)        shake(e.shake.mag, e.shake.dur);
+    else if(e.stageClear)   { screenFlash('#ffffff',1.0); banner('STAGE CLEAR'); Audio.playMusic('none'); yield* waitT(3.0); onStageClear(); return; }
+  }
 }
 
 // ============================ DEV/TEST HOOK ==========================
