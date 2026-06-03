@@ -275,7 +275,35 @@ const BOSS = {
   arrangement: ['intro','A1','A2','B','bridge','climax','A3','outro'],
 };
 
-const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS };
+// ================================================================ GAME OVER
+// "Falling Petals" — A natural minor, 80 BPM. A short, conclusive lament played
+// on the GAME OVER screen: a slow stepwise octave descent (A5→A4) over a soft
+// i–VI–iv–V (Am–F–Dm–E7) so the single 4-bar loop (~12s, matching the screen's
+// auto-return) resolves on its seam. Drumless and dim; the saw layers and drive
+// grooves of the gameplay tracks are deliberately stripped back to bare longing.
+const GO_LAMENT = [ // stepwise descent, one note per half-bar, all natural-minor
+  [0,81],[8,79],     // Am: A5 → G5
+  [16,77],[24,76],   // F : F5 → E5
+  [32,74],[40,72],   // Dm: D5 → C5
+  [48,71],[56,69],   // E7: B4 → A4  (resolves down; loops back up to A5)
+];
+const GAMEOVER = {
+  title: 'Falling Petals', keyName: 'A minor', bpm: 80, gain: 0.42,
+  voices: { lead: { layers: [
+      { type:'triangle', octave:0, detune:0, gain:1.0 },
+      { type:'triangle', octave:1, detune:5, gain:0.16 } ],   // soft octave shimmer, no saw bite
+      atk:0.02, dec:0.12, sus:0.6, rel:0.38, maxGate:6 },
+    harm: { layers:[{ type:'triangle', octave:0, detune:-4, gain:1.0 }], atk:0.02, dec:0.1, sus:0.5, rel:0.34, filter:'lowpass', filterFreq:1900, maxGate:6 },
+    bass: { layers:[{ type:'sine', octave:0, detune:0, gain:1.0 }], atk:0.012, dec:0.09, sus:0.7, rel:0.22, filter:'lowpass', filterFreq:560, maxGate:8 },
+    pad: { octave:0, voices:3, detune:8, type:'sawtooth', atk:0.2, dec:0.22, sus:0.7, rel:0.8, filter:'lowpass', filterFreq:1150 } },
+  gains: { lead:0.13, harm:0.075, bass:0.15, sub:0.12, pad:0.062 },
+  sections: {
+    A: makeSection({ bars:4, scale:'Amin', chords:['Am','F','Dm','E7'], lead:GO_LAMENT, harm:true, bassStyle:'half', arpRate:0, groove:'none', sub:true }),
+  },
+  arrangement: ['A'],
+};
+
+const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER };
 
 // ---------------------------------------------------------------- validation (Node only)
 function validateTracks() {
