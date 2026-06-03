@@ -1913,7 +1913,9 @@ function* fireRings(e,opts){ const period=opts.period||1.4; while(true){ ring(e,
 function* fireSpiralTurret(e,opts){ const period=opts.period||0.06, da=opts.da||0.31; let a=opts.a0||0; while(true){ spiral(e,{angle:a,arms:opts.arms||2,speed:opts.speed||130,hue:(e.hue+(T*40))%360,style:opts.style||'small'}); a+=da; yield* waitT(period); } }
 
 // ---- wave generators ----
-function waveSideSweep(opts){ return (function*(){ const n=opts.n||6, side=opts.side||'left', y=opts.y||90, hue=opts.hue!=null?opts.hue:205; const fromX=side==='left'?-SPAWN_MARGIN:PF_W+SPAWN_MARGIN, toX=side==='left'?PF_W+SPAWN_MARGIN:-SPAWN_MARGIN; for(let i=0;i<n;i++){ spawnEnemy({ x:fromX, y, hp:HP_POP_LIGHT, r:R_POP_LIGHT, hue:hue, score:800, drops:i%3===0?['power']:['point'], coro:function*(e){ yield* moveTo(e,side==='left'?40:PF_W-40,y,0.7,EASE.out); const fc=Director.fork(()=>fireAimedBursts(e,{period:1.0,n:1,speed:150,hue:hue,style:'mid'}),e); yield* moveTo(e,toX,y+60,3.2,EASE.linear); Director.kill(fc); despawnEnemy(e); } }); yield* waitT(opts.spacing||0.18); } })(); }
+// opts.yStep (px) staggers each successive enemy's entry depth → a diagonal ECHELON line instead of a flat
+// 横一列 row (sign chooses up/down slant). yStep omitted ⇒ flat row, unchanged (Stage 1 never passes it).
+function waveSideSweep(opts){ return (function*(){ const n=opts.n||6, side=opts.side||'left', y=opts.y||90, hue=opts.hue!=null?opts.hue:205, yStep=opts.yStep||0; const fromX=side==='left'?-SPAWN_MARGIN:PF_W+SPAWN_MARGIN, toX=side==='left'?PF_W+SPAWN_MARGIN:-SPAWN_MARGIN; for(let i=0;i<n;i++){ const ey=y+i*yStep; spawnEnemy({ x:fromX, y:ey, hp:HP_POP_LIGHT, r:R_POP_LIGHT, hue:hue, score:800, drops:i%3===0?['power']:['point'], coro:function*(e){ yield* moveTo(e,side==='left'?40:PF_W-40,ey,0.7,EASE.out); const fc=Director.fork(()=>fireAimedBursts(e,{period:1.0,n:1,speed:150,hue:hue,style:'mid'}),e); yield* moveTo(e,toX,ey+60,3.2,EASE.linear); Director.kill(fc); despawnEnemy(e); } }); yield* waitT(opts.spacing||0.18); } })(); }
 function waveVFormation(opts){ return (function*(){ const half=opts.half||4, apexX=opts.apexX||PF_W/2, apexY=opts.apexY||80, dx=opts.dx||30, dy=opts.dy||26, hue=opts.hue!=null?opts.hue:350; for(let s=-1;s<=1;s+=2){ for(let i=(s<0?half:0); s<0?i>=1:i<=half; i+=(s<0?-1:1)){ const tx=apexX+s*i*dx, ty=apexY+i*dy; spawnEnemy({ x:apexX, y:-SPAWN_MARGIN, hp:HP_POP_MED, r:R_POP_MED, hue:hue, score:1200, drops:['power','point'], coro:function*(e){ yield* moveTo(e,tx,ty,0.9,EASE.out); yield* holdFire(e,function*(en){ yield* fireRings(en,{period:1.1,count:12,speed:110,hue:hue,aim:true}); },2.4); yield* exitOff(e,Math.PI*0.5+(s*0.25)); } }); yield* waitT(0.08); } } })(); }
 function waveStream(opts){ return (function*(){ const n=opts.n||10, x=opts.x||PF_W*0.5, hue=opts.hue!=null?opts.hue:130; for(let i=0;i<n;i++){ const cx=x+Math.sin(i*0.6)*(opts.amp||60); spawnEnemy({ x:cx, y:-SPAWN_MARGIN, hp:HP_POP_MED, r:R_POP_MED, hue:hue, score:900, drops:i%2?['point']:['power'], coro:function*(e){ const fc=Director.fork(()=>fireAimedBursts(e,{period:1.3,n:3,spread:0.25,speed:140,hue:hue}),e); yield* moveTo(e,cx+rng.range(-30,30),PF_H+SPAWN_MARGIN,4.0,EASE.linear); Director.kill(fc); despawnEnemy(e); } }); yield* waitT(opts.spacing||0.45); } })(); }
 function waveTurrets(opts){ return (function*(){ const xs=opts.xs||[PF_W*0.28,PF_W*0.72], y=opts.y||130, hue=opts.hue!=null?opts.hue:280; for(let i=0;i<xs.length;i++){ spawnEnemy({ x:xs[i], y:-SPAWN_MARGIN, hp:HP_POP_HEAVY, r:R_POP_HEAVY, hue:hue, score:2500, drops:['power','power','point'], cancelOnDeath:0.4, coro:function*(e){ yield* moveTo(e,xs[i],y,1.0,EASE.out); yield* holdFire(e,function*(en){ yield* fireSpiralTurret(en,{da:i?-0.33:0.33,period:0.07,arms:2,speed:125,a0:i*Math.PI}); },opts.hold||5.0); yield* exitOff(e,i?Math.PI*0.85:Math.PI*0.15,140); } }); } yield; })(); }
@@ -1924,7 +1926,12 @@ function waveTurrets(opts){ return (function*(){ const xs=opts.xs||[PF_W*0.28,PF
 // opts.band (>0) scatters each enemy's spawn x across a band centred on opts.x via a low-discrepancy
 // sequence (golden-ratio) → a SPREAD formation emerging from different positions, not a tight column;
 // opts.bandPhase offsets that sequence so two overlapping waves interleave. band omitted ⇒ unchanged.
-function waveDrifters(opts){ return (function*(){ const n=opts.n||8, x=opts.x!=null?opts.x:PF_W*0.5, amp=opts.amp||50, hue=opts.hue!=null?opts.hue:212, band=opts.band||0, bphase=opts.bandPhase||0; for(let i=0;i<n;i++){ const bx=band?(x+((((i+bphase)*0.6180339887)%1)-0.5)*band):x; spawnEnemy({ x:bx, y:-SPAWN_MARGIN, hp:HP_POP_MED, r:R_POP_MED, hue:hue, score:1000, drops:i%2?['point']:['power'], coro:function*(e){ const baseX=e.x, t0=T; const fc=Director.fork(()=>fireAimedBursts(e,{period:1.5,n:1,speed:125,hue:hue,style:'mid'}),e); while(e.y<PF_H+SPAWN_MARGIN){ e.y+=52*STEP; e.x=baseX+Math.sin((T-t0)*1.5+i*0.7)*amp; e._steered=true; yield; } Director.kill(fc); despawnEnemy(e); } }); yield* waitT(opts.spacing||0.5); } })(); }
+// opts.speed sets the base descent rate (default 52 px/s) — give overlapping clusters DIFFERENT speeds so
+// they settle into distinct depth layers instead of piling into one horizontal band; opts.speedJit (0..1)
+// shears the cluster, biasing speed UP across the shared low-discrepancy coord u (faster ones pull ahead →
+// a vertical smear, never slower so nothing lingers); opts.drift adds px/s of lateral travel → a diagonal
+// path that crosses the lane. All three default to the original straight-down-at-52 column (Stage-1-safe).
+function waveDrifters(opts){ return (function*(){ const n=opts.n||8, x=opts.x!=null?opts.x:PF_W*0.5, amp=opts.amp||50, hue=opts.hue!=null?opts.hue:212, band=opts.band||0, bphase=opts.bandPhase||0, baseSpd=opts.speed||52, spdJit=opts.speedJit||0, drift=opts.drift||0; for(let i=0;i<n;i++){ const u=(((i+bphase)*0.6180339887)%1); const bx=band?(x+(u-0.5)*band):x; const spd=baseSpd*(1+spdJit*u); spawnEnemy({ x:bx, y:-SPAWN_MARGIN, hp:HP_POP_MED, r:R_POP_MED, hue:hue, score:1000, drops:i%2?['point']:['power'], coro:function*(e){ const baseX=e.x, t0=T; const fc=Director.fork(()=>fireAimedBursts(e,{period:1.5,n:1,speed:125,hue:hue,style:'mid'}),e); while(e.y<PF_H+SPAWN_MARGIN){ e.y+=spd*STEP; e.x=baseX+drift*(T-t0)+Math.sin((T-t0)*1.5+i*0.7)*amp; e._steered=true; yield; } Director.kill(fc); despawnEnemy(e); } }); yield* waitT(opts.spacing||0.5); } })(); }
 // Stage 2 heavy ghost "wraith": drifts to an anchor and HOLDS, firing a ghost pattern — a delayed-turn
 // soul-orb ring (drifts out, then homes) layered with aimed lobs — then withdraws. Tanky + cancelOnDeath.
 // This is the road's danmaku identity and the building block of its 山場 (spawn 6–8 to overlap their rings).
@@ -2057,10 +2064,14 @@ const STAGES = [
     music:{ stage:'stage2', boss:'boss2' },     // the midboss appearance stays on the 道中 track — only the FINAL boss switches to boss2
     timeline:[
       {banner:'Stage 2'}, {wait:INTRO_FADE},
-      // opening: a SPREAD drifter formation — two hue-groups scatter in from staggered positions across the
-      // whole lane (band) rather than two tight columns, so the (doubled) count reads loose, not bunched.
-      {parallel:[ {wave:'drifters', opts:{n:20,amp:36,spacing:0.38,band:PF_W*0.84,bandPhase:0.0,hue:200}},
-                  {wave:'drifters', opts:{n:20,amp:36,spacing:0.38,band:PF_W*0.84,bandPhase:0.5,hue:280}, delay:0.7} ]}, {waitClear:true}, {wait:WAVE_GAP},
+      // opening: a 2D LAYERED descent, not a horizontal curtain. Two SHEARED cascades hold their separate
+      // lanes — each speedJit-sheared so it smears across the whole height instead of bunching into one band
+      // — while a steep diagonal ECHELON sweep slashes down across them and a slow centre trail fills the
+      // gap behind, so enemies occupy the full height at once and can't be mown as one row. Total 40 as before.
+      {parallel:[ {wave:'drifters',  opts:{n:12,x:PF_W*0.26,band:PF_W*0.34,amp:24,spacing:0.34,speed:46,speedJit:0.8,hue:200}},
+                  {wave:'drifters',  opts:{n:12,x:PF_W*0.74,band:PF_W*0.34,amp:24,spacing:0.34,speed:54,speedJit:0.8,hue:280}, delay:1.0},
+                  {wave:'sideSweep', opts:{n:9,side:'right',y:70,yStep:16,spacing:0.18,hue:212}, delay:2.6},
+                  {wave:'drifters',  opts:{n:7,x:PF_W*0.50,band:PF_W*0.22,amp:28,spacing:0.5,speed:50,speedJit:0.9,hue:240}, delay:4.4} ]}, {waitClear:true}, {wait:WAVE_GAP},
       // a wraith SEXTET introduces the heavy ghost enemy (homing soul-orb rings — the road's signature). Counts
       // DOUBLED for power=max entry (the stage was tuned at power=1; real play melts enemies ~2× faster).
       {wave:'wraith', opts:{xs:[PF_W*0.40,PF_W*0.60,PF_W*0.26,PF_W*0.74,PF_W*0.12,PF_W*0.88],y:118,hold:4.5,spacing:0.5,hue:208}}, {waitClear:true}, {wait:1.0},
@@ -2068,9 +2079,14 @@ const STAGES = [
       {banner:'WARNING'}, {sfx:'warn'},
       {boss:'tasokareIntro'},
       {wait:CALM_BEFORE_BOSS},
-      // the road builds: a wide SPREAD drifter formation (band-scattered, not a centre column) + a side sweep
-      {parallel:[ {wave:'drifters', opts:{n:28,amp:46,spacing:0.30,band:PF_W*0.86,hue:265}},
-                  {wave:'sideSweep', opts:{n:22,side:'right',y:80,spacing:0.13,hue:210}, delay:1.2} ]}, {waitClear:true}, {wait:WAVE_GAP},
+      // the road builds: an ALTERNATING opposite-edge assault, now layered in depth. Two SHEARED cascades
+      // hold separate lanes and smear across the height, while two ECHELON sweeps slash in from opposite
+      // edges with opposing slants (right-sweep angles DOWN, left angles UP → a crossing X over time)
+      // instead of two flat 横一列 rows. Same total count (50) as before.
+      {parallel:[ {wave:'drifters',  opts:{n:14,x:PF_W*0.27,band:PF_W*0.34,amp:24,spacing:0.30,speed:46,speedJit:0.8,hue:265}},
+                  {wave:'sideSweep', opts:{n:11,side:'right',y:54, yStep:14,spacing:0.16,hue:210}, delay:1.2},
+                  {wave:'drifters',  opts:{n:14,x:PF_W*0.73,band:PF_W*0.34,amp:24,spacing:0.30,speed:54,speedJit:0.8,hue:230}, delay:2.6},
+                  {wave:'sideSweep', opts:{n:11,side:'left', y:150,yStep:-13,spacing:0.16,hue:282}, delay:4.0} ]}, {waitClear:true}, {wait:WAVE_GAP},
       // ── 山場 ── a wraith OCTET holds centre + flanks; the overlapping homing-ring danmaku is the road's peak
       {banner:'Twilight Throng'},
       {wave:'wraith', opts:{xs:[PF_W*0.44,PF_W*0.56,PF_W*0.33,PF_W*0.67,PF_W*0.21,PF_W*0.79,PF_W*0.10,PF_W*0.90],y:116,hold:7.0,spacing:0.45,hue:214}}, {waitClear:true}, {wait:1.6},
