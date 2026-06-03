@@ -1225,6 +1225,11 @@ function RenderFrame(now,alpha){ const dt=_lastNow?Math.min(0.05,(now-_lastNow)/
 }
 const Render={ timeScale:1, init:RenderInit, resize:RenderResize, frame:RenderFrame, flash:reqFlash, shake:reqShake, cancelWave:reqCancelWave, slowmo:reqSlowmo, popText:reqPop, banner:triggerBanner, cutin:triggerCutin };
 
+// ============================ THEMES =================================
+// Per-stage palette/scenery data + setTheme(), and the BOSS_DESIGNS registry.
+// Placeholder — populated in Phase 2 (themes) and Phase 3 (boss designs).
+// (Currently RENDER above holds the single hardcoded PALETTE/SCN sakura theme.)
+
 // ============================ PATTERNS ===============================
 const HUE_SPAN_RING=40, HUE_SPAN_LAYER=60, HUE_SPIN_PERTICK=7, MAX_BOUNCES_DEFAULT=2;
 function angleToPlayer(x,y){ return Math.atan2(player.y-y,player.x-x); }
@@ -1260,6 +1265,21 @@ function fan(src,o){ o=o||{}; if(o.aim) pat.aimedSpread(src,{count:o.n||5,spread
 function wall(src,o){ o=o||{}; pat.aimedSpread(src,{count:o.n||9,spread:o.spread||1.0,speed:o.speed||180,hue:o.hue,style:mapStyle(o.style)||'arrow',r:o.r}); }
 function burst(src,o){ o=o||{}; pat.ring(src,{count:o.count||30,speed:o.speed||130,baseAngle:T*0.7,hue:o.hue,hueSpread:60,style:mapStyle(o.style)||'orb',r:o.r}); }
 function rain(src,o){ o=o||{}; pat.acceleratingRain({x:PF_W*0.5,y:-8},{count:o.count||10,xSpread:o.across||PF_W*0.95,speed0:(o.speed||90)*0.45,gravity:(o.gravity!=null?o.gravity:170),hue:o.hue,style:mapStyle(o.style)||'rice',jitterX:26,r:o.r}); }
+
+// ========================= SPELL REGISTRY ===========================
+// makeSpell / Conductor / every / compileSpell + SPELLS motif registry.
+// "registry over generators": parameterisable motifs are promoted here; raw
+// generators remain mainstream. Placeholder — populated in Phase 5.
+
+// =========================== CONTENT DATA ===========================
+// BALANCE / WAVES / SPELLS refs / BOSSES / STAGES / CAMPAIGN — declarative data.
+// build-game.js owns (and regenerates) the region between the anchors below.
+/*BUILD:CONTENT*/
+/*END:CONTENT*/
+
+// ============================== INTERP ==============================
+// runStage(stage) / resolveBoss() / resolveWave() / advanceStage() — compile the
+// declarative CONTENT into the existing Director coroutines. Placeholder — Phase 7.
 
 // ============================ SYSTEMS ================================
 const rawKeys=Object.create(null), edgeKeys=Object.create(null), stepEdge=Object.create(null);
