@@ -1235,7 +1235,6 @@ function drawHUD(){ ctx.save(); ctx.translate(PF_W,0); ctx.fillStyle=PALETTE.hud
     // graze-power gauge: when active = remaining-time fraction (power hue); else = progress toward next milestone
     const gx=lx, gw=HUD_W-44, gy=y+8, gh=5, prevTh=game.grazePowerThreshold-game.grazePowerInterval, prog=active?clamp(player.grazePowerT/GRAZE_POWER_DURATION,0,1):clamp((game.grazeCount-prevTh)/Math.max(1,game.grazePowerInterval),0,1);
     ctx.fillStyle='rgba(120,255,140,0.14)'; roundRect(gx,gy,gw,gh,2.5); ctx.fill(); ctx.fillStyle=active?'hsl('+GRAZE_HUE+',100%,66%)':'rgba(185,255,106,0.85)'; roundRect(gx,gy,gw*prog,gh,2.5); ctx.fill(); } y+=30;
-  label('Point'); ctx.fillStyle=PALETTE.uiText; ctx.font='bold 13px "Trebuchet MS",sans-serif'; ctx.textAlign='right'; ctx.fillText(pad(game.pointValue||0,7),HUD_W-22,y+2); ctx.textAlign='left';
   ctx.fillStyle=PALETTE.uiDim; ctx.font='9px monospace'; ctx.fillText('FPS '+(_fps|0),lx,PF_H-30); ctx.fillStyle='rgba(157,131,192,0.7)'; ctx.font='8px monospace'; ctx.fillText('Z fire  X bomb  Shift focus',lx,PF_H-18); ctx.fillText('M mute   P pause',lx,PF_H-9); ctx.restore();
   const b=game.boss; if(b&&!b.dead&&b.hpMax) drawBossHUD(b);
 }
@@ -1483,7 +1482,7 @@ function attachTouch(el){
 let player=null, game=null, run=null;
 // difficulty knobs now live in BALANCE.difficulties (CONTENT DATA); resolveWave/resolveBoss apply them.
 function makePlayer(){ return { x:PLAYER_START.x, y:PLAYER_START.y, r:PLAYER_R, focus:false, state:'alive', dead:false, invuln:0, blink:false, fireCd:0, power:START_POWER, bombs:START_BOMBS, lives:START_LIVES, itemR:14, bombActive:0, bossDot:0, pendingDeath:0, respawnT:0, options:[], mvx:0, mvy:0, grazePowerT:0 }; }
-function makeGame(){ return { state:STATE.TITLE, score:0, hi:0, grazeCount:0, pointValue:POINT_MIN, pointTotal:0, extendsTaken:0, stateT:0, fullpower:false, paused:false, boss:null, spellIntensity:0, powerMax:MAXPOWER, grazePowerThreshold:GRAZE_POWER_FIRST, grazePowerInterval:GRAZE_POWER_FIRST }; }
+function makeGame(){ return { state:STATE.TITLE, score:0, hi:0, grazeCount:0, pointTotal:0, extendsTaken:0, stateT:0, fullpower:false, paused:false, boss:null, spellIntensity:0, powerMax:MAXPOWER, grazePowerThreshold:GRAZE_POWER_FIRST, grazePowerInterval:GRAZE_POWER_FIRST }; }
 function initGameSystems(){ game=makeGame(); player=makePlayer(); loadHiScore(); setState(STATE.TITLE); }
 
 function updateGameSystems(dt){ game.stateT+=dt;
@@ -1516,7 +1515,7 @@ function setState(s){ const prev=game.state; game.state=s; game.stateT=0;
 function startRun(diff, fromStage){
   run = { difficulty:(diff||'normal'), stage:(fromStage||0), continuesUsed:0, practice:false };
   const D = BALANCE.difficulties[run.difficulty] || BALANCE.difficulties.normal;
-  _cutin.active=false; game.score=0; game.grazeCount=0; game.pointTotal=0; game.extendsTaken=0; game.fullpower=false; game.pointValue=POINT_MIN; game.boss=null; game.spellIntensity=0; game.grazePowerThreshold=GRAZE_POWER_FIRST; game.grazePowerInterval=GRAZE_POWER_FIRST;
+  _cutin.active=false; game.score=0; game.grazeCount=0; game.pointTotal=0; game.extendsTaken=0; game.fullpower=false; game.boss=null; game.spellIntensity=0; game.grazePowerThreshold=GRAZE_POWER_FIRST; game.grazePowerInterval=GRAZE_POWER_FIRST;
   player=makePlayer(); player.lives=D.lives; player.bombs=D.bombs;
   enterStage(run.stage);
 }
@@ -1666,7 +1665,7 @@ function updateItems(dt){ const pAlive=(player.state==='alive'||player.state==='
   }
 }
 function pointItemValue(yAtCollect){ const top=POC_LINE_Y, bot=PF_H; let t=(yAtCollect-top)/(bot-top); t=t<0?0:(t>1?1:t); return Math.round(POINT_BASE-t*(POINT_BASE-POINT_MIN)); }
-function collectItem(it){ switch(it.kind){ case 'power': addPower(POWER_PER_ITEM); break; case 'bigpower': addPower(POWER_PER_BIG); break; case 'full': addPower(MAXPOWER); break; case 'oneup': grantExtend('item'); break; case 'bomb': player.bombs=Math.min(MAX_BOMBS,player.bombs+1); break; case 'point': { const v=pointItemValue(it.y); game.pointValue=v; game.pointTotal++; addScore(v); break; } case 'star': addScore(500); break; } sfx.item&&sfx.item(it.kind); spawnParticle(it.x,it.y,0,-40,{life:0.25,kind:'pickup',hue:it.hue,r:3}); }
+function collectItem(it){ switch(it.kind){ case 'power': addPower(POWER_PER_ITEM); break; case 'bigpower': addPower(POWER_PER_BIG); break; case 'full': addPower(MAXPOWER); break; case 'oneup': grantExtend('item'); break; case 'bomb': player.bombs=Math.min(MAX_BOMBS,player.bombs+1); break; case 'point': { game.pointTotal++; addScore(pointItemValue(it.y)); break; } case 'star': addScore(500); break; } sfx.item&&sfx.item(it.kind); spawnParticle(it.x,it.y,0,-40,{life:0.25,kind:'pickup',hue:it.hue,r:3}); }
 function onEnemyHit(e,shot){ damageEnemy(e,shot.dmg,shot.pierceSpell?GRAZE_PIERCE:null); }
 
 // ============================ STAGE / ENEMIES =======================
