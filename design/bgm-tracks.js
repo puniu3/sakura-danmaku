@@ -278,14 +278,17 @@ const BOSS = {
 // ================================================================ GAME OVER
 // "Falling Petals" — A natural minor, 80 BPM. A short, conclusive lament played
 // on the GAME OVER screen: a slow stepwise octave descent (A5→A4) over a soft
-// i–VI–iv–V (Am–F–Dm–E7) so the single 4-bar loop (~12s, matching the screen's
-// auto-return) resolves on its seam. Drumless and dim; the saw layers and drive
-// grooves of the gameplay tracks are deliberately stripped back to bare longing.
+// i–VI–iv–V (Am–F–Dm–E7). The descent resolves onto A4 at the final half-bar
+// (~10.5s of content); the screen consumes this as a ONE-SHOT — it fades the tail
+// to silence and auto-returns at ~11.6s, before the 4-bar loop seam (12.0s) would
+// re-attack A5, so the seamless-loop scaffolding (E7→Am) is never actually heard.
+// Drumless and dim; the saw layers and drive grooves of the gameplay tracks are
+// deliberately stripped back to bare longing.
 const GO_LAMENT = [ // stepwise descent, one note per half-bar, all natural-minor
   [0,81],[8,79],     // Am: A5 → G5
   [16,77],[24,76],   // F : F5 → E5
   [32,74],[40,72],   // Dm: D5 → C5
-  [48,71],[56,69],   // E7: B4 → A4  (resolves down; loops back up to A5)
+  [48,71],[56,69],   // E7: B4 → A4  (final resolution; the screen fades out here)
 ];
 const GAMEOVER = {
   title: 'Falling Petals', keyName: 'A minor', bpm: 80, gain: 0.42,
