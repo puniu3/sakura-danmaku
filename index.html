@@ -1605,6 +1605,22 @@ function* runPhase(boss,ph,pi){
 }
 function* bossDefeat(boss,spec){ sfx.bomb&&sfx.bomb(); boss.invuln=true; slowmo(SLOWMO_DEFEAT,SLOWMO_DEFEAT_DUR); shake(10,1.4); for(let i=0;i<6;i++){ cancelBullets({x:boss.x,y:boss.y,radius:60+i*60,frac:1.0,toItems:true}); spawnDeathPuff(boss.x+rng.range(-30,30),boss.y+rng.range(-20,20),(boss.hue+i*40)%360); yield* waitT(0.12); } screenFlash('#ffffff',0.9); for(const d of (spec.drops||[])) dropItem(boss.x+rng.range(-40,40),boss.y+rng.range(-20,20),d); hud.clearBoss(); boss.dead=true; yield* waitT(1.2); }
 
+// ---- boss descriptors (hoisted from stageScript; read-only data, shared instance) ----
+const MIDBOSS_SPEC = { name:'Ariel', design:'wisp', hue:140, enterFrom:{x:PF_W/2,y:-60}, enterTo:{x:PF_W/2,y:150}, score:80000, drops:['bigpower','point','point','point','point','power'],
+    phases:[
+      { kind:'nonspell', hp:MIDBOSS_HP_NONSPELL, emitter:function*(b){ Director.fork(function*(){ while(true){ fan(b,{n:7,spread:0.7,speed:150,aim:true,hue:150,style:'mid'}); yield* waitT(0.85); } },b); while(true){ ring(b,{count:20,speed:95,hue:110,style:'mid'}); yield* waitT(1.5); } }, onEnter:function(b){ Director.fork(function*(){ while(true){ yield* moveTo(b,PF_W*0.35,150,1.6,EASE.inOut); yield* moveTo(b,PF_W*0.65,150,1.6,EASE.inOut); } },b); } },
+      { kind:'spell', name:'Verdant Sign "Petal Whirlpool"', hp:MIDBOSS_HP_SPELL, bonus:250000, drops:['point','point','point','point','power'], emitter:function*(b){ let a=0; Director.fork(function*(){ while(true){ wall(b,{n:9,speed:175,hue:320,style:'dart'}); yield* waitT(2.0); } },b); while(true){ spiral(b,{angle:a,arms:3,speed:120,hue:(140+T*30)%360,style:'small'}); spiral(b,{angle:-a*1.3,arms:3,speed:120,hue:(170+T*30)%360,style:'small'}); a+=0.27; yield* waitT(0.05); } } }
+    ] };
+const FINALBOSS_SPEC = { name:'Flower King', design:'mandala', hue:300, enterFrom:{x:PF_W/2,y:-80}, enterTo:{x:PF_W/2,y:140}, score:500000, drops:['full','full','oneup','point','point','point','point','point','bigpower'],
+    phases:[
+      { kind:'nonspell', hp:1800, emitter:function*(b){ while(true){ ring(b,{count:24,speed:110,hue:(300+T*20)%360,style:'mid'}); yield* waitT(0.55); aimedShot(b,{n:5,spread:0.4,speed:200,hue:0,style:'dart'}); yield* waitT(0.55); } } },
+      { kind:'spell', name:'Spring Sign "Petal Storm"', hp:2400, bonus:1500000, drops:['point','point','point'], emitter:function*(b){ Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:14,speed:45,gravity:42.5,hue:330,style:'petal'}); yield* waitT(0.4); } },b); while(true){ fan(b,{n:9,spread:1.1,speed:160,aim:true,hue:290,style:'mid'}); yield* waitT(1.1); } } },
+      { kind:'nonspell', hp:2000, emitter:function*(b){ let a=0; Director.fork(function*(){ while(true){ yield* moveTo(b,PF_W*0.3,140,1.4,EASE.inOut); yield* moveTo(b,PF_W*0.7,140,1.4,EASE.inOut); } },b); while(true){ spiral(b,{angle:a,arms:4,speed:135,hue:(300+T*40)%360,style:'small'}); a+=0.4; yield* waitT(0.045); } } },
+      { kind:'spell', name:'Night Sign "Lunar Rain"', hp:2800, bonus:2000000, drops:['point','point','point'], emitter:function*(b){ while(true){ for(let k=0;k<3;k++){ ring(b,{count:32,speed:70,accel:90,hue:(220+k*30)%360,style:'orb'}); yield* waitT(0.18); } wall(b,{n:13,speed:210,hue:0,style:'dart'}); yield* waitT(1.3); } } },
+      { kind:'spell', name:'Time Sign "Spiral Mandala"', hp:3200, bonus:2500000, drops:['point','point','point'], emitter:function*(b){ let a=0; Director.fork(function*(){ while(true){ ring(b,{count:18,speed:105,hue:(280+T*15)%360,style:'mid',rot:T*0.4}); yield* waitT(0.9); } },b); while(true){ spiral(b,{angle:a,arms:5,speed:145,hue:(0+T*50)%360,style:'small'}); spiral(b,{angle:-a*1.6,arms:5,speed:145,hue:(180+T*50)%360,style:'small'}); a+=0.23; yield* waitT(0.04); } } },
+      { kind:'spell', name:'"Eternal Spring — Last Word"', survival:FB_SURVIVAL_TIME, bonus:5000000, drops:[], emitter:function*(b){ let a=0,wave=0; Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:10,speed:60,gravity:42.5,hue:(330+T*30)%360,style:'petal'}); yield* waitT(0.3); } },b); Director.fork(function*(){ while(true){ burst(b,{count:40,speed:130,hue:(T*60)%360,style:'orb'}); yield* waitT(2.2); } },b); while(true){ spiral(b,{angle:a,arms:6,speed:140+wave*4,hue:(T*70)%360,style:'small'}); spiral(b,{angle:-a*1.4,arms:6,speed:140+wave*4,hue:(120+T*70)%360,style:'small'}); a+=0.21; wave+=0.05; yield* waitT(0.035); } } }
+    ] };
+
 // ---- THE STAGE TIMELINE ----
 function* stageScript(){
   banner('Stage 1'); yield* waitT(INTRO_FADE);
@@ -1617,11 +1633,7 @@ function* stageScript(){
 
   // ===== MIDBOSS =====
   banner('WARNING'); sfx.warn&&sfx.warn(); Audio.playMusic('midboss');
-  yield* runBoss({ name:'Ariel', design:'wisp', hue:140, enterFrom:{x:PF_W/2,y:-60}, enterTo:{x:PF_W/2,y:150}, score:80000, drops:['bigpower','point','point','point','point','power'],
-    phases:[
-      { kind:'nonspell', hp:MIDBOSS_HP_NONSPELL, emitter:function*(b){ Director.fork(function*(){ while(true){ fan(b,{n:7,spread:0.7,speed:150,aim:true,hue:150,style:'mid'}); yield* waitT(0.85); } },b); while(true){ ring(b,{count:20,speed:95,hue:110,style:'mid'}); yield* waitT(1.5); } }, onEnter:function(b){ Director.fork(function*(){ while(true){ yield* moveTo(b,PF_W*0.35,150,1.6,EASE.inOut); yield* moveTo(b,PF_W*0.65,150,1.6,EASE.inOut); } },b); } },
-      { kind:'spell', name:'Verdant Sign "Petal Whirlpool"', hp:MIDBOSS_HP_SPELL, bonus:250000, drops:['point','point','point','point','power'], emitter:function*(b){ let a=0; Director.fork(function*(){ while(true){ wall(b,{n:9,speed:175,hue:320,style:'dart'}); yield* waitT(2.0); } },b); while(true){ spiral(b,{angle:a,arms:3,speed:120,hue:(140+T*30)%360,style:'small'}); spiral(b,{angle:-a*1.3,arms:3,speed:120,hue:(170+T*30)%360,style:'small'}); a+=0.27; yield* waitT(0.05); } } }
-    ] });
+  yield* runBoss(MIDBOSS_SPEC);
 
   // ===== CALM (back to stage music after the midboss falls) =====
   Audio.playMusic('stage');
@@ -1629,19 +1641,49 @@ function* stageScript(){
 
   // ===== FINAL BOSS =====
   banner('WARNING'); sfx.warn&&sfx.warn(); screenFlash('#ff3366',0.4); shake(4,0.6); Audio.playMusic('boss'); yield* waitT(2.0);
-  yield* runBoss({ name:'Flower King', design:'mandala', hue:300, enterFrom:{x:PF_W/2,y:-80}, enterTo:{x:PF_W/2,y:140}, score:500000, drops:['full','full','oneup','point','point','point','point','point','bigpower'],
-    phases:[
-      { kind:'nonspell', hp:1800, emitter:function*(b){ while(true){ ring(b,{count:24,speed:110,hue:(300+T*20)%360,style:'mid'}); yield* waitT(0.55); aimedShot(b,{n:5,spread:0.4,speed:200,hue:0,style:'dart'}); yield* waitT(0.55); } } },
-      { kind:'spell', name:'Spring Sign "Petal Storm"', hp:2400, bonus:1500000, drops:['point','point','point'], emitter:function*(b){ Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:14,speed:45,gravity:42.5,hue:330,style:'petal'}); yield* waitT(0.4); } },b); while(true){ fan(b,{n:9,spread:1.1,speed:160,aim:true,hue:290,style:'mid'}); yield* waitT(1.1); } } },
-      { kind:'nonspell', hp:2000, emitter:function*(b){ let a=0; Director.fork(function*(){ while(true){ yield* moveTo(b,PF_W*0.3,140,1.4,EASE.inOut); yield* moveTo(b,PF_W*0.7,140,1.4,EASE.inOut); } },b); while(true){ spiral(b,{angle:a,arms:4,speed:135,hue:(300+T*40)%360,style:'small'}); a+=0.4; yield* waitT(0.045); } } },
-      { kind:'spell', name:'Night Sign "Lunar Rain"', hp:2800, bonus:2000000, drops:['point','point','point'], emitter:function*(b){ while(true){ for(let k=0;k<3;k++){ ring(b,{count:32,speed:70,accel:90,hue:(220+k*30)%360,style:'orb'}); yield* waitT(0.18); } wall(b,{n:13,speed:210,hue:0,style:'dart'}); yield* waitT(1.3); } } },
-      { kind:'spell', name:'Time Sign "Spiral Mandala"', hp:3200, bonus:2500000, drops:['point','point','point'], emitter:function*(b){ let a=0; Director.fork(function*(){ while(true){ ring(b,{count:18,speed:105,hue:(280+T*15)%360,style:'mid',rot:T*0.4}); yield* waitT(0.9); } },b); while(true){ spiral(b,{angle:a,arms:5,speed:145,hue:(0+T*50)%360,style:'small'}); spiral(b,{angle:-a*1.6,arms:5,speed:145,hue:(180+T*50)%360,style:'small'}); a+=0.23; yield* waitT(0.04); } } },
-      { kind:'spell', name:'"Eternal Spring — Last Word"', survival:FB_SURVIVAL_TIME, bonus:5000000, drops:[], emitter:function*(b){ let a=0,wave=0; Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:10,speed:60,gravity:42.5,hue:(330+T*30)%360,style:'petal'}); yield* waitT(0.3); } },b); Director.fork(function*(){ while(true){ burst(b,{count:40,speed:130,hue:(T*60)%360,style:'orb'}); yield* waitT(2.2); } },b); while(true){ spiral(b,{angle:a,arms:6,speed:140+wave*4,hue:(T*70)%360,style:'small'}); spiral(b,{angle:-a*1.4,arms:6,speed:140+wave*4,hue:(120+T*70)%360,style:'small'}); a+=0.21; wave+=0.05; yield* waitT(0.035); } } }
-    ] });
+  yield* runBoss(FINALBOSS_SPEC);
 
   // ===== STAGE CLEAR =====
   screenFlash('#ffffff',1.0); banner('STAGE CLEAR'); Audio.playMusic('none'); yield* waitT(3.0); onStageClear();
 }
+
+// ============================ DEV/TEST HOOK ==========================
+// Behaviour-neutral instrumentation, active ONLY with ?dev=1 or ?golden=1 in the URL
+// (the IIFE returns immediately otherwise — zero runtime cost in the shipped game).
+// Provides a deterministic, headless structural-golden harness used to verify the
+// Phase 0–9 refactor preserves behaviour. Not gameplay; strippable from the itch build.
+(function(){
+  if(typeof location==='undefined' || !/[?&](dev|golden)=1/.test(location.search)) return;
+  function strHash(s){ let h=2166136261>>>0; for(let i=0;i<(''+s).length;i++){ h^=(''+s).charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
+  // Order-independent structural signature of the live enemy-bullet field: live count, enemy
+  // count, and a commutative checksum over (rounded x, rounded y, style, hue-bucket). Independent
+  // of Math.random (none touched in headless: no render → no camera shake, no ctx → no detune).
+  function sig(){ const it=enemyBullets.items,n=enemyBullets.count; let cs=0; for(let i=0;i<n;i++){ const b=it[i]; if(!b.alive) continue;
+      const x=Math.round(b.x)|0, y=Math.round(b.y)|0, hk=Math.round(((b.hue%360)+360)%360)|0;
+      const h=(Math.imul(x,73856093)^Math.imul(y,19349663)^Math.imul(strHash(b.style),83492791)^Math.imul(hk|0,40503))>>>0;
+      cs=(cs+h)>>>0; }
+    return { nb:enemyBullets.count, ne:enemies.length, cs:cs }; }
+  function freshState(){ T=0; rng.reseed(DEFAULT_SEED); enemyBullets.clear(); playerShots.clear(); particles.clear(); enemies.length=0; items.length=0; if(typeof Director!=='undefined') Director.clear(); game=makeGame(); player=makePlayer(); }
+  window.__dbg = {
+    STEP: STEP, sig: sig, peekRng: function(){ return rng(); },
+    get T(){ return T; }, get bullets(){ return enemyBullets; }, get enemies(){ return enemies; },
+    get game(){ return game; }, get player(){ return player; },
+    get specs(){ return { midboss: MIDBOSS_SPEC, finalboss: FINALBOSS_SPEC }; },
+    // Deterministic stage opening: no input, player invulnerable (collisions/deaths never perturb
+    // the run); all stage waves self-despawn so this reaches the midboss and its emitter.
+    goldenStage: function(ticks){ freshState(); startGame(); player.invuln=1e9; const out=[]; for(let i=0;i<ticks;i++){ simStep(STEP); out.push(sig()); } return out; },
+    // Deterministic single-emitter capture: run one boss-phase emitter in isolation.
+    captureEmitter: function(emitterFn, ticks){ freshState(); game.state=STATE.PLAYING;
+      const b=makeBoss({ design:'mandala', hue:300, score:1, enterFrom:{x:PF_W/2,y:140}, enterTo:{x:PF_W/2,y:140}, phases:[{}] });
+      b.invuln=false; b.x=PF_W/2; b.y=140; b.survivalActive=false; game.boss=b; player.invuln=1e9;
+      const g=Director.beginGroup(); Director.fork(function(){ return emitterFn(b); }, b);
+      const out=[]; for(let i=0;i<ticks;i++){ simStep(STEP); out.push(sig()); } Director.endGroup(g); return out; },
+    // Compact fingerprint of a signature series (rolling hash + sparse samples) for cross-build A/B.
+    fp: function(arr){ let h=0,sum=0; for(let i=0;i<arr.length;i++){ const s=arr[i]; h=(Math.imul(h,31)+s.nb)>>>0; h=(Math.imul(h,31)+s.cs)>>>0; h=(Math.imul(h,31)+s.ne)>>>0; sum+=s.nb; } const samp=[]; for(let i=0;i<arr.length;i+=Math.max(1,(arr.length/16)|0)) samp.push([i,arr[i].nb,arr[i].ne,arr[i].cs]); return { len:arr.length, h:h>>>0, sum:sum, last:arr[arr.length-1], samp:samp }; },
+    fpStage: function(ticks){ return this.fp(this.goldenStage(ticks)); },
+    fpEmitters: function(ticks){ const sp=this.specs, out={}; for(const k in sp){ out[k]=sp[k].phases.map(function(ph,i){ return ph.emitter? Object.assign({phase:i}, window.__dbg.fp(window.__dbg.captureEmitter(ph.emitter,ticks))) : null; }); } return out; }
+  };
+})();
 
 // ============================ BOOT ===================================
 (function boot(){
@@ -1651,7 +1693,9 @@ function* stageScript(){
   attachInput(window);
   attachTouch(cv);
   setState(STATE.TITLE);
-  requestAnimationFrame(frame);
+  // ?golden=1 freezes the rAF loop so the headless structural-golden harness owns the sim clock
+  // (no background petal-wrap rng consumption / state churn). Normal & ?dev=1 boots are unaffected.
+  if(typeof location==='undefined' || !/[?&]golden=1/.test(location.search)) requestAnimationFrame(frame);
 })();
 </script>
 </body>
