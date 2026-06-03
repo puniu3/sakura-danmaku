@@ -16,3 +16,8 @@ design/portraits/
 
 # Claude Code local config (memory, settings) — machine-local, not for the repo
 .claude/
+
+# Generated authoring demos (rebuild with design/build-*-demo.js)
+theme-demo.html
+sfx-demo.html
+balance-demo.html

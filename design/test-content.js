@@ -19,7 +19,7 @@ function check(name, cond, detail) {
   else { failures++; console.log('  FAIL ' + name + (detail ? '  — ' + detail : '')); }
 }
 
-console.log('test-content.js — Phase 0 stub');
+console.log('test-content.js — content/integration gate');
 
 const html = fs.readFileSync(INDEX, 'utf8');
 check('index.html exists and is non-empty', html.length > 1000);
@@ -61,8 +61,17 @@ try {
 check('pool.shrink API present', /shrink\(toCap\)\{/.test(html));
 check('run spine present (startRun/enterStage/advanceStage)', /function startRun\(/.test(html) && /function enterStage\(/.test(html) && /function advanceStage\(/.test(html));
 
-// --- placeholder framing for assertions added in later phases ---
-// (Phase 9) every $ref resolves; every wave/theme/spell id is defined.
+// (Phase 9) BALANCE master table + difficulty resolution + registries + demo builders.
+check('BALANCE.difficulties present (4 tiers)',
+  /const BALANCE = \{[\s\S]*?difficulties:\s*\{[\s\S]*?easy:[\s\S]*?normal:[\s\S]*?hard:[\s\S]*?lunatic:/.test(html));
+check('resolveWave/resolveBoss are identity at normal (mul===1 short-circuit)',
+  /function resolveWave\([\s\S]*?if\(D\.countMul===1\) return opts;/.test(html) &&
+  /function resolveBoss\([\s\S]*?if\(D\.hpMul===1\) return spec;/.test(html));
+check('content registries present (WAVES / SPELLS / BOSSES / STAGES)',
+  /const WAVES = \{/.test(html) && /const SPELLS = \{/.test(html) && /const BOSSES = \{/.test(html) && /const STAGES = \[/.test(html));
+for (const b of ['build-theme-demo.js', 'build-sfx-demo.js', 'build-balance-demo.js']) {
+  check('demo builder design/' + b + ' present', fs.existsSync(path.join(__dirname, b)));
+}
 
 if (failures) { console.error('\n' + failures + ' check(s) failed.'); process.exit(1); }
-console.log('\nAll Phase 0 checks passed.');
+console.log('\nAll checks passed.');

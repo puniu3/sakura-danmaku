@@ -1305,11 +1305,28 @@ function compileSpell(ph){ if(ph.body && ph.body!=='raw'){ const m=SPELLS[ph.bod
 // BALANCE / WAVES / SPELLS refs / BOSSES / STAGES / CAMPAIGN — declarative data.
 // build-game.js owns (and regenerates) the region between the anchors below.
 /*BUILD:CONTENT*/
+// BALANCE — master tuning table (ARCHITECTURE-V2 §6). difficulties = the cross-cutting knobs applied
+// by resolveWave/resolveBoss at spawn time; normal is identity (×1.0) so default play is byte-for-byte
+// unchanged. Per-phase base numbers stay in the stage specs/timeline (their single source); BALANCE
+// scales them by difficulty. New difficulties / per-stage ranks append here.
+const BALANCE = {
+  difficulties: {
+    easy:   { countMul:0.7, spdMul:0.85, hpMul:0.8,  lives:4, bombs:3 },
+    normal: { countMul:1.0, spdMul:1.0,  hpMul:1.0,  lives:3, bombs:2 },
+    hard:   { countMul:1.2, spdMul:1.08, hpMul:1.15, lives:3, bombs:2 },
+    lunatic:{ countMul:1.4, spdMul:1.15, hpMul:1.3,  lives:2, bombs:2 },
+  },
+};
 /*END:CONTENT*/
 
 // ============================== INTERP ==============================
-// runStage(stage) / resolveBoss() / resolveWave() / advanceStage() — compile the
-// declarative CONTENT into the existing Director coroutines. Placeholder — Phase 7.
+// Difficulty resolution: scale a wave's count / a boss's phase HP by the selected difficulty.
+// At normal the multipliers are 1.0 so both return the ORIGINAL object unchanged (identity) — the
+// default playthrough is byte-for-byte unaffected. (runStage itself lives in STAGE/ENEMIES.)
+function resolveWave(opts, diff){ const D=BALANCE.difficulties[diff]||BALANCE.difficulties.normal; if(D.countMul===1) return opts;
+  const o=Object.assign({},opts); if(o.n!=null) o.n=Math.max(1,Math.round(o.n*D.countMul)); if(o.half!=null) o.half=Math.max(1,Math.round(o.half*D.countMul)); return o; }
+function resolveBoss(spec, diff){ const D=BALANCE.difficulties[diff]||BALANCE.difficulties.normal; if(D.hpMul===1) return spec;
+  const s=Object.assign({},spec); s.phases=spec.phases.map(ph=>{ if(ph.hp==null) return ph; const p=Object.assign({},ph); p.hp=Math.round(ph.hp*D.hpMul); return p; }); return s; }
 
 // ============================ SYSTEMS ================================
 const rawKeys=Object.create(null), edgeKeys=Object.create(null), stepEdge=Object.create(null);
@@ -1395,14 +1412,7 @@ function attachTouch(el){
 }
 
 let player=null, game=null, run=null;
-// difficulty knobs. normal = identity, so default play is byte-for-byte unchanged. lives/bombs are the
-// starting loadout; the hp/count/speed multipliers are applied by the resolve step (Phase 9 balance).
-const DIFFICULTY = {
-  easy:   { countMul:0.7, spdMul:0.85, hpMul:0.8,  lives:4, bombs:3 },
-  normal: { countMul:1.0, spdMul:1.0,  hpMul:1.0,  lives:3, bombs:2 },
-  hard:   { countMul:1.2, spdMul:1.08, hpMul:1.15, lives:3, bombs:2 },
-  lunatic:{ countMul:1.4, spdMul:1.15, hpMul:1.3,  lives:2, bombs:2 },
-};
+// difficulty knobs now live in BALANCE.difficulties (CONTENT DATA); resolveWave/resolveBoss apply them.
 function makePlayer(){ return { x:PLAYER_START.x, y:PLAYER_START.y, r:PLAYER_R, focus:false, state:'alive', dead:false, invuln:0, blink:false, fireCd:0, power:START_POWER, bombs:START_BOMBS, lives:START_LIVES, itemR:14, bombActive:0, bossDot:0, pendingDeath:0, respawnT:0, options:[], mvx:0, mvy:0, grazePowerT:0 }; }
 function makeGame(){ return { state:STATE.TITLE, score:0, hi:0, grazeCount:0, pointValue:POINT_MIN, pointTotal:0, extendsTaken:0, stateT:0, fullpower:false, paused:false, boss:null, spellIntensity:0, powerMax:MAXPOWER, grazePowerThreshold:GRAZE_POWER_FIRST, grazePowerInterval:GRAZE_POWER_FIRST }; }
 function initGameSystems(){ game=makeGame(); player=makePlayer(); loadHiScore(); setState(STATE.TITLE); }
@@ -1433,7 +1443,7 @@ function setState(s){ const prev=game.state; game.state=s; game.stateT=0;
 // wires STAGE_INTERMISSION / RESULTS / CONTINUE around these seams.)
 function startRun(diff, fromStage){
   run = { difficulty:(diff||'normal'), stage:(fromStage||0), continuesUsed:0, practice:false };
-  const D = DIFFICULTY[run.difficulty] || DIFFICULTY.normal;
+  const D = BALANCE.difficulties[run.difficulty] || BALANCE.difficulties.normal;
   _cutin.active=false; game.score=0; game.grazeCount=0; game.pointTotal=0; game.extendsTaken=0; game.fullpower=false; game.pointValue=POINT_MIN; game.boss=null; game.spellIntensity=0; game.grazePowerThreshold=GRAZE_POWER_FIRST; game.grazePowerInterval=GRAZE_POWER_FIRST;
   player=makePlayer(); player.lives=D.lives; player.bombs=D.bombs;
   enterStage(run.stage);
@@ -1746,11 +1756,12 @@ const STAGES = [
 
 function* runStage(stage){
   if(stage.theme) setTheme(stage.theme);
+  const diff=(run&&run.difficulty)||'normal';
   const M=stage.music||{}, music=name=>(M[name]!=null?M[name]:name);
   for(const e of stage.timeline){
-    if(e.wave!=null)        yield* spawnWave(WAVES[e.wave](e.opts||{}));
-    else if(e.parallel)     yield* parallel(...e.parallel.map(p=> p.delay ? delayed(p.delay, WAVES[p.wave](p.opts||{})) : WAVES[p.wave](p.opts||{}) ));
-    else if(e.boss!=null)   yield* runBoss(BOSSES[e.boss]);
+    if(e.wave!=null)        yield* spawnWave(WAVES[e.wave](resolveWave(e.opts||{}, diff)));
+    else if(e.parallel)     yield* parallel(...e.parallel.map(p=> p.delay ? delayed(p.delay, WAVES[p.wave](resolveWave(p.opts||{}, diff))) : WAVES[p.wave](resolveWave(p.opts||{}, diff)) ));
+    else if(e.boss!=null)   yield* runBoss(resolveBoss(BOSSES[e.boss], diff));
     else if(e.wait!=null)   yield* waitT(e.wait);
     else if(e.waitClear)    yield* waitClear({minHp:e.minHp||0});
     else if(e.music!=null)  Audio.playMusic(music(e.music));
@@ -1768,7 +1779,7 @@ function* runStage(stage){
 // Provides a deterministic, headless structural-golden harness used to verify the
 // Phase 0–9 refactor preserves behaviour. Not gameplay; strippable from the itch build.
 (function(){
-  if(typeof location==='undefined' || !/[?&](dev|golden)=1/.test(location.search)) return;
+  if(typeof location==='undefined' || (!/[?&](dev|golden)=1/.test(location.search) && !(typeof window!=='undefined'&&window.__DEMO))) return;
   function strHash(s){ let h=2166136261>>>0; for(let i=0;i<(''+s).length;i++){ h^=(''+s).charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
   // Order-independent structural signature of the live enemy-bullet field: live count, enemy
   // count, and a commutative checksum over (rounded x, rounded y, style, hue-bucket). Independent
@@ -1784,6 +1795,9 @@ function* runStage(stage){
     get T(){ return T; }, get bullets(){ return enemyBullets; }, get enemies(){ return enemies; },
     get game(){ return game; }, get player(){ return player; },
     get specs(){ return { midboss: MIDBOSS_SPEC, finalboss: FINALBOSS_SPEC }; },
+    // authoring-harness exports (theme-demo / sfx-demo / balance-demo, generated by design/build-*-demo.js)
+    get themes(){ return THEMES; }, setTheme: function(k){ return setTheme(k); }, get balance(){ return BALANCE; },
+    sfx: sfx, audio: Audio, resolveWave: resolveWave, resolveBoss: resolveBoss,
     // Deterministic stage opening: no input, player invulnerable (collisions/deaths never perturb
     // the run); all stage waves self-despawn so this reaches the midboss and its emitter.
     goldenStage: function(ticks){ freshState(); startGame(); player.invuln=1e9; const out=[]; for(let i=0;i<ticks;i++){ simStep(STEP); out.push(sig()); } return out; },
