@@ -25,8 +25,19 @@ const html = fs.readFileSync(INDEX, 'utf8');
 check('index.html exists and is non-empty', html.length > 1000);
 check('index.html is a single-file artifact (one <script>)', (html.match(/<script>/g) || []).length === 1);
 
+// (Phase 6) anchors present + BGM splice round-trip is byte-identical.
+check('BGM:GEN anchors present', html.indexOf('/*BGM:GEN*/') >= 0 && html.indexOf('/*END:BGM:GEN*/') >= 0);
+check('CONTENT anchors present', html.indexOf('/*BUILD:CONTENT*/') >= 0 && html.indexOf('/*END:CONTENT*/') >= 0);
+check('playMusic uses the trackOf whitelist (not a hardcoded name list)',
+  /function playMusic\(name\)\{ if\(name!=='none' && !trackOf\(name\)\) return;/.test(html));
+try {
+  require('child_process').execFileSync('node', [path.join(__dirname, 'build-game.js'), '--check'], { stdio: 'pipe' });
+  check('BGM:GEN region in sync with bgm-engine.js + bgm-tracks.js (build-game --check)', true);
+} catch (e) {
+  check('BGM:GEN region in sync with bgm-engine.js + bgm-tracks.js (build-game --check)', false, 'build-game --check exited non-zero');
+}
+
 // --- placeholder framing for assertions added in later phases ---
-// (Phase 6) BGM splice round-trip: re-injecting the generated region yields byte-identical output.
 // (Phase 7) CONTENT region: src/content build output === /*BUILD:CONTENT*/…/*END:CONTENT*/ slice.
 // (Phase 8) save migration: migrate(v1-int) preserves the hi-score under hiByDiff.normal.
 // (Phase 9) every $ref resolves; every wave/theme/spell id is defined.
