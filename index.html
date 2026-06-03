@@ -1103,11 +1103,13 @@ const PUFF_CULL_S=0.12, LANTERN_CULL_S=0.30, STREAM_MIN_S=0.18;
 const sAt=y=>(y-HORIZON_Y)/DEN, gAt=y=>{ const t=sAt(y); return CAM*(1-t)/t; }, sOfG=g=>CAM/(CAM+g);
 let _hazeCap=null, _groundTile=null, _streamSpr=null, _lanternSpr=null;
 const _mistSpr=[], canopyVar=[], puffs=[], lanterns=[], STRIPS=[], _ys=[], _cxs=[], _ss=[];
+let _ghostEls=[], _ghostShore=[]; const GHOST_SPAN=360, GHOST_HOR=PF_H*0.58;   // ghost (Far Shore) fly-over: world span per far→near pass + horizon
 // scenery ground colours moved to THEMES[*].ground; read via activeTheme.ground in build/drawScenery.
 // single source of truth for the path: shared by the lane stroke AND every puff/lantern x.
 function laneCx(wy){ let cx=PF_W*0.5+Math.sin(wy*0.0090)*78+Math.sin(wy*0.0235+1.7)*26; const lo=PF_W*0.30, hi=PF_W*0.70; return cx<lo?lo:(cx>hi?hi:cx); }
 function buildScenery(){
   const srng=makeRng(0x5A6B7C8D); // independent stream — must NOT perturb gameplay rng
+  if(activeTheme.ghost){ buildGhostScenery(srng); return; }   // Far Shore (Stage 2): no road tiles — a fly-over of still water + onibi
   // ground patchwork tile, authored seamless over TILE_H (patches drawn at y, y±TILE_H)
   { const cv=document.createElement('canvas'); cv.width=PF_W; cv.height=TILE_H; const c=cv.getContext('2d');
     const G=activeTheme.ground; c.fillStyle=G.base; c.fillRect(0,0,PF_W,TILE_H);
@@ -1161,6 +1163,7 @@ function drawScenery(){
   const target=(game.boss&&!game.boss.dead)?BG_HOVER:BG_CRUISE;
   bgSpeed+=(target-bgSpeed)*Math.min(1,dT*0.7);                    // ~1.4s ease to a hover on boss arrival
   bgScroll=(bgScroll+bgSpeed*dT)%LANE_SPAN; const sc=bgScroll;     // sc = world-travel distance flown
+  if(activeTheme.ghost){ drawSceneryGhost(sc); return; }           // Far Shore: road-less fly-over (shares bgScroll → same slow cruise + ease-to-hover)
   ctx.save();
   ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='low';
   // GROUND: 24 horizontal strips, each a depth-mapped slice of the seamless tile → vertical foreshortening.
@@ -1185,6 +1188,34 @@ function drawScenery(){
   ctx.drawImage(_hazeCap,0,0);
   // MIST: nearest layer, drifting low in the clear foreground
   const bandH=PF_H*0.45; for(let k=0;k<2;k++){ const my=PF_H*0.55+(((sc*1.35+k*400)%bandH)+bandH)%bandH; ctx.drawImage(_mistSpr[k],0,my); }
+  ctx.restore();
+}
+
+// ---- Far Shore (Stage 2) scenery: a road-LESS bird's-eye fly-over of a still marsh ----
+// World-fixed water-patches + onibi soul-flames at evenly-spread worldY; one shared scroll clock (sc =
+// bgScroll, the same slow cruise as Stage 1, easing to hover at the boss) ⇒ UNIFORM speed + no overtaking
+// — purely "flying over still objects". Positions baked off the independent srng (gameplay rng untouched).
+function buildGhostScenery(srng){
+  _ghostEls.length=0; const N=18;
+  for(let i=0;i<N;i++) _ghostEls.push({ worldY:i*(GHOST_SPAN/N)+srng()*10, lat:(srng()*2-1), kind:(srng()<0.62?'water':'flame'), v:srng(), ph:srng()*TAU });
+  _ghostShore.length=0; for(let i=0;i<5;i++) _ghostShore.push({ cx:srng()*PF_W, w:60+srng()*70, yb:PF_H*0.585+srng()*10, h:18+srng()*16 });
+}
+function drawSceneryGhost(sc){
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';   // horizon glow — the lower field smoulders green
+  { const gx=PF_W*0.5, gy=PF_H*0.66, gg=ctx.createRadialGradient(gx,gy,0,gx,gy,PF_W*0.95); gg.addColorStop(0,'rgba(120,235,165,0.26)'); gg.addColorStop(1,'rgba(120,235,165,0)'); ctx.fillStyle=gg; ctx.fillRect(0,PF_H*0.42,PF_W,PF_H*0.58); }
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle='rgba(20,48,42,0.85)';      // far-shore silhouettes (the other shore in the haze)
+  for(const s of _ghostShore){ ctx.beginPath(); ctx.moveTo(s.cx-s.w,s.yb); ctx.quadraticCurveTo(s.cx,s.yb-s.h,s.cx+s.w,s.yb); ctx.lineTo(s.cx+s.w,s.yb+46); ctx.lineTo(s.cx-s.w,s.yb+46); ctx.closePath(); ctx.fill(); }
+  { const wb=ctx.createLinearGradient(0,GHOST_HOR,0,PF_H); wb.addColorStop(0,'rgba(20,52,46,0)'); wb.addColorStop(1,'rgba(26,66,54,0.5)'); ctx.fillStyle=wb; ctx.fillRect(0,GHOST_HOR,PF_W,PF_H-GHOST_HOR); }  // marsh-water base
+  const SP=GHOST_SPAN, list=_ghostEls.map(e=>({ p:1-((((e.worldY-sc)%SP)+SP)%SP)/SP, e })).sort((A,B)=>A.p-B.p);   // far→near, painted back-to-front
+  for(const o of list){ const p=o.p, e=o.e; if(p<=0.02) continue;
+    const s2=0.12+Math.pow(p,1.6)*1.25, y=GHOST_HOR+(PF_H+50-GHOST_HOR)*Math.pow(p,1.55), x=PF_W*0.5+e.lat*(24+Math.pow(p,1.5)*PF_W*0.6), a=Math.min(1,p*3.2)*Math.min(1,(1.06-p)*7); if(a<=0.01) continue;
+    if(e.kind==='water'){ const w=56*s2; ctx.globalAlpha=a; ctx.fillStyle='rgba(12,38,34,0.7)'; ctx.save(); ctx.translate(x,y); ctx.scale(1,0.30); ctx.beginPath(); ctx.arc(0,0,w,0,TAU); ctx.fill(); ctx.restore(); ctx.globalCompositeOperation='lighter'; ctx.strokeStyle='rgba(120,235,165,'+(0.4*a).toFixed(3)+')'; ctx.lineWidth=1.3*s2+0.5; ctx.beginPath(); ctx.ellipse(x,y,w,w*0.30,0,0.15,Math.PI-0.15); ctx.stroke(); ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1;
+      if(e.v<0.3){ ctx.fillStyle='rgba(190,255,205,'+(0.7*a).toFixed(3)+')'; ctx.beginPath(); ctx.arc(x,y-w*0.12,2.2*s2+0.6,0,TAU); ctx.fill(); } }
+    else { const fl=0.55+0.45*Math.sin(T*2.4+e.ph), by=y+Math.sin(T*1.6+e.ph)*2*s2, w=9*s2+2; ctx.save(); ctx.globalCompositeOperation='lighter'; const fg=ctx.createRadialGradient(x,by,0,x,by,w*2.3); fg.addColorStop(0,'rgba(150,255,190,'+(0.5*a*fl).toFixed(3)+')'); fg.addColorStop(1,'rgba(120,235,165,0)'); ctx.fillStyle=fg; ctx.beginPath(); ctx.arc(x,by,w*2.3,0,TAU); ctx.fill(); ctx.fillStyle='rgba(195,255,210,'+(0.85*a*fl).toFixed(3)+')'; ctx.beginPath(); ctx.arc(x,by-w*0.25,w*0.42,0,TAU); ctx.fill(); ctx.restore(); } }
+  ctx.globalAlpha=1;
+  { const fv=ctx.createLinearGradient(0,PF_H*0.8,0,PF_H); fv.addColorStop(0,'rgba(150,225,170,0)'); fv.addColorStop(1,'rgba(150,225,170,0.16)'); ctx.fillStyle=fv; ctx.fillRect(0,PF_H*0.8,PF_W,PF_H*0.2); }   // near ground-fog (static — keep the scene still)
   ctx.restore();
 }
 
@@ -1433,13 +1464,15 @@ const THEMES = {
     petal:['#ffd5e6','#ffb3d1','#f58fb6'], petalEdge:'#ffe9f2',
     ground:{ base:'#d8edc9', tones:['#cfe6c4','#f3d4e0','#e6dcf2','#f6eccf','#d2e8c2'], seam:'rgba(201,183,154,0.42)',
              laneShoulder:'rgba(198,182,156,0.5)', laneBed:'#f3e6cf', lanePave:'rgba(255,250,240,0.32)' } },
-  // Stage 2 — twilight: indigo→violet→rose-dusk sky, violet/red-violet petals, cool dusk-green ground
-  // with dusky-violet flagstones. (cloud is vestigial — defined for shape parity, never read.)
-  dusk: { name:'Twilight Petal Lane',
-    sky:{ top:'#3a2a5e', mid:'#8a5a8f', bot:'#f0a6a0' }, cloud:'rgba(255,224,236,0.30)',
-    petal:['#c98fd6','#e88fb6','#a86fc0'], petalEdge:'#f3e0ff',
-    ground:{ base:'#b9c4a8', tones:['#aebd9e','#c9a6c8','#a89cc8','#d4b6c2','#b3c0a4'], seam:'rgba(58,42,94,0.42)',
-             laneShoulder:'rgba(78,60,104,0.5)', laneBed:'#d8c2d6', lanePave:'rgba(244,228,240,0.30)' } },
+  // Stage 2 — "Far Shore" (彼岸): desaturated teal/jade sky bleeding to a luminous green horizon, spectral
+  // jade petals. ghost:true ⇒ buildScenery/drawScenery take the road-LESS ghost branch (drawSceneryGhost):
+  // a slow, uniform bird's-eye fly-over of still marsh water-patches + onibi soul-flames (no lane). The
+  // ground{} fields below are vestigial here (the ghost branch never reads them) — kept for shape parity.
+  dusk: { name:'Far Shore', ghost:true,
+    sky:{ top:'#15303a', mid:'#1e5246', bot:'#5fa86b' }, cloud:'rgba(150,225,170,0.20)',
+    petal:['#9fd6c4','#7fc9a8','#bfe6c8'], petalEdge:'#e6fff0',
+    ground:{ base:'#1c4638', tones:['#173a30','#1e5246','#123028','#205a4a','#15403a'], seam:'rgba(20,52,46,0.42)',
+             laneShoulder:'rgba(20,52,46,0.5)', laneBed:'#1e5246', lanePave:'rgba(150,225,170,0.20)' } },
 };
 let activeTheme = THEMES.spring;
 // boss visual designs: draw fn + render scale + hitbox radius, one record per design id. Collapses
@@ -1634,7 +1667,7 @@ function updateTitle(dt){ if(keyEdge('Enter')||keyEdge('KeyZ')) startGame(); }
 
 function setState(s){ const prev=game.state; game.state=s; game.stateT=0;
   if(s!==STATE.PLAYING&&s!==STATE.PAUSED) _cutin.active=false;   // tear down any in-flight cut-in entering a menu/terminal state
-  if(s===STATE.TITLE){ game.paused=false; game.boss=null; abortStage&&abortStage(); enemies.length=0; items.length=0; enemyBullets.clear(); playerShots.clear(); particles.clear(); Audio.playMusic('none'); }
+  if(s===STATE.TITLE){ game.paused=false; game.boss=null; abortStage&&abortStage(); enemies.length=0; items.length=0; enemyBullets.clear(); playerShots.clear(); particles.clear(); Audio.playMusic('none'); if(activeTheme!==THEMES.spring) setTheme('spring'); }   // reset to the Stage-1 (spring) backdrop so a Stage-2 game-over doesn't leave the dusk/ghost scenery under the title
   else if(s===STATE.PAUSED){ game.paused=true; }
   else if(s===STATE.PLAYING){ game.paused=false; }
   else if(s===STATE.GAMEOVER){ game.paused=false; game._goFade=false; saveHiScore(); enemyBullets.clear(); Audio.playMusic('gameover'); }   // somber lament; tail fades out (GAMEOVER_FADE) then auto-returns to TITLE at GAMEOVER_AUTORET (Enter also returns early)
@@ -1885,10 +1918,13 @@ function waveTurrets(opts){ return (function*(){ const xs=opts.xs||[PF_W*0.28,PF
 // references waves by name; runStage resolves them here. The "id-referenced generator registry" for waves.
 // Stage 2 ghost-flavoured road wave: wisps drift straight down in a slow sine sway, lobbing slow
 // aimed shots, then dissipate off the bottom. Manual integrate (sets _steered) like exitOff.
-function waveDrifters(opts){ return (function*(){ const n=opts.n||8, x=opts.x!=null?opts.x:PF_W*0.5, amp=opts.amp||50, hue=opts.hue!=null?opts.hue:212; for(let i=0;i<n;i++){ spawnEnemy({ x:x, y:-SPAWN_MARGIN, hp:HP_POP_MED, r:R_POP_MED, hue:hue, score:1000, drops:i%2?['point']:['power'], coro:function*(e){ const baseX=e.x, t0=T; const fc=Director.fork(()=>fireAimedBursts(e,{period:1.5,n:1,speed:125,hue:hue,style:'mid'}),e); while(e.y<PF_H+SPAWN_MARGIN){ e.y+=52*STEP; e.x=baseX+Math.sin((T-t0)*1.5+i*0.7)*amp; e._steered=true; yield; } Director.kill(fc); despawnEnemy(e); } }); yield* waitT(opts.spacing||0.5); } })(); }
+// opts.band (>0) scatters each enemy's spawn x across a band centred on opts.x via a low-discrepancy
+// sequence (golden-ratio) → a SPREAD formation emerging from different positions, not a tight column;
+// opts.bandPhase offsets that sequence so two overlapping waves interleave. band omitted ⇒ unchanged.
+function waveDrifters(opts){ return (function*(){ const n=opts.n||8, x=opts.x!=null?opts.x:PF_W*0.5, amp=opts.amp||50, hue=opts.hue!=null?opts.hue:212, band=opts.band||0, bphase=opts.bandPhase||0; for(let i=0;i<n;i++){ const bx=band?(x+((((i+bphase)*0.6180339887)%1)-0.5)*band):x; spawnEnemy({ x:bx, y:-SPAWN_MARGIN, hp:HP_POP_MED, r:R_POP_MED, hue:hue, score:1000, drops:i%2?['point']:['power'], coro:function*(e){ const baseX=e.x, t0=T; const fc=Director.fork(()=>fireAimedBursts(e,{period:1.5,n:1,speed:125,hue:hue,style:'mid'}),e); while(e.y<PF_H+SPAWN_MARGIN){ e.y+=52*STEP; e.x=baseX+Math.sin((T-t0)*1.5+i*0.7)*amp; e._steered=true; yield; } Director.kill(fc); despawnEnemy(e); } }); yield* waitT(opts.spacing||0.5); } })(); }
 // Stage 2 heavy ghost "wraith": drifts to an anchor and HOLDS, firing a ghost pattern — a delayed-turn
 // soul-orb ring (drifts out, then homes) layered with aimed lobs — then withdraws. Tanky + cancelOnDeath.
-// This is the road's danmaku identity and the building block of its 山場 (spawn 3 to overlap their rings).
+// This is the road's danmaku identity and the building block of its 山場 (spawn 6–8 to overlap their rings).
 function waveWraith(opts){ return (function*(){ const xs=opts.xs||[PF_W*0.5], y=opts.y||112, hold=opts.hold||5.0, hue=opts.hue!=null?opts.hue:212;
   for(let i=0;i<xs.length;i++){ spawnEnemy({ x:xs[i], y:-SPAWN_MARGIN, hp:HP_POP_HEAVY*1.4, r:R_POP_HEAVY+2, hue:hue, score:3000, drops:['power','power','point'], cancelOnDeath:0.5, coro:function*(e){
     yield* moveTo(e,xs[i],y,1.1,EASE.out);
@@ -1963,22 +1999,22 @@ const FINALBOSS_SPEC = { name:'Flower King', design:'mandala', hue:300, enterFro
 const _sway=(cx0,cx1,y,dur)=>function(b){ Director.fork(function*(){ while(true){ yield* moveTo(b,cx0,y,dur,EASE.inOut); yield* moveTo(b,cx1,y,dur,EASE.inOut); } },b); };
 const TASOKARE_INTRO_SPEC = { name:'Tasokare', design:'phantom', hue:212, enterFrom:{x:PF_W/2,y:-70}, enterTo:{x:PF_W/2,y:150}, score:90000, retreat:true, retreatDrops:[],
     phases:[
-      { kind:'nonspell', hp:900, body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ aimedShot(b,{n:5,spread:0.6,speed:140,hue:285,style:'mid'}); yield* waitT(1.05); } },b); while(true){ ring(b,{count:18,speed:90,accel:55,hue:210,style:'orb'}); yield* waitT(1.6); } }, onEnter:_sway(PF_W*0.34,PF_W*0.66,150,2.0) },
-      { kind:'spell', name:'Spirit Sign "Twilight Pursuit"', hp:1150, bonus:300000, drops:['point','point','point','power'], body:'raw', raw:function*(b){ let off=0; while(true){ pat.delayedTurn(b,{count:14,spread:TAU,baseAngle:off,speed:88,delay:0.9,turnAim:true,speed2:165,hue:205,style:'orb'}); off+=0.5; yield* waitT(1.5); pat.aimedSpread(b,{count:7,spread:0.5,speed:150,hue:280,style:'pellet'}); yield* waitT(0.9); } } }
+      { kind:'nonspell', hp:1720, body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ aimedShot(b,{n:5,spread:0.6,speed:140,hue:285,style:'mid'}); yield* waitT(1.05); } },b); while(true){ ring(b,{count:18,speed:90,accel:55,hue:210,style:'orb'}); yield* waitT(1.6); } }, onEnter:_sway(PF_W*0.34,PF_W*0.66,150,2.0) },
+      { kind:'spell', name:'Spirit Sign "Twilight Pursuit"', hp:2200, bonus:300000, drops:['point','point','point','power'], body:'raw', raw:function*(b){ let off=0; while(true){ pat.delayedTurn(b,{count:14,spread:TAU,baseAngle:off,speed:88,delay:0.9,turnAim:true,speed2:165,hue:205,style:'orb'}); off+=0.5; yield* waitT(1.5); pat.aimedSpread(b,{count:7,spread:0.5,speed:150,hue:280,style:'pellet'}); yield* waitT(0.9); } } }
     ] };
 const TASOKARE_SPEC = { name:'Tasokare', design:'phantom', hue:212, enterFrom:{x:PF_W/2,y:-80}, enterTo:{x:PF_W/2,y:140}, score:600000, drops:['full','oneup','bigpower','point','point','point','point','point'],
     phases:[
-      { kind:'nonspell', hp:1400, body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ aimedShot(b,{n:7,spread:0.7,speed:150,hue:285,style:'mid'}); yield* waitT(0.85); } },b); while(true){ ring(b,{count:22,speed:95,accel:55,hue:210,style:'orb'}); yield* waitT(1.3); } }, onEnter:_sway(PF_W*0.3,PF_W*0.7,140,1.9) },
+      { kind:'nonspell', hp:1720, body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ aimedShot(b,{n:7,spread:0.7,speed:150,hue:285,style:'mid'}); yield* waitT(0.85); } },b); while(true){ ring(b,{count:22,speed:95,accel:55,hue:210,style:'orb'}); yield* waitT(1.3); } }, onEnter:_sway(PF_W*0.3,PF_W*0.7,140,1.9) },
       // a COMPLEXIFIED evolution of the midboss pursuit (same delayed-turn family, escalated): the
       // homing soul-orb ring is now woven with a second ring that veers to a fixed sweep, over a slow
       // counter-rotating base ring — a pursuing lattice rather than the single homing ring of the intro.
-      { kind:'spell', name:'Phantom Sign "Twilight Labyrinth"', hp:1900, bonus:700000, drops:['point','point','power'], body:'raw', raw:function*(b){ let off=0, base=0;
+      { kind:'spell', name:'Phantom Sign "Twilight Labyrinth"', hp:2360, bonus:700000, drops:['point','point','power'], body:'raw', raw:function*(b){ let off=0, base=0;
         Director.fork(function*(){ while(true){ ring(b,{count:14,speed:72,hue:282,style:'pellet',rot:base}); base-=0.20; yield* waitT(0.95); } },b);
         while(true){ pat.delayedTurn(b,{count:16,spread:TAU,baseAngle:off,speed:90,delay:0.85,turnAim:true,speed2:178,hue:205,style:'orb'});
           pat.delayedTurn(b,{count:16,spread:TAU,baseAngle:off+0.20,speed:112,delay:0.6,turn:1.15,speed2:150,hue:190,style:'pellet'});
           off+=0.42; yield* waitT(1.3); } } },
-      { kind:'nonspell', hp:1600, body:'raw', raw:function*(b){ let a=0; Director.fork(function*(){ while(true){ yield* moveTo(b,PF_W*0.3,135,1.6,EASE.inOut); yield* moveTo(b,PF_W*0.7,135,1.6,EASE.inOut); } },b); Director.fork(function*(){ while(true){ burst(b,{count:22,speed:120,hue:(195+T*40)%360,style:'orb'}); yield* waitT(1.9); } },b); while(true){ spiral(b,{angle:a,arms:3,speed:128,hue:(210+T*50)%360,style:'small'}); spiral(b,{angle:-a*1.3,arms:3,speed:128,hue:(258+T*50)%360,style:'small'}); a+=0.32; yield* waitT(0.05); } } },
-      { kind:'spell', name:'Twilight Sign "Hitodama Drift"', hp:2000, bonus:900000, drops:['point','point','point'], body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:10,speed:55,gravity:40,hue:(200+T*30)%360,style:'orb'}); yield* waitT(0.5); } },b); while(true){ pat.randomScatter(b,{count:18,baseAngle:HALFPI,spread:Math.PI*1.25,speedMin:70,speedMax:150,jitterHue:30,hue:215,style:'pellet'}); yield* waitT(0.7); ring(b,{count:16,speed:100,accel:70,hue:280,style:'orb'}); yield* waitT(0.7); } } },
+      { kind:'nonspell', hp:2000, body:'raw', raw:function*(b){ let a=0; Director.fork(function*(){ while(true){ yield* moveTo(b,PF_W*0.3,135,1.6,EASE.inOut); yield* moveTo(b,PF_W*0.7,135,1.6,EASE.inOut); } },b); Director.fork(function*(){ while(true){ burst(b,{count:22,speed:120,hue:(195+T*40)%360,style:'orb'}); yield* waitT(1.9); } },b); while(true){ spiral(b,{angle:a,arms:3,speed:128,hue:(210+T*50)%360,style:'small'}); spiral(b,{angle:-a*1.3,arms:3,speed:128,hue:(258+T*50)%360,style:'small'}); a+=0.32; yield* waitT(0.05); } } },
+      { kind:'spell', name:'Twilight Sign "Hitodama Drift"', hp:2480, bonus:900000, drops:['point','point','point'], body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:10,speed:55,gravity:40,hue:(200+T*30)%360,style:'orb'}); yield* waitT(0.5); } },b); while(true){ pat.randomScatter(b,{count:18,baseAngle:HALFPI,spread:Math.PI*1.25,speedMin:70,speedMax:150,jitterHue:30,hue:215,style:'pellet'}); yield* waitT(0.7); ring(b,{count:16,speed:100,accel:70,hue:280,style:'orb'}); yield* waitT(0.7); } } },
       { kind:'spell', name:'"Twilight Hour — Last Word"', survival:26, bonus:3000000, drops:[], body:'raw', raw:function*(b){ let a=0,wave=0; Director.fork(function*(){ while(true){ pat.delayedTurn(b,{count:16,spread:TAU,baseAngle:a*2,speed:80,delay:0.8,turnAim:true,speed2:160,hue:205,style:'orb'}); yield* waitT(1.7); } },b); Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:9,speed:60,gravity:42,hue:(195+T*40)%360,style:'orb'}); yield* waitT(0.36); } },b); while(true){ spiral(b,{angle:a,arms:5,speed:135+wave*3,hue:(210+T*60)%360,style:'small'}); spiral(b,{angle:-a*1.4,arms:5,speed:135+wave*3,hue:(258+T*60)%360,style:'small'}); a+=0.22; wave+=0.04; yield* waitT(0.04); } } }
     ] };
 
@@ -2018,21 +2054,23 @@ const STAGES = [
     music:{ stage:'stage2', boss:'boss2' },     // the midboss appearance stays on the 道中 track — only the FINAL boss switches to boss2
     timeline:[
       {banner:'Stage 2'}, {wait:INTRO_FADE},
-      // opening: ghostly drifters converging from both sides (sine-sway wisps)
-      {parallel:[ {wave:'drifters', opts:{n:6,x:PF_W*0.28,amp:64,spacing:0.5,hue:200}},
-                  {wave:'drifters', opts:{n:6,x:PF_W*0.72,amp:64,spacing:0.5,hue:280}, delay:0.35} ]}, {waitClear:true}, {wait:WAVE_GAP},
-      // a wraith PAIR introduces the heavy ghost enemy (homing soul-orb rings — the road's signature)
-      {wave:'wraith', opts:{xs:[PF_W*0.30,PF_W*0.70],y:118,hold:4.5,spacing:0.5,hue:208}}, {waitClear:true}, {wait:1.0},
+      // opening: a SPREAD drifter formation — two hue-groups scatter in from staggered positions across the
+      // whole lane (band) rather than two tight columns, so the (doubled) count reads loose, not bunched.
+      {parallel:[ {wave:'drifters', opts:{n:20,amp:36,spacing:0.38,band:PF_W*0.84,bandPhase:0.0,hue:200}},
+                  {wave:'drifters', opts:{n:20,amp:36,spacing:0.38,band:PF_W*0.84,bandPhase:0.5,hue:280}, delay:0.7} ]}, {waitClear:true}, {wait:WAVE_GAP},
+      // a wraith SEXTET introduces the heavy ghost enemy (homing soul-orb rings — the road's signature). Counts
+      // DOUBLED for power=max entry (the stage was tuned at power=1; real play melts enemies ~2× faster).
+      {wave:'wraith', opts:{xs:[PF_W*0.40,PF_W*0.60,PF_W*0.26,PF_W*0.74,PF_W*0.12,PF_W*0.88],y:118,hold:4.5,spacing:0.5,hue:208}}, {waitClear:true}, {wait:1.0},
       // the boss's early (retreating) appearance — NO music switch (the 道中 track underscores it)
       {banner:'WARNING'}, {sfx:'warn'},
       {boss:'tasokareIntro'},
       {wait:CALM_BEFORE_BOSS},
-      // the road builds: a wide drifting sweep
-      {parallel:[ {wave:'drifters', opts:{n:9,x:PF_W*0.5,amp:130,spacing:0.32,hue:265}},
-                  {wave:'sideSweep', opts:{n:7,side:'right',y:80,spacing:0.13,hue:210}, delay:1.2} ]}, {waitClear:true}, {wait:WAVE_GAP},
-      // ── 山場 ── a wraith TRIO holds centre + flanks; the overlapping homing-ring danmaku is the road's peak
+      // the road builds: a wide SPREAD drifter formation (band-scattered, not a centre column) + a side sweep
+      {parallel:[ {wave:'drifters', opts:{n:28,amp:46,spacing:0.30,band:PF_W*0.86,hue:265}},
+                  {wave:'sideSweep', opts:{n:22,side:'right',y:80,spacing:0.13,hue:210}, delay:1.2} ]}, {waitClear:true}, {wait:WAVE_GAP},
+      // ── 山場 ── a wraith OCTET holds centre + flanks; the overlapping homing-ring danmaku is the road's peak
       {banner:'Twilight Throng'},
-      {wave:'wraith', opts:{xs:[PF_W*0.5,PF_W*0.22,PF_W*0.78],y:116,hold:7.0,spacing:0.45,hue:214}}, {waitClear:true}, {wait:1.6},
+      {wave:'wraith', opts:{xs:[PF_W*0.44,PF_W*0.56,PF_W*0.33,PF_W*0.67,PF_W*0.21,PF_W*0.79,PF_W*0.10,PF_W*0.90],y:116,hold:7.0,spacing:0.45,hue:214}}, {waitClear:true}, {wait:1.6},
       // final boss (full fight) — the one real music switch to boss2
       {banner:'WARNING'}, {sfx:'warn'}, {flash:{color:'#9a6cff',i:0.4}}, {shake:{mag:4,dur:0.6}}, {music:'boss'}, {wait:2.0},
       {boss:'tasokare'},
