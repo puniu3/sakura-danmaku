@@ -1583,6 +1583,7 @@ function* waitUntil(pred){ while(!pred()) yield; }
 function* waitClear(opts){ const minHp=(opts&&opts.minHp)||0; while(true){ let live=0; for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(!e.dead&&!e.boss&&e.hp>minHp) live++; } if(live===0) return; yield; } }
 function* parallel(){ const gens=Array.prototype.slice.call(arguments).map(g=>({g,done:false})); while(gens.some(o=>!o.done)){ for(const o of gens) if(!o.done&&o.g.next().done) o.done=true; yield; } }
 function* spawnWave(gen){ yield* gen; }
+function* delayed(sec,gen){ yield* waitT(sec); yield* gen; }   // stagger a wave inside parallel(): wait, then run the (lazily-iterated) generator
 
 // ---- enemy ----
 function spawnEnemy(spec){ const _hp=(spec.hp||1)*(spec.boss?1:ENEMY_HP_MUL); const e={ x:spec.x, y:spec.y, vx:0, vy:0, hp:_hp, maxHp:_hp, r:spec.r||R_POP_MED, hue:spec.hue!=null?spec.hue:200, boss:!!spec.boss, bodyDamage:!!spec.bodyDamage, score:spec.score||1000, drops:spec.drops||[], dead:false, invuln:false, born:T, _spec:spec, _steered:false }; enemies.push(e); if(spec.coro) Director.fork(()=>spec.coro(e),e); return e; }
@@ -1612,6 +1613,9 @@ function waveSideSweep(opts){ return (function*(){ const n=opts.n||6, side=opts.
 function waveVFormation(opts){ return (function*(){ const half=opts.half||4, apexX=opts.apexX||PF_W/2, apexY=opts.apexY||80, dx=opts.dx||30, dy=opts.dy||26; for(let s=-1;s<=1;s+=2){ for(let i=(s<0?half:0); s<0?i>=1:i<=half; i+=(s<0?-1:1)){ const tx=apexX+s*i*dx, ty=apexY+i*dy; spawnEnemy({ x:apexX, y:-SPAWN_MARGIN, hp:HP_POP_MED, r:R_POP_MED, hue:350, score:1200, drops:['power','point'], coro:function*(e){ yield* moveTo(e,tx,ty,0.9,EASE.out); yield* holdFire(e,function*(en){ yield* fireRings(en,{period:1.1,count:12,speed:110,hue:350,aim:true}); },2.4); yield* exitOff(e,Math.PI*0.5+(s*0.25)); } }); yield* waitT(0.08); } } })(); }
 function waveStream(opts){ return (function*(){ const n=opts.n||10, x=opts.x||PF_W*0.5; for(let i=0;i<n;i++){ const cx=x+Math.sin(i*0.6)*(opts.amp||60); spawnEnemy({ x:cx, y:-SPAWN_MARGIN, hp:HP_POP_MED, r:R_POP_MED, hue:130, score:900, drops:i%2?['point']:['power'], coro:function*(e){ const fc=Director.fork(()=>fireAimedBursts(e,{period:1.3,n:3,spread:0.25,speed:140,hue:130}),e); yield* moveTo(e,cx+rng.range(-30,30),PF_H+SPAWN_MARGIN,4.0,EASE.linear); Director.kill(fc); despawnEnemy(e); } }); yield* waitT(opts.spacing||0.45); } })(); }
 function waveTurrets(opts){ return (function*(){ const xs=opts.xs||[PF_W*0.28,PF_W*0.72], y=opts.y||130; for(let i=0;i<xs.length;i++){ spawnEnemy({ x:xs[i], y:-SPAWN_MARGIN, hp:HP_POP_HEAVY, r:R_POP_HEAVY, hue:280, score:2500, drops:['power','power','point'], cancelOnDeath:0.4, coro:function*(e){ yield* moveTo(e,xs[i],y,1.0,EASE.out); yield* holdFire(e,function*(en){ yield* fireSpiralTurret(en,{da:i?-0.33:0.33,period:0.07,arms:2,speed:125,a0:i*Math.PI}); },opts.hold||5.0); yield* exitOff(e,i?Math.PI*0.85:Math.PI*0.15,140); } }); } yield; })(); }
+// wave registry: friendly name -> factory(opts) -> generator. The stage timeline (Phase 7 STAGES data)
+// references waves by name; runStage resolves them here. The "id-referenced generator registry" for waves.
+const WAVES = { sideSweep:waveSideSweep, vFormation:waveVFormation, stream:waveStream, turrets:waveTurrets };
 
 // ---- boss: descriptor-driven phase machine ----
 function makeBoss(spec){ const _bd=BOSS_DESIGNS[spec.design]; const b=spawnEnemy({ x:spec.enterFrom?spec.enterFrom.x:PF_W/2, y:spec.enterFrom?spec.enterFrom.y:-60, hp:1, r:_bd?_bd.hitR:18, hue:spec.hue!=null?spec.hue:320, boss:true, score:spec.score||50000, drops:[], coro:null }); b.invuln=true; b.phaseTotal=spec.phases.length; b.phaseIndex=0; b.phasesLeft=spec.phases.length; b.spellName=''; b.inSpell=false; b.timer=null; b.hpMax=1; b.design=spec.design; b.survivalActive=false; b.survivalTotal=0; return b; }
@@ -1664,7 +1668,7 @@ function* stageScript(){
   yield* spawnWave(waveSideSweep({n:6,side:'left',y:90,spacing:0.16})); yield* waitT(2.4);
   yield* spawnWave(waveSideSweep({n:6,side:'right',y:150,spacing:0.16})); yield* waitClear({minHp:0}); yield* waitT(WAVE_GAP);
   yield* spawnWave(waveVFormation({half:4,apexX:PF_W/2,apexY:80})); yield* waitT(3.2);
-  yield* parallel( waveStream({n:8,x:PF_W*0.33,amp:50,spacing:0.5}), (function*(){ yield* waitT(0.25); yield* waveStream({n:8,x:PF_W*0.66,amp:50,spacing:0.5}); })() ); yield* waitClear(); yield* waitT(WAVE_GAP);
+  yield* parallel( WAVES.stream({n:8,x:PF_W*0.33,amp:50,spacing:0.5}), delayed(0.25, WAVES.stream({n:8,x:PF_W*0.66,amp:50,spacing:0.5})) ); yield* waitClear(); yield* waitT(WAVE_GAP);
   yield* spawnWave(waveTurrets({xs:[PF_W*0.28,PF_W*0.72],y:130,hold:5.0})); yield* waitClear({minHp:0}); yield* waitT(WAVE_GAP);
   yield* spawnWave(waveSideSweep({n:8,side:'left',y:70,spacing:0.10})); yield* spawnWave(waveSideSweep({n:8,side:'right',y:110,spacing:0.10})); yield* waitClear(); yield* waitT(1.5);
 
