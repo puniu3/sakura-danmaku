@@ -884,9 +884,9 @@ const sfx = {
 const HUE_BUCKET=12, SPRITE_PAD=2, GLOW_SOFTNESS=0.55, CORE_FRACTION=0.42, BULLET_SPRITE_PX_PER_UNIT=1.7;
 const MAX_SHAKE=11, TRAUMA_DECAY=1.8, FLASH_DECAY=9.0, SPAWN_FADE=0.10;
 const CANCEL_WAVE_SPEED=520, CANCEL_WAVE_LIFE=0.6, POPTEXT_LIFE=0.9, BOSS_AURA_SPIN=0.6;
+// PALETTE = stage-independent UI/entity identity (HUD, ship, boss rims, hp bars). Per-stage
+// sky/petal/ground colours live in THEMES (see THEMES section) and are read via activeTheme.
 const PALETTE={
-  skyTop:'#ffd9ec', skyMid:'#cfe0ff', skyBot:'#bfeede', cloud:'rgba(255,255,255,0.42)',
-  petal:['#ffd5e6','#ffb3d1','#f58fb6'], petalEdge:'#ffe9f2',
   hudBg:'#160b22', hudPanel:'#241338', hudEdge:'#4b2d72',
   uiText:'#ffe9fb', uiDim:'#9d83c0', uiGold:'#ffd45e',
   life:'#ff5d8f', bomb:'#74e0ff', graze:'#b9ff6a',
@@ -911,7 +911,7 @@ function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w
 
 let _vig=null;
 function buildVignette(){ const cv=document.createElement('canvas'); cv.width=PF_W; cv.height=PF_H; const c=cv.getContext('2d'); const g=c.createRadialGradient(PF_W/2,PF_H/2,PF_H*0.35,PF_W/2,PF_H/2,PF_H*0.72); g.addColorStop(0,'rgba(40,18,46,0)'); g.addColorStop(1,'rgba(40,18,46,0.5)'); c.fillStyle=g; c.fillRect(0,0,PF_W,PF_H); c.fillStyle='rgba(0,0,0,0.05)'; for(let y=0;y<PF_H;y+=3) c.fillRect(0,y,PF_W,1); _vig=cv; }
-function RenderInit(canvasEl){ canvas=canvasEl; ctx=canvas.getContext('2d',{alpha:false,desynchronized:true}); buildPetals(); buildScenery(); buildVignette(); window.addEventListener('resize',RenderResize); RenderResize(); }
+function RenderInit(canvasEl){ canvas=canvasEl; ctx=canvas.getContext('2d',{alpha:false,desynchronized:true}); buildPetals(); setTheme('spring'); buildVignette(); window.addEventListener('resize',RenderResize); RenderResize(); }
 function RenderResize(){ dpr=Math.min(DPR_CAP,window.devicePixelRatio||1); canvas.width=Math.round(CANVAS_W*dpr); canvas.height=Math.round(CANVAS_H*dpr); const sx=window.innerWidth/CANVAS_W, sy=window.innerHeight/CANVAS_H; let s=Math.min(sx,sy); if(s>=1) s=Math.max(1,Math.floor(s*2)/2); canvas.style.width=(CANVAS_W*s)+'px'; canvas.style.height=(CANVAS_H*s)+'px'; ctx.imageSmoothingEnabled=true; }
 
 // ---- bullet sprite cache ----
@@ -943,9 +943,9 @@ function getPlayerShotSprite(kind,hue){ const key=kind+'|'+hueKey(hue); let cv=_
 
 // ---- background ----
 let _skyCache={d:999,c0:'',c1:'',c2:''};
-function drawBackground(t){ const drift=Math.sin(t*0.05)*14, db=Math.round(drift); if(db!==_skyCache.d){ _skyCache.d=db; _skyCache.c0=shiftHue(PALETTE.skyTop,drift); _skyCache.c1=shiftHue(PALETTE.skyMid,drift*0.5); _skyCache.c2=shiftHue(PALETTE.skyBot,-drift*0.4); } const g=ctx.createLinearGradient(0,0,0,PF_H); g.addColorStop(0,_skyCache.c0); g.addColorStop(0.5,_skyCache.c1); g.addColorStop(1,_skyCache.c2); ctx.fillStyle=g; ctx.fillRect(0,0,PF_W,PF_H); }
+function drawBackground(t){ const drift=Math.sin(t*0.05)*14, db=Math.round(drift); if(db!==_skyCache.d){ _skyCache.d=db; _skyCache.c0=shiftHue(activeTheme.sky.top,drift); _skyCache.c1=shiftHue(activeTheme.sky.mid,drift*0.5); _skyCache.c2=shiftHue(activeTheme.sky.bot,-drift*0.4); } const g=ctx.createLinearGradient(0,0,0,PF_H); g.addColorStop(0,_skyCache.c0); g.addColorStop(0.5,_skyCache.c1); g.addColorStop(1,_skyCache.c2); ctx.fillStyle=g; ctx.fillRect(0,0,PF_W,PF_H); }
 function buildPetals(){ const L=[{n:14,scale:0.55,vy:18,sway:10,alpha:0.55},{n:18,scale:0.8,vy:34,sway:16,alpha:0.8},{n:12,scale:1.15,vy:68,sway:24,alpha:1.0}]; petals.length=0; L.forEach((layer,li)=>{ for(let i=0;i<layer.n;i++) petals.push({ layer:li, x:rng()*PF_W, y:rng()*PF_H, scale:layer.scale*(0.7+rng()*0.6), vy:layer.vy*(0.8+rng()*0.4), sway:layer.sway, swayPh:rng()*6.28, swaySpd:0.6+rng()*0.8, rot:rng()*6.28, rotV:(rng()-0.5)*1.4, alpha:layer.alpha }); }); }
-const _petalSprite=(()=>{ const out=[]; PALETTE.petal.forEach(col=>{ const W=24,cv=document.createElement('canvas'); cv.width=W; cv.height=W; const c=cv.getContext('2d'); c.translate(W/2,W/2); c.fillStyle=col; c.beginPath(); c.moveTo(0,-9); c.bezierCurveTo(7,-6,7,6,0,9); c.bezierCurveTo(-7,6,-7,-6,0,-9); c.fill(); c.strokeStyle=PALETTE.petalEdge; c.lineWidth=0.8; c.beginPath(); c.moveTo(0,-8); c.lineTo(0,7); c.stroke(); out.push(cv); }); return out; })();
+let _petalSprite=[];   // baked per-theme by bakePetals() (THEMES section), called from setTheme() in RenderInit
 function updateAndDrawPetals(dt,t){ for(const p of petals){ p.y+=p.vy*dt; p.swayPh+=p.swaySpd*dt; p.rot+=p.rotV*dt; if(p.y>PF_H+16){ p.y=-16; p.x=rng()*PF_W; } const x=p.x+Math.sin(p.swayPh)*p.sway; const spr=_petalSprite[p.layer]; ctx.save(); ctx.globalAlpha=p.alpha; ctx.translate(x,p.y); ctx.rotate(p.rot); const s=p.scale; ctx.scale(s,s*(0.6+0.4*Math.abs(Math.cos(p.swayPh)))); ctx.drawImage(spr,-spr.width/2,-spr.height/2); ctx.restore(); } }
 function drawPocLine(){ ctx.save(); ctx.globalAlpha=0.18; ctx.strokeStyle='#ffffff'; ctx.lineWidth=1; ctx.setLineDash([6,8]); ctx.beginPath(); ctx.moveTo(8,POC_LINE_Y); ctx.lineTo(PF_W-8,POC_LINE_Y); ctx.stroke(); ctx.setLineDash([]); ctx.restore(); }
 
@@ -964,18 +964,17 @@ const PUFF_CULL_S=0.12, LANTERN_CULL_S=0.30, STREAM_MIN_S=0.18;
 const sAt=y=>(y-HORIZON_Y)/DEN, gAt=y=>{ const t=sAt(y); return CAM*(1-t)/t; }, sOfG=g=>CAM/(CAM+g);
 let _hazeCap=null, _groundTile=null, _streamSpr=null, _lanternSpr=null;
 const _mistSpr=[], canopyVar=[], puffs=[], lanterns=[], STRIPS=[], _ys=[], _cxs=[], _ss=[];
-const SCN={ groundBase:'#d8edc9', tones:['#cfe6c4','#f3d4e0','#e6dcf2','#f6eccf','#d2e8c2'], seam:'rgba(201,183,154,0.42)',
-            laneShoulder:'rgba(198,182,156,0.5)', laneBed:'#f3e6cf', lanePave:'rgba(255,250,240,0.32)' };
+// scenery ground colours moved to THEMES[*].ground; read via activeTheme.ground in build/drawScenery.
 // single source of truth for the path: shared by the lane stroke AND every puff/lantern x.
 function laneCx(wy){ let cx=PF_W*0.5+Math.sin(wy*0.0090)*78+Math.sin(wy*0.0235+1.7)*26; const lo=PF_W*0.30, hi=PF_W*0.70; return cx<lo?lo:(cx>hi?hi:cx); }
 function buildScenery(){
   const srng=makeRng(0x5A6B7C8D); // independent stream — must NOT perturb gameplay rng
   // ground patchwork tile, authored seamless over TILE_H (patches drawn at y, y±TILE_H)
   { const cv=document.createElement('canvas'); cv.width=PF_W; cv.height=TILE_H; const c=cv.getContext('2d');
-    c.fillStyle=SCN.groundBase; c.fillRect(0,0,PF_W,TILE_H);
+    const G=activeTheme.ground; c.fillStyle=G.base; c.fillRect(0,0,PF_W,TILE_H);
     const rr=(x,y,w,h,r)=>{ c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); };
-    for(let i=0;i<22;i++){ const bx=srng()*PF_W, by=srng()*TILE_H, bw=46+srng()*96, bh=34+srng()*78, rot=(srng()-0.5)*0.7, tone=SCN.tones[(srng()*SCN.tones.length)|0], a=0.42+srng()*0.34, rad=8+srng()*12;
-      for(const oy of [0,-TILE_H,TILE_H]){ c.save(); c.translate(bx,by+oy); c.rotate(rot); c.globalAlpha=a; c.fillStyle=tone; rr(-bw/2,-bh/2,bw,bh,rad); c.fill(); c.globalAlpha=a*0.7; c.lineWidth=1.1; c.strokeStyle=SCN.seam; c.stroke(); c.restore(); } }
+    for(let i=0;i<22;i++){ const bx=srng()*PF_W, by=srng()*TILE_H, bw=46+srng()*96, bh=34+srng()*78, rot=(srng()-0.5)*0.7, tone=G.tones[(srng()*G.tones.length)|0], a=0.42+srng()*0.34, rad=8+srng()*12;
+      for(const oy of [0,-TILE_H,TILE_H]){ c.save(); c.translate(bx,by+oy); c.rotate(rot); c.globalAlpha=a; c.fillStyle=tone; rr(-bw/2,-bh/2,bw,bh,rad); c.fill(); c.globalAlpha=a*0.7; c.lineWidth=1.1; c.strokeStyle=G.seam; c.stroke(); c.restore(); } }
     _groundTile=cv; }
   // distance haze: a graded veil over the upper field — densest at the far top, fully clear by mid-screen.
   // (this IS the depth cue: the farther/higher, the more atmosphere; it also masks far-strip downscale shimmer.)
@@ -1035,10 +1034,10 @@ function drawScenery(){
   { const hi=sc+gAt(GROUND_TOP); for(let Wd=Math.ceil(sc/STREAM_GAP)*STREAM_GAP; Wd<=hi; Wd+=STREAM_GAP){ const g=Wd-sc; if(g<0) continue; const s=sOfG(g); if(s<STREAM_MIN_S) continue; const y=HORIZON_Y+DEN*s, w=_streamSpr.width*s, h=_streamSpr.height*s; ctx.drawImage(_streamSpr,(PF_W-w)/2,y-h/2,w,h); } }
   // HERO LANE: tapering filled ribbon (shoulder + bed) + dashed centerline, converging to a vanishing tip.
   let n=0; for(let y=GROUND_TOP;y<=PF_H+2;y+=LANE_ROW){ const s=sAt(y); _ss[n]=s; _ys[n]=y; _cxs[n]=PF_W/2+(laneCx(sc+gAt(y))-PF_W/2)*s; n++; }
-  ctx.lineCap='round'; ctx.lineJoin='round';
-  ctx.fillStyle=SCN.laneShoulder; ctx.beginPath(); ctx.moveTo(_cxs[0]-30*_ss[0],_ys[0]); for(let i=1;i<n;i++) ctx.lineTo(_cxs[i]-30*_ss[i],_ys[i]); for(let i=n-1;i>=0;i--) ctx.lineTo(_cxs[i]+30*_ss[i],_ys[i]); ctx.closePath(); ctx.fill();
-  ctx.fillStyle=SCN.laneBed; ctx.beginPath(); ctx.moveTo(_cxs[0]-22*_ss[0],_ys[0]); for(let i=1;i<n;i++) ctx.lineTo(_cxs[i]-22*_ss[i],_ys[i]); for(let i=n-1;i>=0;i--) ctx.lineTo(_cxs[i]+22*_ss[i],_ys[i]); ctx.closePath(); ctx.fill();
-  ctx.setLineDash([10,16]); ctx.strokeStyle=SCN.lanePave; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(_cxs[0],_ys[0]); for(let i=1;i<n;i++) ctx.lineTo(_cxs[i],_ys[i]); ctx.stroke(); ctx.setLineDash([]);
+  ctx.lineCap='round'; ctx.lineJoin='round'; const G=activeTheme.ground;
+  ctx.fillStyle=G.laneShoulder; ctx.beginPath(); ctx.moveTo(_cxs[0]-30*_ss[0],_ys[0]); for(let i=1;i<n;i++) ctx.lineTo(_cxs[i]-30*_ss[i],_ys[i]); for(let i=n-1;i>=0;i--) ctx.lineTo(_cxs[i]+30*_ss[i],_ys[i]); ctx.closePath(); ctx.fill();
+  ctx.fillStyle=G.laneBed; ctx.beginPath(); ctx.moveTo(_cxs[0]-22*_ss[0],_ys[0]); for(let i=1;i<n;i++) ctx.lineTo(_cxs[i]-22*_ss[i],_ys[i]); for(let i=n-1;i>=0;i--) ctx.lineTo(_cxs[i]+22*_ss[i],_ys[i]); ctx.closePath(); ctx.fill();
+  ctx.setLineDash([10,16]); ctx.strokeStyle=G.lanePave; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(_cxs[0],_ys[0]); for(let i=1;i<n;i++) ctx.lineTo(_cxs[i],_ys[i]); ctx.stroke(); ctx.setLineDash([]);
   // SCENERY: sakura canopies (far→near painter order) + lanterns, depth-scaled, hugging the same lane curve
   puffs.sort((a,b)=>(((b.worldY-sc)%SCN_SPAN+SCN_SPAN)%SCN_SPAN)-(((a.worldY-sc)%SCN_SPAN+SCN_SPAN)%SCN_SPAN));
   for(const p of puffs){ const g=((p.worldY-sc)%SCN_SPAN+SCN_SPAN)%SCN_SPAN, s=sOfG(g); if(s<PUFF_CULL_S) continue; const y=HORIZON_Y+DEN*s, x=PF_W/2+(laneCx(sc+g)-PF_W/2)*s+p.side*(30+p.off)*s, spr=canopyVar[p.v], w=spr.width*s; ctx.drawImage(spr,x-w/2,y-w/2,w,w); }
@@ -1226,9 +1225,20 @@ function RenderFrame(now,alpha){ const dt=_lastNow?Math.min(0.05,(now-_lastNow)/
 const Render={ timeScale:1, init:RenderInit, resize:RenderResize, frame:RenderFrame, flash:reqFlash, shake:reqShake, cancelWave:reqCancelWave, slowmo:reqSlowmo, popText:reqPop, banner:triggerBanner, cutin:triggerCutin };
 
 // ============================ THEMES =================================
-// Per-stage palette/scenery data + setTheme(), and the BOSS_DESIGNS registry.
-// Placeholder — populated in Phase 2 (themes) and Phase 3 (boss designs).
-// (Currently RENDER above holds the single hardcoded PALETTE/SCN sakura theme.)
+// Per-stage sky/petal/ground colours. setTheme(key) re-bakes the petal sprites and the scenery
+// ground tile from the chosen theme (PALETTE/HUD identity stays global; see RENDER). buildPetals'
+// petal POSITIONS still use the gameplay rng (unchanged); buildScenery uses its own srng.
+// New stages append a THEMES entry — no new control flow. (Phase 3 adds BOSS_DESIGNS here.)
+const THEMES = {
+  spring: { name:'Vernal Petal Lane',
+    sky:{ top:'#ffd9ec', mid:'#cfe0ff', bot:'#bfeede' }, cloud:'rgba(255,255,255,0.42)',
+    petal:['#ffd5e6','#ffb3d1','#f58fb6'], petalEdge:'#ffe9f2',
+    ground:{ base:'#d8edc9', tones:['#cfe6c4','#f3d4e0','#e6dcf2','#f6eccf','#d2e8c2'], seam:'rgba(201,183,154,0.42)',
+             laneShoulder:'rgba(198,182,156,0.5)', laneBed:'#f3e6cf', lanePave:'rgba(255,250,240,0.32)' } },
+};
+let activeTheme = THEMES.spring;
+function bakePetals(theme){ const out=[]; theme.petal.forEach(col=>{ const W=24,cv=document.createElement('canvas'); cv.width=W; cv.height=W; const c=cv.getContext('2d'); c.translate(W/2,W/2); c.fillStyle=col; c.beginPath(); c.moveTo(0,-9); c.bezierCurveTo(7,-6,7,6,0,9); c.bezierCurveTo(-7,6,-7,-6,0,-9); c.fill(); c.strokeStyle=theme.petalEdge; c.lineWidth=0.8; c.beginPath(); c.moveTo(0,-8); c.lineTo(0,7); c.stroke(); out.push(cv); }); _petalSprite=out; }
+function setTheme(key){ const t=THEMES[key]; if(!t) return; activeTheme=t; _skyCache.d=999; bakePetals(t); buildScenery(); }
 
 // ============================ PATTERNS ===============================
 const HUE_SPAN_RING=40, HUE_SPAN_LAYER=60, HUE_SPIN_PERTICK=7, MAX_BOUNCES_DEFAULT=2;
