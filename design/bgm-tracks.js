@@ -17,6 +17,8 @@ const SCALES = {
   Charm: [0,2,3,5,7,8,11],   // C harmonic minor: C D Eb F G Ab B
   Dharm: [1,2,4,5,7,9,10],   // D harmonic minor: D E F G A Bb C#   (Stage 2)
   Fharm: [0,1,4,5,7,8,10],   // F harmonic minor: F G Ab Bb C Db E   (Stage 2 boss climax lift)
+  Eharm: [0,3,4,6,7,9,11],   // E harmonic minor: E F# G A B C D#   (Stage 3)
+  Gharm: [0,2,3,6,7,9,10],   // G harmonic minor: G A Bb C D Eb F#   (Stage 3 boss climax lift)
 };
 function parseChord(sym) {
   let bass = null, s = sym;
@@ -404,7 +406,105 @@ const BOSS2 = {
   arrangement: ['intro','A1','A2','B','bridge','climax','A3','outro'],
 };
 
-const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER, stage2: STAGE2, boss2: BOSS2 };
+// ================================================================ STAGE 3
+// "Mayoi Bamboo" — E harmonic minor, 120 BPM. An INDEPENDENT tune (not a Stage-1/2 reskin): a winding,
+// searching koto-plucked line that wanders like the lost grove — the harmonic-minor augmented-2nd shimmer
+// here is C ↔ D# (a different colour from Stage 2's Bb↔C#), over a slower walking groove. Distinct key &
+// timbre from both earlier 道中 themes.
+const S3_HOOK = [
+  [0,76],[6,79],[10,78],            // E … G F#  — a searching off-beat rise/step
+  [16,83],[20,84],[24,87],[28,84],  // B → C6 → D#6 → C6  (the augmented-2nd shimmer C↔D#)
+  [32,81],[40,79],[44,78],          // A G F#  — winding descent
+  [48,76],[54,75],[58,76],          // E → D#5 → E  (leading-tone resolution)
+];
+const S3_HOOK2 = [ // variation tail, hangs on B (the V) for the half-cadence
+  [0,76],[6,79],[10,81],
+  [16,84],[20,87],[28,84],
+  [32,83],[40,79],
+  [48,81],[56,83],[60,83],
+];
+const S3_B = [ // 8-bar contrasting lift — lyrical, upper register
+  [0,88],[8,84],[12,87],
+  [16,83],[24,79],[28,81],
+  [32,78],[40,79],[48,83],[56,88],
+  [64,87],[72,84],[80,81],[88,79],
+  [96,81],[104,83],[112,84],[120,87],
+];
+const S3_BRIDGE = [ [0,71],[8,76],[16,79],[24,84],[32,87],[40,84],[48,81],[56,79] ];
+const S3_OUTRO = [ [0,84],[8,83],[16,81],[24,79],[32,78],[40,76],[48,76] ];
+const STAGE3 = {
+  title: 'Mayoi Bamboo', keyName: 'E harmonic minor', bpm: 120, gain: 0.55,
+  // DISTINCT timbre: a koto-plucked lead (triangle + a faint square bell octave-up, short sustain), a round
+  // sine bass, a glassy bell arp, and a forward dark pad — a wandering night-grove piece, not the Stage-1
+  // bright march nor the Stage-2 floating twilight.
+  voices: {
+    lead: { layers:[ { type:'triangle', octave:0, detune:0, gain:1.0 }, { type:'square', octave:1, detune:0, gain:0.16, filter:'lowpass', filterFreq:3000 }, { type:'sine', octave:0, detune:-5, gain:0.4 } ], atk:0.004, dec:0.10, sus:0.32, rel:0.18, maxGate:5 },
+    arp:  { layers:[ { type:'triangle', octave:1, detune:0, gain:1.0 } ], atk:0.002, dec:0.04, sus:0.12, rel:0.07, filter:'lowpass', filterFreq:3200, maxGate:1 },
+    bass: { layers:[ { type:'sine', octave:0, detune:0, gain:1.0 }, { type:'triangle', octave:0, detune:0, gain:0.35 } ], atk:0.006, dec:0.07, sus:0.6, rel:0.12, filter:'lowpass', filterFreq:640, maxGate:4 },
+    pad:  { octave:0, voices:3, detune:11, type:'sawtooth', atk:0.18, dec:0.2, sus:0.76, rel:0.6, filter:'lowpass', filterFreq:1100 } },
+  gains: { lead:0.13, harm:0.07, counter:0.07, arp:0.058, bass:0.15, sub:0.13, pad:0.072 },
+  sections: {
+    intro: makeSection({ bars:4, scale:'Eharm', chords:['Em','Em','C','B7'], bassStyle:'half', arpRate:2, groove:'introTick', sub:true, crash:true }),
+    A:     makeSection({ bars:8, scale:'Eharm', chords:['Em','C','G','B7','Em','Am','B7','Em'], lead:cat(S3_HOOK, off(64,S3_HOOK2)), bassStyle:'walk8', arpRate:2, groove:'midGroove', sub:true }),
+    A2:    makeSection({ bars:8, scale:'Eharm', chords:['Em','C','G','B7','Em','Am','B7','Em'], lead:cat(S3_HOOK, off(64,S3_HOOK2)), harm:true, bassStyle:'walk8', arpRate:2, groove:'midGroove', sub:true }),
+    B:     makeSection({ bars:8, scale:'Eharm', chords:['C','G','Am','Em','C','G','B7','B7'], lead:S3_B, counter:true, bassStyle:'walk8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
+    bridge:makeSection({ bars:4, scale:'Eharm', chords:['Am','B7','Em','B7'], lead:S3_BRIDGE, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
+    A2b:   makeSection({ bars:8, scale:'Eharm', chords:['Em','C','G','B7','Em','Am','B7','Em'], lead:cat(S3_HOOK, off(64,S3_HOOK2)), harm:true, counter:true, bassStyle:'walk8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
+    outro: makeSection({ bars:4, scale:'Eharm', chords:['Em','C','Am','B7'], lead:S3_OUTRO, bassStyle:'walk8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
+  },
+  arrangement: ['intro','A','A2','B','bridge','A2b','outro'],
+};
+
+// ================================================================ STAGE 3 BOSS
+// "Twin Moons Rising" — E harmonic minor, key-lift to G harmonic minor, 158 BPM. The 2体ボス theme: a
+// driving angular hook carried as a TWO-VOICE texture (harm = a parallel third, counter = a tight octave-down
+// echo two sixteenths later) so the line is constantly ANSWERED — a musical duet for the twin sisters. An
+// independent theme: distinct key, the C↔D# augmented-2nd colour, and a minor-third climax lift (E→G), not
+// the Stage-2 boss reshaped.
+const B3_HOOK = [
+  [0,76],[2,83],[4,84],[8,87],[10,84],[12,81],[14,79],   // E↑B C (leap) → D#6 C A G  — wide leaps, then fall
+  [16,78],[18,76],[20,83],[24,84],[26,79],[28,78],[30,76], // F# E B(leap) C G F# E  — angular
+];
+const B3_CLOSE = [ [0,84],[4,83],[8,81],[12,79],[16,78],[20,76],[24,75],[28,76] ]; // descending lament: C B A G F# E D# E
+const B3_B = [ // dramatic lift, E harmonic minor
+  [0,88],[6,84],[10,87],[16,83],[24,79],
+  [32,81],[40,84],[48,87],[56,88],
+  [64,87],[72,84],[80,81],[88,79],
+  [96,83],[104,87],[112,84],[120,88],
+];
+const B3_BRIDGE = [ // sinking, then a leading-tone climb back
+  [0,83],[8,79],[16,76],[24,72],
+  [32,71],[40,75],[48,76],[56,79],
+  [64,81],[72,84],[80,87],[88,84],
+  [96,83],[104,79],[112,76],[120,75],
+];
+const B3_OUTRO = [ [0,76],[2,83],[6,87],[12,84],[16,81],[24,79],[32,76],[48,76] ];
+const BOSS3 = {
+  title: 'Twin Moons Rising', keyName: 'E harmonic minor → G', bpm: 158, gain: 0.62,
+  // DISTINCT timbre: a bright saw+square lead doubled an octave up (a "two-bell" sheen for the twins), a
+  // triangle harm a third below, a hollow square echo (counter), a chiptune square arp, gritty saw bass.
+  voices: {
+    lead: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:0.9, filter:'lowpass', filterFreq:2700 }, { type:'triangle', octave:1, detune:0, gain:0.28 }, { type:'square', octave:0, detune:9, gain:0.4, filter:'lowpass', filterFreq:2300 } ], atk:0.004, dec:0.05, sus:0.46, rel:0.12, maxGate:6 },
+    harm: { layers:[ { type:'triangle', octave:0, detune:-5, gain:1.0 } ], atk:0.006, dec:0.05, sus:0.44, rel:0.13, filter:'lowpass', filterFreq:2600, maxGate:6 },
+    counter: { layers:[ { type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:1900 } ], atk:0.005, dec:0.05, sus:0.4, rel:0.11, maxGate:5 },
+    arp: { layers:[ { type:'square', octave:0, detune:7, gain:1.0 } ], atk:0.002, dec:0.022, sus:0.14, rel:0.05, filter:'lowpass', filterFreq:3500, maxGate:1 },
+    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.05, sus:0.6, rel:0.08, filter:'lowpass', filterFreq:1000, maxGate:3 },
+    pad: { octave:0, voices:3, detune:11, type:'sawtooth', atk:0.07, dec:0.12, sus:0.68, rel:0.4, filter:'lowpass', filterFreq:1380 } },
+  gains: { lead:0.142, harm:0.08, counter:0.085, arp:0.062, bass:0.17, sub:0.14, pad:0.056, kick:1.1, snare:1.05, crash:1.05 },
+  sections: {
+    intro:  makeSection({ bars:8, scale:'Eharm', chords:['Em','Em','B7','B7','Am','Am','B7','B7'], lead:cat(B3_HOOK, off(64,B3_HOOK)), harm:true, bassStyle:'half', arpRate:2, groove:'fourLite', sub:true, crash:true }),
+    A1:     makeSection({ bars:8, scale:'Eharm', chords:['Em','C','G','B7','Em','C','Am','B7'], lead:cat(B3_HOOK, off(32,B3_HOOK), off(64,B3_HOOK), off(96,B3_CLOSE)), counter:true, bassStyle:'gallop', arpRate:1, groove:'midGallop', sub:true, crash:true }),
+    A2:     makeSection({ bars:8, scale:'Eharm', chords:['Em','C','G','B7','Em','Am','B7','Em'], lead:cat(B3_HOOK, off(32,B3_HOOK), off(64,B3_HOOK), off(96,B3_CLOSE)), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'midGallop', sub:true, crash:true }),
+    B:      makeSection({ bars:8, scale:'Eharm', chords:['C','G','Am','Em','C','G','B7','Em'], lead:B3_B, harm:true, counter:true, bassStyle:'pump8', arpRate:1, groove:'midGallop', sub:true, crash:true }),
+    bridge: makeSection({ bars:8, scale:'Eharm', chords:['Am','Am','Em','B7','C','C','B7','B7'], lead:B3_BRIDGE, bassStyle:'half', arpRate:2, groove:'bossBridge', sub:true }),
+    climax: makeSection({ bars:8, scale:'Gharm', chords:['Gm','Eb','Bb','D7','Gm','Eb','Cm','D7'], lead:cat(transpose(B3_HOOK,3), off(32,transpose(B3_HOOK,3)), off(64,transpose(B3_HOOK,3)), off(96,transpose(B3_CLOSE,3))), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
+    A3:     makeSection({ bars:8, scale:'Eharm', chords:['Em','C','G','B7','Em','Am','B7','Em'], lead:cat(B3_HOOK, off(32,B3_HOOK), off(64,B3_HOOK), off(96,B3_CLOSE)), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
+    outro:  makeSection({ bars:4, scale:'Eharm', chords:['Am','B7','Em','Em'], lead:B3_OUTRO, bassStyle:'half', arpRate:2, groove:'midGallop', sub:true, crash:true }),
+  },
+  arrangement: ['intro','A1','A2','B','bridge','climax','A3','outro'],
+};
+
+const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER, stage2: STAGE2, boss2: BOSS2, stage3: STAGE3, boss3: BOSS3 };
 
 // ---------------------------------------------------------------- validation (Node only)
 function validateTracks() {

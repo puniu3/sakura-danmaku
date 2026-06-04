@@ -232,11 +232,12 @@ function collidePlayerBullets(){
 function collideShotsEnemies(){
   const sh=playerShots.items, sn=playerShots.count;
   for(let ei=0;ei<enemies.length;ei++){ const e=enemies[ei]; if(e.dead) continue;
-    const pierceable=e.boss&&e.survivalActive;          // endurance spell: only pierce-shots may connect
-    if(e.invuln&&!pierceable) continue;
+    const owner=e._shareHpWith||e;                       // twin-boss bodies share one HP/invuln pool → state checks read the owner (geometry & the hit spark stay on the actual body e)
+    const pierceable=owner.boss&&owner.survivalActive;   // endurance spell: only pierce-shots may connect
+    if(owner.invuln&&!pierceable) continue;
     const ex=e.x,ey=e.y,er=e.r;
-    for(let i=0;i<sn;i++){ const s=sh[i]; if(!s.alive) continue; if(e.invuln&&!s.pierceSpell) continue; const rr=er+s.r;
-      if(dist2(s.x,s.y,ex,ey)<=rr*rr){ onEnemyHit(e,s); if(s.pierce>0) s.pierce--; else s.alive=false; if(e.dead) break; } } }
+    for(let i=0;i<sn;i++){ const s=sh[i]; if(!s.alive) continue; if(owner.invuln&&!s.pierceSpell) continue; const rr=er+s.r;
+      if(dist2(s.x,s.y,ex,ey)<=rr*rr){ onEnemyHit(e,s); if(s.pierce>0) s.pierce--; else s.alive=false; if(owner.dead) break; } } }
 }
 function collidePlayerEnemies(){
   if(!player||player.dead||player.invuln>0) return;
@@ -596,6 +597,8 @@ const SCALES = {
   Charm: [0,2,3,5,7,8,11],   // C harmonic minor: C D Eb F G Ab B
   Dharm: [1,2,4,5,7,9,10],   // D harmonic minor: D E F G A Bb C#   (Stage 2)
   Fharm: [0,1,4,5,7,8,10],   // F harmonic minor: F G Ab Bb C Db E   (Stage 2 boss climax lift)
+  Eharm: [0,3,4,6,7,9,11],   // E harmonic minor: E F# G A B C D#   (Stage 3)
+  Gharm: [0,2,3,6,7,9,10],   // G harmonic minor: G A Bb C D Eb F#   (Stage 3 boss climax lift)
 };
 function parseChord(sym) {
   let bass = null, s = sym;
@@ -983,7 +986,105 @@ const BOSS2 = {
   arrangement: ['intro','A1','A2','B','bridge','climax','A3','outro'],
 };
 
-const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER, stage2: STAGE2, boss2: BOSS2 };
+// ================================================================ STAGE 3
+// "Mayoi Bamboo" — E harmonic minor, 120 BPM. An INDEPENDENT tune (not a Stage-1/2 reskin): a winding,
+// searching koto-plucked line that wanders like the lost grove — the harmonic-minor augmented-2nd shimmer
+// here is C ↔ D# (a different colour from Stage 2's Bb↔C#), over a slower walking groove. Distinct key &
+// timbre from both earlier 道中 themes.
+const S3_HOOK = [
+  [0,76],[6,79],[10,78],            // E … G F#  — a searching off-beat rise/step
+  [16,83],[20,84],[24,87],[28,84],  // B → C6 → D#6 → C6  (the augmented-2nd shimmer C↔D#)
+  [32,81],[40,79],[44,78],          // A G F#  — winding descent
+  [48,76],[54,75],[58,76],          // E → D#5 → E  (leading-tone resolution)
+];
+const S3_HOOK2 = [ // variation tail, hangs on B (the V) for the half-cadence
+  [0,76],[6,79],[10,81],
+  [16,84],[20,87],[28,84],
+  [32,83],[40,79],
+  [48,81],[56,83],[60,83],
+];
+const S3_B = [ // 8-bar contrasting lift — lyrical, upper register
+  [0,88],[8,84],[12,87],
+  [16,83],[24,79],[28,81],
+  [32,78],[40,79],[48,83],[56,88],
+  [64,87],[72,84],[80,81],[88,79],
+  [96,81],[104,83],[112,84],[120,87],
+];
+const S3_BRIDGE = [ [0,71],[8,76],[16,79],[24,84],[32,87],[40,84],[48,81],[56,79] ];
+const S3_OUTRO = [ [0,84],[8,83],[16,81],[24,79],[32,78],[40,76],[48,76] ];
+const STAGE3 = {
+  title: 'Mayoi Bamboo', keyName: 'E harmonic minor', bpm: 120, gain: 0.55,
+  // DISTINCT timbre: a koto-plucked lead (triangle + a faint square bell octave-up, short sustain), a round
+  // sine bass, a glassy bell arp, and a forward dark pad — a wandering night-grove piece, not the Stage-1
+  // bright march nor the Stage-2 floating twilight.
+  voices: {
+    lead: { layers:[ { type:'triangle', octave:0, detune:0, gain:1.0 }, { type:'square', octave:1, detune:0, gain:0.16, filter:'lowpass', filterFreq:3000 }, { type:'sine', octave:0, detune:-5, gain:0.4 } ], atk:0.004, dec:0.10, sus:0.32, rel:0.18, maxGate:5 },
+    arp:  { layers:[ { type:'triangle', octave:1, detune:0, gain:1.0 } ], atk:0.002, dec:0.04, sus:0.12, rel:0.07, filter:'lowpass', filterFreq:3200, maxGate:1 },
+    bass: { layers:[ { type:'sine', octave:0, detune:0, gain:1.0 }, { type:'triangle', octave:0, detune:0, gain:0.35 } ], atk:0.006, dec:0.07, sus:0.6, rel:0.12, filter:'lowpass', filterFreq:640, maxGate:4 },
+    pad:  { octave:0, voices:3, detune:11, type:'sawtooth', atk:0.18, dec:0.2, sus:0.76, rel:0.6, filter:'lowpass', filterFreq:1100 } },
+  gains: { lead:0.13, harm:0.07, counter:0.07, arp:0.058, bass:0.15, sub:0.13, pad:0.072 },
+  sections: {
+    intro: makeSection({ bars:4, scale:'Eharm', chords:['Em','Em','C','B7'], bassStyle:'half', arpRate:2, groove:'introTick', sub:true, crash:true }),
+    A:     makeSection({ bars:8, scale:'Eharm', chords:['Em','C','G','B7','Em','Am','B7','Em'], lead:cat(S3_HOOK, off(64,S3_HOOK2)), bassStyle:'walk8', arpRate:2, groove:'midGroove', sub:true }),
+    A2:    makeSection({ bars:8, scale:'Eharm', chords:['Em','C','G','B7','Em','Am','B7','Em'], lead:cat(S3_HOOK, off(64,S3_HOOK2)), harm:true, bassStyle:'walk8', arpRate:2, groove:'midGroove', sub:true }),
+    B:     makeSection({ bars:8, scale:'Eharm', chords:['C','G','Am','Em','C','G','B7','B7'], lead:S3_B, counter:true, bassStyle:'walk8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
+    bridge:makeSection({ bars:4, scale:'Eharm', chords:['Am','B7','Em','B7'], lead:S3_BRIDGE, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
+    A2b:   makeSection({ bars:8, scale:'Eharm', chords:['Em','C','G','B7','Em','Am','B7','Em'], lead:cat(S3_HOOK, off(64,S3_HOOK2)), harm:true, counter:true, bassStyle:'walk8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
+    outro: makeSection({ bars:4, scale:'Eharm', chords:['Em','C','Am','B7'], lead:S3_OUTRO, bassStyle:'walk8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
+  },
+  arrangement: ['intro','A','A2','B','bridge','A2b','outro'],
+};
+
+// ================================================================ STAGE 3 BOSS
+// "Twin Moons Rising" — E harmonic minor, key-lift to G harmonic minor, 158 BPM. The 2体ボス theme: a
+// driving angular hook carried as a TWO-VOICE texture (harm = a parallel third, counter = a tight octave-down
+// echo two sixteenths later) so the line is constantly ANSWERED — a musical duet for the twin sisters. An
+// independent theme: distinct key, the C↔D# augmented-2nd colour, and a minor-third climax lift (E→G), not
+// the Stage-2 boss reshaped.
+const B3_HOOK = [
+  [0,76],[2,83],[4,84],[8,87],[10,84],[12,81],[14,79],   // E↑B C (leap) → D#6 C A G  — wide leaps, then fall
+  [16,78],[18,76],[20,83],[24,84],[26,79],[28,78],[30,76], // F# E B(leap) C G F# E  — angular
+];
+const B3_CLOSE = [ [0,84],[4,83],[8,81],[12,79],[16,78],[20,76],[24,75],[28,76] ]; // descending lament: C B A G F# E D# E
+const B3_B = [ // dramatic lift, E harmonic minor
+  [0,88],[6,84],[10,87],[16,83],[24,79],
+  [32,81],[40,84],[48,87],[56,88],
+  [64,87],[72,84],[80,81],[88,79],
+  [96,83],[104,87],[112,84],[120,88],
+];
+const B3_BRIDGE = [ // sinking, then a leading-tone climb back
+  [0,83],[8,79],[16,76],[24,72],
+  [32,71],[40,75],[48,76],[56,79],
+  [64,81],[72,84],[80,87],[88,84],
+  [96,83],[104,79],[112,76],[120,75],
+];
+const B3_OUTRO = [ [0,76],[2,83],[6,87],[12,84],[16,81],[24,79],[32,76],[48,76] ];
+const BOSS3 = {
+  title: 'Twin Moons Rising', keyName: 'E harmonic minor → G', bpm: 158, gain: 0.62,
+  // DISTINCT timbre: a bright saw+square lead doubled an octave up (a "two-bell" sheen for the twins), a
+  // triangle harm a third below, a hollow square echo (counter), a chiptune square arp, gritty saw bass.
+  voices: {
+    lead: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:0.9, filter:'lowpass', filterFreq:2700 }, { type:'triangle', octave:1, detune:0, gain:0.28 }, { type:'square', octave:0, detune:9, gain:0.4, filter:'lowpass', filterFreq:2300 } ], atk:0.004, dec:0.05, sus:0.46, rel:0.12, maxGate:6 },
+    harm: { layers:[ { type:'triangle', octave:0, detune:-5, gain:1.0 } ], atk:0.006, dec:0.05, sus:0.44, rel:0.13, filter:'lowpass', filterFreq:2600, maxGate:6 },
+    counter: { layers:[ { type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:1900 } ], atk:0.005, dec:0.05, sus:0.4, rel:0.11, maxGate:5 },
+    arp: { layers:[ { type:'square', octave:0, detune:7, gain:1.0 } ], atk:0.002, dec:0.022, sus:0.14, rel:0.05, filter:'lowpass', filterFreq:3500, maxGate:1 },
+    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.05, sus:0.6, rel:0.08, filter:'lowpass', filterFreq:1000, maxGate:3 },
+    pad: { octave:0, voices:3, detune:11, type:'sawtooth', atk:0.07, dec:0.12, sus:0.68, rel:0.4, filter:'lowpass', filterFreq:1380 } },
+  gains: { lead:0.142, harm:0.08, counter:0.085, arp:0.062, bass:0.17, sub:0.14, pad:0.056, kick:1.1, snare:1.05, crash:1.05 },
+  sections: {
+    intro:  makeSection({ bars:8, scale:'Eharm', chords:['Em','Em','B7','B7','Am','Am','B7','B7'], lead:cat(B3_HOOK, off(64,B3_HOOK)), harm:true, bassStyle:'half', arpRate:2, groove:'fourLite', sub:true, crash:true }),
+    A1:     makeSection({ bars:8, scale:'Eharm', chords:['Em','C','G','B7','Em','C','Am','B7'], lead:cat(B3_HOOK, off(32,B3_HOOK), off(64,B3_HOOK), off(96,B3_CLOSE)), counter:true, bassStyle:'gallop', arpRate:1, groove:'midGallop', sub:true, crash:true }),
+    A2:     makeSection({ bars:8, scale:'Eharm', chords:['Em','C','G','B7','Em','Am','B7','Em'], lead:cat(B3_HOOK, off(32,B3_HOOK), off(64,B3_HOOK), off(96,B3_CLOSE)), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'midGallop', sub:true, crash:true }),
+    B:      makeSection({ bars:8, scale:'Eharm', chords:['C','G','Am','Em','C','G','B7','Em'], lead:B3_B, harm:true, counter:true, bassStyle:'pump8', arpRate:1, groove:'midGallop', sub:true, crash:true }),
+    bridge: makeSection({ bars:8, scale:'Eharm', chords:['Am','Am','Em','B7','C','C','B7','B7'], lead:B3_BRIDGE, bassStyle:'half', arpRate:2, groove:'bossBridge', sub:true }),
+    climax: makeSection({ bars:8, scale:'Gharm', chords:['Gm','Eb','Bb','D7','Gm','Eb','Cm','D7'], lead:cat(transpose(B3_HOOK,3), off(32,transpose(B3_HOOK,3)), off(64,transpose(B3_HOOK,3)), off(96,transpose(B3_CLOSE,3))), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
+    A3:     makeSection({ bars:8, scale:'Eharm', chords:['Em','C','G','B7','Em','Am','B7','Em'], lead:cat(B3_HOOK, off(32,B3_HOOK), off(64,B3_HOOK), off(96,B3_CLOSE)), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
+    outro:  makeSection({ bars:4, scale:'Eharm', chords:['Am','B7','Em','Em'], lead:B3_OUTRO, bassStyle:'half', arpRate:2, groove:'midGallop', sub:true, crash:true }),
+  },
+  arrangement: ['intro','A1','A2','B','bridge','climax','A3','outro'],
+};
+
+const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER, stage2: STAGE2, boss2: BOSS2, stage3: STAGE3, boss3: BOSS3 };
   /*END:BGM:GEN*/
 
   function trackOf(n){ return (TRACKS && TRACKS[n]) ? TRACKS[n] : null; }
@@ -1106,12 +1207,14 @@ const sAt=y=>(y-HORIZON_Y)/DEN, gAt=y=>{ const t=sAt(y); return CAM*(1-t)/t; }, 
 let _hazeCap=null, _groundTile=null, _streamSpr=null, _lanternSpr=null;
 const _mistSpr=[], canopyVar=[], puffs=[], lanterns=[], STRIPS=[], _ys=[], _cxs=[], _ss=[];
 let _ghostEls=[], _ghostShore=[]; const GHOST_SPAN=360, GHOST_HOR=PF_H*0.58;   // ghost (Far Shore) fly-over: world span per far→near pass + horizon
+let _bambooStalks=[], _bambooFog=[]; const BAMBOO_SPAN=300, BAMBOO_HOR=PF_H*0.40;   // bamboo (Grove of the Lost) fly-over: world span per far→near pass + horizon
 // scenery ground colours moved to THEMES[*].ground; read via activeTheme.ground in build/drawScenery.
 // single source of truth for the path: shared by the lane stroke AND every puff/lantern x.
 function laneCx(wy){ let cx=PF_W*0.5+Math.sin(wy*0.0090)*78+Math.sin(wy*0.0235+1.7)*26; const lo=PF_W*0.30, hi=PF_W*0.70; return cx<lo?lo:(cx>hi?hi:cx); }
 function buildScenery(){
   const srng=makeRng(0x5A6B7C8D); // independent stream — must NOT perturb gameplay rng
   if(activeTheme.ghost){ buildGhostScenery(srng); return; }   // Far Shore (Stage 2): no road tiles — a fly-over of still water + onibi
+  if(activeTheme.bamboo){ buildBambooScenery(srng); return; }   // Grove of the Lost (Stage 3): no road tiles — a fly-over THROUGH bamboo
   // ground patchwork tile, authored seamless over TILE_H (patches drawn at y, y±TILE_H)
   { const cv=document.createElement('canvas'); cv.width=PF_W; cv.height=TILE_H; const c=cv.getContext('2d');
     const G=activeTheme.ground; c.fillStyle=G.base; c.fillRect(0,0,PF_W,TILE_H);
@@ -1166,6 +1269,7 @@ function drawScenery(){
   bgSpeed+=(target-bgSpeed)*Math.min(1,dT*0.7);                    // ~1.4s ease to a hover on boss arrival
   bgScroll=(bgScroll+bgSpeed*dT)%LANE_SPAN; const sc=bgScroll;     // sc = world-travel distance flown
   if(activeTheme.ghost){ drawSceneryGhost(sc); return; }           // Far Shore: road-less fly-over (shares bgScroll → same slow cruise + ease-to-hover)
+  if(activeTheme.bamboo){ drawSceneryBamboo(sc); return; }         // Grove of the Lost: road-less fly-over THROUGH bamboo (shares bgScroll)
   ctx.save();
   ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='low';
   // GROUND: 24 horizontal strips, each a depth-mapped slice of the seamless tile → vertical foreshortening.
@@ -1221,6 +1325,49 @@ function drawSceneryGhost(sc){
   ctx.restore();
 }
 
+// ---- Grove of the Lost (Stage 3) scenery: a road-LESS forward cruise THROUGH a night bamboo forest ----
+// World-fixed bamboo stalks at evenly-spread worldY are depth-projected (same far→near scheme as the ghost
+// branch: p = phase of the worldY−sc loop) and rush past on both flanks, towering as they near; a low
+// lantern-gold horizon glow marks a lit clearing deep in the grove, and pale jade fog sheets drift across
+// for the 迷宮 (lost-in-the-grove) veil. Positions baked off the independent srng (gameplay rng untouched).
+function buildBambooScenery(srng){
+  _bambooStalks.length=0; const N=22;
+  for(let i=0;i<N;i++){ const side=srng()<0.5?-1:1;
+    _bambooStalks.push({ worldY:i*(BAMBOO_SPAN/N)+srng()*12, lat:side*(0.5+srng()*0.7), ph:srng()*TAU, sw:0.7+srng()*0.7, th:0.82+srng()*0.5, hj:(srng()*2-1)*10, seg:5+((srng()*3)|0) }); }
+  _bambooFog.length=0;
+  for(let k=0;k<3;k++){ const H=120, cv=document.createElement('canvas'); cv.width=PF_W; cv.height=H; const c=cv.getContext('2d');
+    for(let w=0;w<4;w++){ const cx=srng()*PF_W, cy=H*0.5+(srng()-0.5)*40, rx=90+srng()*120, ry=24+srng()*18; const g=c.createRadialGradient(cx,cy,2,cx,cy,rx); g.addColorStop(0,'rgba(202,228,206,0.15)'); g.addColorStop(1,'rgba(202,228,206,0)'); c.fillStyle=g; c.save(); c.translate(cx,cy); c.scale(1,ry/rx); c.beginPath(); c.arc(0,0,rx,0,TAU); c.fill(); c.restore(); }
+    _bambooFog.push(cv); }
+}
+function drawBambooStalk(x,baseY,s,a,e){
+  const H=Math.min(PF_H*1.25,330*s), w=6.5*s, sway=Math.sin(T*0.5+e.ph)*8*s*e.sw, topX=x+sway, topY=baseY-H, hue=140+e.hj;
+  ctx.save(); ctx.globalAlpha=a;
+  const g=ctx.createLinearGradient(x-w,0,x+w,0); g.addColorStop(0,'hsl('+hue+',32%,15%)'); g.addColorStop(0.45,'hsl('+hue+',42%,33%)'); g.addColorStop(0.7,'hsl('+(hue+8)+',46%,46%)'); g.addColorStop(1,'hsl('+hue+',34%,21%)');
+  ctx.fillStyle=g; ctx.beginPath(); ctx.moveTo(x-w,baseY); ctx.quadraticCurveTo(x-w*0.6+sway*0.5,(baseY+topY)/2,topX-w*0.5,topY); ctx.lineTo(topX+w*0.5,topY); ctx.quadraticCurveTo(x+w*0.6+sway*0.5,(baseY+topY)/2,x+w,baseY); ctx.closePath(); ctx.fill();
+  const segs=e.seg; for(let i=1;i<=segs;i++){ const u=i/(segs+0.5), nx=x+sway*u, ny=baseY-H*u, nw=w*(1-u*0.42); ctx.strokeStyle='hsla('+(hue+14)+',55%,'+(58-u*8)+'%,0.7)'; ctx.lineWidth=Math.max(1,1.5*s); ctx.beginPath(); ctx.moveTo(nx-nw,ny); ctx.lineTo(nx+nw,ny+1.2*s); ctx.stroke(); ctx.strokeStyle='hsla('+hue+',40%,12%,0.5)'; ctx.beginPath(); ctx.moveTo(nx-nw,ny+2*s); ctx.lineTo(nx+nw,ny+3.2*s); ctx.stroke(); }
+  ctx.globalCompositeOperation='lighter';
+  for(let i=0;i<4;i++){ const dir=(i&1)?1:-1, la=dir*(0.5+i*0.18)+Math.sin(T*0.6+e.ph+i)*0.14, ll=20*s+i*3*s; ctx.save(); ctx.translate(topX,topY+i*3*s); ctx.rotate(la); ctx.fillStyle='hsla('+(hue+6)+',58%,50%,'+(0.42*a).toFixed(2)+')'; ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(ll*0.4,-2*s,ll,0); ctx.quadraticCurveTo(ll*0.4,2.5*s,0,0); ctx.fill(); ctx.restore(); }
+  ctx.restore();
+}
+function drawSceneryBamboo(sc){
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';   // low horizon glow — a lit clearing deep in the grove (jade haze + lantern-gold core)
+  { const gx=PF_W*0.5, gy=BAMBOO_HOR+8, gg=ctx.createRadialGradient(gx,gy,0,gx,gy,PF_W*0.9); gg.addColorStop(0,'rgba(120,210,150,0.22)'); gg.addColorStop(0.5,'rgba(150,200,120,0.09)'); gg.addColorStop(1,'rgba(150,200,120,0)'); ctx.fillStyle=gg; ctx.fillRect(0,BAMBOO_HOR-60,PF_W,PF_H-BAMBOO_HOR+60); }
+  { const gx=PF_W*0.5, gy=BAMBOO_HOR+2, lg=ctx.createRadialGradient(gx,gy,0,gx,gy,PF_W*0.42); lg.addColorStop(0,'rgba(255,222,150,0.22)'); lg.addColorStop(1,'rgba(255,222,150,0)'); ctx.fillStyle=lg; ctx.beginPath(); ctx.arc(gx,gy,PF_W*0.42,0,TAU); ctx.fill(); }
+  ctx.globalCompositeOperation='source-over';
+  { ctx.save(); ctx.strokeStyle='rgba(26,58,44,0.8)'; ctx.lineWidth=1.4;   // far bamboo wall: hazy vertical strokes near the horizon → "endless bamboo" depth cue
+    for(let i=0;i<28;i++){ const x=((i/28*PF_W+sc*0.06)%(PF_W+20))-10+Math.sin(i*1.7)*3; ctx.globalAlpha=0.16+0.16*Math.sin(i*2.1); ctx.beginPath(); ctx.moveTo(x,BAMBOO_HOR); ctx.lineTo(x+Math.sin(i)*1.5,BAMBOO_HOR-30-Math.sin(i*3.3)*8); ctx.stroke(); } ctx.restore(); }
+  { const wb=ctx.createLinearGradient(0,BAMBOO_HOR,0,PF_H); wb.addColorStop(0,'rgba(16,40,32,0)'); wb.addColorStop(1,'rgba(14,36,28,0.55)'); ctx.fillStyle=wb; ctx.fillRect(0,BAMBOO_HOR,PF_W,PF_H-BAMBOO_HOR); }   // dim mossy floor fading down
+  const SP=BAMBOO_SPAN, list=_bambooStalks.map(e=>({ p:1-((((e.worldY-sc)%SP)+SP)%SP)/SP, e })).sort((A,B)=>A.p-B.p);   // far→near, painted back-to-front
+  for(const o of list){ const p=o.p, e=o.e; if(p<=0.015) continue; const a=Math.min(1,p*3.4)*Math.min(1,(1.05-p)*8); if(a<=0.01) continue;
+    const s=0.06+Math.pow(p,1.7)*1.7, baseY=BAMBOO_HOR+(PF_H+120-BAMBOO_HOR)*Math.pow(p,1.5), x=PF_W*0.5+e.lat*(16+Math.pow(p,1.35)*PF_W*0.62);
+    drawBambooStalk(x,baseY,s*e.th,a,e); }
+  ctx.globalCompositeOperation='lighter';   // drifting fog sheets (the 迷宮 obscuring veil)
+  const bandH=PF_H*0.5; for(let k=0;k<3;k++){ const fy=PF_H*0.28+(((sc*(0.8+k*0.5)+k*240)%bandH)+bandH)%bandH-60; ctx.drawImage(_bambooFog[k],0,fy); }
+  ctx.globalCompositeOperation='source-over';
+  { const fv=ctx.createLinearGradient(0,PF_H*0.78,0,PF_H); fv.addColorStop(0,'rgba(150,210,170,0)'); fv.addColorStop(1,'rgba(120,180,140,0.14)'); ctx.fillStyle=fv; ctx.fillRect(0,PF_H*0.78,PF_W,PF_H*0.22); }   // near ground-fog veil
+  ctx.restore();
+}
 // ---- spell bg + boss + banner ----
 function drawSpellBackground(t,intensity){ if(intensity<=0) return; ctx.save(); const g=ctx.createRadialGradient(PF_W*0.5,PF_H*0.42,40,PF_W*0.5,PF_H*0.42,PF_H*0.8); g.addColorStop(0,'rgba(60,20,90,0)'); g.addColorStop(1,'rgba(20,6,34,'+(0.5*intensity)+')'); ctx.fillStyle=g; ctx.fillRect(0,0,PF_W,PF_H); ctx.globalCompositeOperation='lighter'; ctx.translate(PF_W*0.5,PF_H*0.42); ctx.rotate(t*0.25); for(let i=0;i<10;i++){ ctx.rotate(TAU/10); const sg=ctx.createLinearGradient(0,0,0,-PF_H); sg.addColorStop(0,'rgba(180,120,255,'+(0.1*intensity)+')'); sg.addColorStop(1,'rgba(180,120,255,0)'); ctx.fillStyle=sg; ctx.beginPath(); ctx.moveTo(-26,0); ctx.lineTo(26,0); ctx.lineTo(8,-PF_H); ctx.lineTo(-8,-PF_H); ctx.closePath(); ctx.fill(); } ctx.restore(); }
 // ---- boss designs (dispatched on boss.design; set in stageScript via spec.design) ----
@@ -1277,6 +1424,37 @@ function drawBossPhantom(c,t){ const H=212;
   c.save(); c.globalCompositeOperation='lighter'; const eg=0.65+0.35*Math.sin(t*3.3);   // eerie glowing eyes
   for(const sx of [-6.5,6.5]){ c.save(); c.translate(sx,-28); bossGlow(c,9,H,96,82,0.7*eg); c.fillStyle='hsla('+H+',96%,'+(68+eg*20)+'%,0.96)'; c.beginPath(); c.ellipse(0,0,2.6,4.4,sx<0?0.3:-0.3,0,TAU); c.fill(); c.restore(); }
   bossGlow(c,16,H,70,92,0.8); c.restore();                   // core glow at the gameplay centre
+}
+// STAGE 3 BOSS — the twin sisters of the bamboo grove, 宵 (Yoi, deep indigo H=265) & 暁 (Akatsuki, amber
+// H=32), a MIRROR PAIR (drawn by the same fn; `flip` horizontally mirrors one so they read as reflections).
+// A spirit-maiden silhouette: a crescent-moon halo, a small crown of orbiting hitodama, flowing wavering
+// sleeves, a kimono torso with an obi sash, long twin-tail hair sweeping aside (the asymmetry the mirror
+// reflects), a veiled face + one eerie glowing eye. Centred on the origin = the gameplay hit point.
+function drawBossTwin(c,t,H,flip){ c.save(); if(flip) c.scale(-1,1);
+  const pulse=0.9+0.08*Math.sin(t*2.6);
+  c.save(); c.globalCompositeOperation='lighter'; c.scale(pulse,pulse); bossGlow(c,58,H,70,58,0.4); c.restore();   // cold halo
+  c.save(); c.globalCompositeOperation='lighter'; c.translate(0,-30); c.rotate(-0.5+Math.sin(t*0.6)*0.05);          // crescent-moon halo
+    c.strokeStyle='hsla('+H+',80%,82%,0.7)'; c.lineWidth=3; c.beginPath(); c.arc(0,0,30,Math.PI*0.15,Math.PI*1.05); c.stroke();
+    c.strokeStyle='hsla('+H+',92%,93%,0.5)'; c.lineWidth=1.2; c.beginPath(); c.arc(0,0,30,Math.PI*0.15,Math.PI*1.05); c.stroke(); c.restore();
+  for(let i=0;i<4;i++){ const aa=t*0.9+i/4*TAU, x=Math.cos(aa)*46, y=Math.sin(aa)*22-22, sc=0.7+0.35*Math.sin(aa), fh=(H+i*10)%360;   // crown of hitodama
+    c.save(); c.translate(x,y); c.scale(sc,sc); c.globalCompositeOperation='lighter'; bossGlow(c,12,fh,90,76,0.8); c.fillStyle='hsla('+fh+',96%,86%,0.95)'; c.beginPath(); c.moveTo(0,-7); c.quadraticCurveTo(5,2,0,7); c.quadraticCurveTo(-5,2,0,-7); c.fill(); c.restore(); }
+  c.save(); c.globalCompositeOperation='lighter';            // flowing wavering sleeves/robe below
+  for(let k=3;k>=1;k--){ const ph=t*1.6; c.fillStyle='hsla('+H+',68%,'+(58+k*5)+'%,'+(0.11*k)+')';
+    c.beginPath(); c.moveTo(-16,-10);
+    for(let i=0;i<=10;i++){ const u=i/10, x=-26+52*u+Math.sin(ph+u*5+k)*5, y=-10+58*u+Math.sin(ph*1.2+u*6+k*1.3)*9*(0.3+u); c.lineTo(x,y); }
+    c.lineTo(16,-10); c.quadraticCurveTo(0,-2,-16,-10); c.fill(); }
+  c.restore();
+  c.fillStyle='hsla('+H+',28%,90%,0.96)';                    // opaque kimono torso + head (solid silhouette; hitR covers this)
+  c.beginPath(); c.moveTo(0,-38); c.bezierCurveTo(15,-37,18,-16,16,-2); c.bezierCurveTo(20,16,12,34,0,38); c.bezierCurveTo(-12,34,-20,16,-16,-2); c.bezierCurveTo(-18,-16,-15,-37,0,-38); c.fill();
+  c.strokeStyle='hsla('+H+',78%,84%,0.45)'; c.lineWidth=1.3; c.stroke();
+  c.fillStyle='hsla('+H+',70%,60%,0.55)'; c.fillRect(-16,2,32,6);   // obi sash (mirror-accent band)
+  c.save(); c.strokeStyle='hsla('+H+',45%,28%,0.85)'; c.lineCap='round';   // long twin-tail hair sweeping aside
+  for(let s2=0;s2<2;s2++){ c.lineWidth=5-s2*1.5; c.beginPath(); c.moveTo(-8+s2*4,-30); for(let i=1;i<=6;i++){ const u=i/6; c.lineTo(-14-u*16+Math.sin(t*1.2+u*4+s2)*4,-28+u*46); } c.stroke(); } c.restore();
+  c.fillStyle='hsla('+H+',50%,36%,0.3)'; c.beginPath(); c.ellipse(0,-22,12,13,0,0,TAU); c.fill();   // veil shadow over the face
+  c.save(); c.globalCompositeOperation='lighter'; const eg=0.6+0.4*Math.sin(t*3.3);   // eerie glowing eyes
+  for(const sx of [-5,5]){ c.save(); c.translate(sx,-23); bossGlow(c,7,H,96,82,0.7*eg); c.fillStyle='hsla('+H+',96%,'+(70+eg*18)+'%,0.96)'; c.beginPath(); c.ellipse(0,0,2.1,3.6,sx<0?0.3:-0.3,0,TAU); c.fill(); c.restore(); }
+  bossGlow(c,13,H,70,90,0.7); c.restore();
+  c.restore();
 }
 // generic fallback (original ellipse-with-wings) — drawn at origin; used when boss.design is unset
 function drawBossGeneric(c,t){ c.save(); c.globalCompositeOperation='lighter'; for(let k=0;k<2;k++){ c.save(); c.rotate(t*BOSS_AURA_SPIN*(k?-1:1)+k); const col=k?PALETTE.auraB:PALETTE.auraA; const g=c.createRadialGradient(0,0,6,0,0,46+k*10); g.addColorStop(0,hexA(col,0.5)); g.addColorStop(1,hexA(col,0)); c.fillStyle=g; for(let p=0;p<6;p++){ c.rotate(Math.PI/3); c.beginPath(); c.ellipse(20,0,26,9,0,0,TAU); c.fill(); } c.restore(); } c.restore(); c.fillStyle=PALETTE.bossBody; c.beginPath(); c.ellipse(0,4,16,22,0,0,TAU); c.fill(); c.beginPath(); c.arc(0,-16,9,0,TAU); c.fill(); c.strokeStyle=PALETTE.bossRim; c.lineWidth=1.6; c.beginPath(); c.ellipse(0,4,16,22,0,0,TAU); c.stroke(); c.beginPath(); c.arc(0,-16,9,0,TAU); c.stroke(); c.fillStyle=hexA(PALETTE.bossRim,0.5); c.beginPath(); c.moveTo(-16,-2); c.quadraticCurveTo(-40,-18,-30,12); c.quadraticCurveTo(-22,2,-16,6); c.fill(); c.beginPath(); c.moveTo(16,-2); c.quadraticCurveTo(40,-18,30,12); c.quadraticCurveTo(22,2,16,6); c.fill(); }
@@ -1453,7 +1631,7 @@ function RenderFrame(now,alpha){ const dt=_lastNow?Math.min(0.05,(now-_lastNow)/
   ctx.save(); ctx.beginPath(); ctx.rect(PF_X,PF_Y,PF_W,PF_H); ctx.clip();
   ctx.save(); ctx.translate(PF_X,PF_Y); drawBackground(T); drawScenery(); updateAndDrawPetals(paused?0:dt,T); const spellI=(game.boss&&game.boss.inSpell&&!game.boss.dead)?(game.spellIntensity!=null?game.spellIntensity:1):0; drawSpellBackground(T,spellI); if(game.state===STATE.PLAYING||game.state===STATE.PAUSED||game.boss){ ctx.fillStyle='rgba(22,9,38,0.36)'; ctx.fillRect(0,0,PF_W,PF_H); } if(game.state===STATE.PLAYING) drawPocLine(); ctx.restore();
   ctx.save(); ctx.translate(PF_X,PF_Y); drawCutin(paused?0:dt); ctx.restore();   // cut-in: above background, BELOW bullets/sprites (no shake — it's a backdrop)
-  ctx.save(); ctx.translate(PF_X+cam.shakeX,PF_Y+cam.shakeY); drawGrazeLaser(T); drawItems(T); drawPlayerShots(alpha); if(game.boss&&!game.boss.dead) drawBoss(game.boss,T); drawEnemies(ctx,T,alpha); drawParticles(); drawLaserBulletContrast(alpha); drawEnemyBullets(alpha); drawPlayer(T); drawWaves(dt); drawPops(dt); ctx.restore();  // laser drawn first (back-most) so enemy bullets & items stay visible on top; contrast backing keeps on-beam bullets readable
+  ctx.save(); ctx.translate(PF_X+cam.shakeX,PF_Y+cam.shakeY); drawGrazeLaser(T); drawItems(T); drawPlayerShots(alpha); if(game.boss&&!game.boss.dead){ drawBoss(game.boss,T); const _tw=game.boss._twin; if(_tw&&!_tw.dead) drawBoss(_tw,T); } drawEnemies(ctx,T,alpha); drawParticles(); drawLaserBulletContrast(alpha); drawEnemyBullets(alpha); drawPlayer(T); drawWaves(dt); drawPops(dt); ctx.restore();  // laser drawn first (back-most) so enemy bullets & items stay visible on top; contrast backing keeps on-beam bullets readable
   ctx.save(); ctx.translate(PF_X,PF_Y); drawBanner(paused?0:dt); drawFlash(); drawVignette(T); ctx.restore();
   ctx.restore();
   ctx.setTransform(dpr,0,0,dpr,0,0); drawHUD(); drawTouchControls(); drawOverlays();
@@ -1483,6 +1661,16 @@ const THEMES = {
     petal:['#355b4d','#2c5042','#3f6a59'], petalEdge:'#4d7a66', petalAlpha:0.5,
     ground:{ base:'#1c4638', tones:['#173a30','#1e5246','#123028','#205a4a','#15403a'], seam:'rgba(20,52,46,0.42)',
              laneShoulder:'rgba(20,52,46,0.5)', laneBed:'#1e5246', lanePave:'rgba(150,225,170,0.20)' } },
+  // Stage 3 — "Grove of the Lost" (迷いの竹林): a deep night bamboo forest. Teal-black sky bleeding to a
+  // pale lantern-lit mist at the horizon. bamboo:true ⇒ buildScenery/drawScenery take the road-LESS bamboo
+  // branch (drawSceneryBamboo): a forward cruise THROUGH towering bamboo stalks rushing past on both flanks,
+  // wrapped in drifting fog + a low lantern-gold horizon glow (迷宮/静寂/不気味). Drifting "petals" here are
+  // bamboo leaves + faint gold lantern-motes; petalAlpha recedes them below the bullet brightness band.
+  bamboo: { name:'Grove of the Lost', bamboo:true,
+    sky:{ top:'#101e1b', mid:'#234738', bot:'#c9e0cc' }, cloud:'rgba(180,228,188,0.16)',
+    petal:['#b6a861','#8fbf7d','#cdd693'], petalEdge:'#e6d79a', petalAlpha:0.5,
+    ground:{ base:'#13302a', tones:['#10342a','#1b4634','#0e2a22','#234e38','#15403a'], seam:'rgba(18,46,40,0.42)',
+             laneShoulder:'rgba(18,46,40,0.5)', laneBed:'#1b4634', lanePave:'rgba(180,228,188,0.18)' } },
 };
 let activeTheme = THEMES.spring;
 // boss visual designs: draw fn + render scale + hitbox radius, one record per design id. Collapses
@@ -1492,6 +1680,8 @@ const BOSS_DESIGNS = {
   wisp:    { draw:drawBossWisp,    scale:0.55, hitR:32 },
   mandala: { draw:drawBossMandala, scale:0.60, hitR:60 },
   phantom: { draw:drawBossPhantom, scale:1.0,  hitR:40 },
+  twinYoi:      { draw:(c,t)=>drawBossTwin(c,t,265,false), scale:0.82, hitR:30 },   // 宵 — deep indigo sister (left)
+  twinAkatsuki: { draw:(c,t)=>drawBossTwin(c,t,32,true),   scale:0.82, hitR:30 },   // 暁 — amber sister (right, mirrored)
 };
 function bakePetals(theme){ const out=[]; theme.petal.forEach(col=>{ const W=24,cv=document.createElement('canvas'); cv.width=W; cv.height=W; const c=cv.getContext('2d'); c.translate(W/2,W/2); c.fillStyle=col; c.beginPath(); c.moveTo(0,-9); c.bezierCurveTo(7,-6,7,6,0,9); c.bezierCurveTo(-7,6,-7,-6,0,-9); c.fill(); c.strokeStyle=theme.petalEdge; c.lineWidth=0.8; c.beginPath(); c.moveTo(0,-8); c.lineTo(0,7); c.stroke(); out.push(cv); }); _petalSprite=out; }
 function setTheme(key){ const t=THEMES[key]; if(!t) return; activeTheme=t; _skyCache.d=999; bakePetals(t); buildScenery(); }
@@ -1746,7 +1936,7 @@ function fireShot(x,y,a,speed,dmg,style){ const b=playerShots.acquire(); if(!b) 
 function nearestEnemy(x,y){ let best=null,bd=1e9; for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(!e||e.dead) continue; const d=(e.x-x)*(e.x-x)+(e.y-y)*(e.y-y); if(d<bd){ bd=d; best=e; } } return best; }
 // homing only targets enemies with an effective hitbox — skip invulnerable ones (an entering/announcing "準備中" boss),
 // but a boss in a survival/耐久 spell IS targetable since the power-up's pierce damages it.
-function nearestHomingTarget(x,y){ let best=null,bd=1e9; for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(!e||e.dead) continue; if(e.invuln&&!(e.boss&&e.survivalActive)) continue; const d=(e.x-x)*(e.x-x)+(e.y-y)*(e.y-y); if(d<bd){ bd=d; best=e; } } return best; }
+function nearestHomingTarget(x,y){ let best=null,bd=1e9; for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(!e||e.dead) continue; const owner=e._shareHpWith||e; if(owner.invuln&&!(owner.boss&&owner.survivalActive)) continue; const d=(e.x-x)*(e.x-x)+(e.y-y)*(e.y-y); if(d<bd){ bd=d; best=e; } } return best; }   // owner-gated so a twin body isn't targeted during the shared pool's invuln windows
 function clampAngle(a,lo,hi){ while(a>Math.PI) a-=TAU; while(a<-Math.PI) a+=TAU; return a<lo?lo:(a>hi?hi:a); }
 
 // ---- graze power-up: activation + the super-shot (ignores power level; fires regardless of fireHeld) ----
@@ -1776,14 +1966,14 @@ function updHomingShot(s,dt){ const tgt=nearestHomingTarget(s.x,s.y);
 // continuous laser: damage every enemy in a vertical column above the player (pierces all; trims survival timers)
 function grazeLaserDamage(dt){ const px=player.x, py=player.y, halfW=GRAZE_LASER_HALFW, dmg=GRAZE_LASER_DPS*dt;
   for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(!e||e.dead) continue;
-    const pierceable=e.boss&&e.survivalActive; if(e.invuln&&!pierceable) continue;
+    const owner=e._shareHpWith||e; const pierceable=owner.boss&&owner.survivalActive; if(owner.invuln&&!pierceable) continue;   // eligibility reads the shared owner (twin-boss); the column hit stays per-body so either sister can be lasered
     if(e.y>py) continue; if(Math.abs(e.x-px)>halfW+e.r) continue;
     damageEnemy(e,dmg,GRAZE_PIERCE);
     if(pierceable&&(rng()<0.25)) spawnParticle(e.x+(rng()-0.5)*e.r,e.y+(rng()-0.5)*e.r,(rng()-0.5)*60,(rng()-0.5)*60,{life:0.25,kind:'sparkle',hue:GRAZE_HUE,r:2.4}); } }
 
 function tryBomb(){ if(player.state!=='alive'||player.bombs<=0) return false; doBomb(false); return true; }
 function doBomb(isDeathbomb){ player.bombs--; player.invuln=Math.max(player.invuln,BOMB_INVULN); player.bombActive=BOMB_INVULN; player.bossDot=BOMB_DOT_TIME; Render.flash(BOMB_FLASH,55); Render.shake(0.6); Render.cancelWave(player.x,player.y,55,1.2); clearBulletsToSparkles(player.x,player.y,1e9); for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(e&&!e.boss&&!e.dead&&!e.invuln) damageEnemy(e,99999,true); } sfx.bomb&&sfx.bomb(); }
-function applyBossDot(dt){ if(player.bossDot>0){ player.bossDot-=dt; for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(e&&!e.dead&&!e.invuln) damageEnemy(e,BOMB_BOSS_DPS*dt,true); } } }
+function applyBossDot(dt){ if(player.bossDot>0){ player.bossDot-=dt; for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(e&&!e.dead&&!e._shareHpWith&&!e.invuln) damageEnemy(e,BOMB_BOSS_DPS*dt,true); } } }   // skip twin-boss secondary bodies: the DoT must hit a shared HP pool only ONCE per frame (the primary carries it; the redirect would otherwise double-count)
 function clearBulletsToSparkles(cx,cy,radius){ const r2=radius*radius; enemyBullets.forEachLive(b=>{ if(!b.alive) return; const d=(b.x-cx)*(b.x-cx)+(b.y-cy)*(b.y-cy); if(d<=r2){ b.alive=false; addScore(10); spawnParticle(b.x,b.y,(rng()-0.5)*60,(rng()-0.5)*60,{life:0.3,kind:'sparkle',hue:b.hue||55,r:2.6}); } }); }
 
 function onPlayerHit(srcBullet,enemy){ if(player.state!=='alive'||player.invuln>0) return;
@@ -1903,7 +2093,7 @@ function* delayed(sec,gen){ yield* waitT(sec); yield* gen; }   // stagger a wave
 // ---- enemy ----
 function spawnEnemy(spec){ const _hp=(spec.hp||1); const e={ x:spec.x, y:spec.y, vx:0, vy:0, hp:_hp, maxHp:_hp, r:spec.r||R_POP_MED, hue:spec.hue!=null?spec.hue:200, boss:!!spec.boss, bodyDamage:!!spec.bodyDamage, score:spec.score||1000, drops:spec.drops||[], dead:false, invuln:false, born:T, _spec:spec, _steered:false }; enemies.push(e); if(spec.coro) Director.fork(()=>spec.coro(e),e); return e; }
 function enemyIntegrate(e,dt){ if(e._steered){ e._steered=false; return; } e.x+=e.vx*dt; e.y+=e.vy*dt; }
-function damageEnemy(e,dmg,opts){ if(!e||e.dead) return false;
+function damageEnemy(e,dmg,opts){ if(!e) return false; if(e._shareHpWith) e=e._shareHpWith; if(e.dead) return false;   // twin-boss body → all damage lands on the shared HP/invuln pool (the primary)
   // endurance (耐久/survival) spell: invulnerable to normal damage; only pierce-shots act, by trimming the
   // remaining timer in proportion to the HP fraction dealt. Bombs are not pierce-flagged → cannot break it.
   if(e.boss&&e.survivalActive){ if(opts&&opts.pierce){ if(e.survivalTotal>0&&e.maxHp>0) e.timer=Math.max(0,e.timer-e.survivalTotal*(dmg/e.maxHp)); e.hp=Math.max(0,e.hp-dmg); } return false; }   // pierce drains BOTH the HP bar and the survival timer (HP fraction removed == time fraction removed)
@@ -1927,8 +2117,8 @@ function* fireSpiralTurret(e,opts){ const period=opts.period||0.06, da=opts.da||
 // opts.yStep (px) staggers each successive enemy's entry depth → a diagonal ECHELON line instead of a flat
 // 横一列 row (sign chooses up/down slant). yStep omitted ⇒ flat row, unchanged (Stage 1 never passes it).
 function waveSideSweep(opts){ return (function*(){ const n=opts.n||6, side=opts.side||'left', y=opts.y||90, hue=opts.hue!=null?opts.hue:205, yStep=opts.yStep||0, halveP=!!opts.halvePower, sparse=!!opts.sparse; const fromX=side==='left'?-SPAWN_MARGIN:PF_W+SPAWN_MARGIN, toX=side==='left'?PF_W+SPAWN_MARGIN:-SPAWN_MARGIN; for(let i=0;i<n;i++){ const ey=y+i*yStep; spawnEnemy({ x:fromX, y:ey, hp:HP_POP_LIGHT, r:R_POP_LIGHT, hue:hue, score:400, drops:(sparse&&i%2!==0)?[]:((i%3===0&&(!halveP||i%6===0))?['power']:['point']), coro:function*(e){ yield* moveTo(e,side==='left'?40:PF_W-40,ey,0.7,EASE.out); const fc=Director.fork(()=>fireAimedBursts(e,{period:1.0,n:1,speed:150,hue:hue,style:'mid'}),e); yield* moveTo(e,toX,ey+60,3.2,EASE.linear); Director.kill(fc); despawnEnemy(e); } }); yield* waitT(opts.spacing||0.18); } })(); }
-function waveVFormation(opts){ return (function*(){ const half=opts.half||4, apexX=opts.apexX||PF_W/2, apexY=opts.apexY||80, dx=opts.dx||30, dy=opts.dy||26, hue=opts.hue!=null?opts.hue:350; for(let s=-1;s<=1;s+=2){ for(let i=(s<0?half:0); s<0?i>=1:i<=half; i+=(s<0?-1:1)){ const tx=apexX+s*i*dx, ty=apexY+i*dy; spawnEnemy({ x:apexX, y:-SPAWN_MARGIN, hp:HP_POP_MED, r:R_POP_MED, hue:hue, score:600, drops:['power','point'], coro:function*(e){ yield* moveTo(e,tx,ty,0.9,EASE.out); yield* holdFire(e,function*(en){ yield* fireRings(en,{period:1.1,count:12,speed:110,hue:hue,aim:true}); },2.4); yield* exitOff(e,Math.PI*0.5+(s*0.25)); } }); yield* waitT(0.08); } } })(); }
-function waveStream(opts){ return (function*(){ const n=opts.n||10, x=opts.x||PF_W*0.5, hue=opts.hue!=null?opts.hue:130; for(let i=0;i<n;i++){ const cx=x+Math.sin(i*0.6)*(opts.amp||60); spawnEnemy({ x:cx, y:-SPAWN_MARGIN, hp:HP_POP_MED, r:R_POP_MED, hue:hue, score:450, drops:i%2?['point']:['power'], coro:function*(e){ const fc=Director.fork(()=>fireAimedBursts(e,{period:1.3,n:3,spread:0.25,speed:140,hue:hue}),e); yield* moveTo(e,cx+rng.range(-30,30),PF_H+SPAWN_MARGIN,4.0,EASE.linear); Director.kill(fc); despawnEnemy(e); } }); yield* waitT(opts.spacing||0.45); } })(); }
+function waveVFormation(opts){ return (function*(){ const half=opts.half||4, apexX=opts.apexX||PF_W/2, apexY=opts.apexY||80, dx=opts.dx||30, dy=opts.dy||26, hue=opts.hue!=null?opts.hue:350, halveP=!!opts.halvePower; for(let s=-1;s<=1;s+=2){ for(let i=(s<0?half:0); s<0?i>=1:i<=half; i+=(s<0?-1:1)){ const tx=apexX+s*i*dx, ty=apexY+i*dy; spawnEnemy({ x:apexX, y:-SPAWN_MARGIN, hp:HP_POP_MED, r:R_POP_MED, hue:hue, score:600, drops:halveP?['point']:['power','point'], coro:function*(e){ yield* moveTo(e,tx,ty,0.9,EASE.out); yield* holdFire(e,function*(en){ yield* fireRings(en,{period:1.1,count:12,speed:110,hue:hue,aim:true}); },2.4); yield* exitOff(e,Math.PI*0.5+(s*0.25)); } }); yield* waitT(0.08); } } })(); }
+function waveStream(opts){ return (function*(){ const n=opts.n||10, x=opts.x||PF_W*0.5, hue=opts.hue!=null?opts.hue:130, halveP=!!opts.halvePower; for(let i=0;i<n;i++){ const cx=x+Math.sin(i*0.6)*(opts.amp||60); spawnEnemy({ x:cx, y:-SPAWN_MARGIN, hp:HP_POP_MED, r:R_POP_MED, hue:hue, score:450, drops:(i%2)?['point']:((!halveP||i%4===0)?['power']:['point']), coro:function*(e){ const fc=Director.fork(()=>fireAimedBursts(e,{period:1.3,n:3,spread:0.25,speed:140,hue:hue}),e); yield* moveTo(e,cx+rng.range(-30,30),PF_H+SPAWN_MARGIN,4.0,EASE.linear); Director.kill(fc); despawnEnemy(e); } }); yield* waitT(opts.spacing||0.45); } })(); }
 function waveTurrets(opts){ return (function*(){ const xs=opts.xs||[PF_W*0.28,PF_W*0.72], y=opts.y||130, hue=opts.hue!=null?opts.hue:280; for(let i=0;i<xs.length;i++){ spawnEnemy({ x:xs[i], y:-SPAWN_MARGIN, hp:HP_POP_HEAVY, r:R_POP_HEAVY, hue:hue, score:1250, drops:['power','power','point'], cancelOnDeath:0.4, coro:function*(e){ yield* moveTo(e,xs[i],y,1.0,EASE.out); yield* holdFire(e,function*(en){ yield* fireSpiralTurret(en,{da:i?-0.33:0.33,period:0.07,arms:2,speed:125,a0:i*Math.PI}); },opts.hold||5.0); yield* exitOff(e,i?Math.PI*0.85:Math.PI*0.15,140); } }); } yield; })(); }
 // wave registry: friendly name -> factory(opts) -> generator. The stage timeline (Phase 7 STAGES data)
 // references waves by name; runStage resolves them here. The "id-referenced generator registry" for waves.
@@ -1955,7 +2145,17 @@ const WAVES = { sideSweep:waveSideSweep, vFormation:waveVFormation, stream:waveS
 
 // ---- boss: descriptor-driven phase machine ----
 function makeBoss(spec){ const _bd=BOSS_DESIGNS[spec.design]; const b=spawnEnemy({ x:spec.enterFrom?spec.enterFrom.x:PF_W/2, y:spec.enterFrom?spec.enterFrom.y:-60, hp:1, r:_bd?_bd.hitR:18, hue:spec.hue!=null?spec.hue:320, boss:true, score:spec.score||50000, drops:[], coro:null }); b.invuln=true; b.phaseTotal=spec.phases.length; b.phaseIndex=0; b.phasesLeft=spec.phases.length; b.spellName=''; b.inSpell=false; b.timer=null; b.hpMax=1; b.design=spec.design; b.survivalActive=false; b.survivalTotal=0; return b; }
-function* runBoss(spec){ const boss=makeBoss(spec); hud.setBoss(boss); yield* moveTo(boss,spec.enterTo.x,spec.enterTo.y,BOSS_ENTER,EASE.inOut); boss.invuln=false;
+// 2体同時出現 (shared HP): a SECOND boss body that shares the primary's single HP pool. boss:true so
+// drawEnemies skips it & it's never auto-killed; its incoming damage redirects onto the primary via
+// _shareHpWith (see damageEnemy + collideShotsEnemies). It carries its own position/hitbox/design so it
+// can be aimed at & fired from independently; the primary's runBoss owns phases/HUD/teardown. Rendered
+// next to the primary (RenderFrame draws game.boss._twin); spec phases fire from it via b._twin.
+function makeTwinBody(tw,primary){ const _bd=BOSS_DESIGNS[tw.design]; const b=spawnEnemy({ x:tw.enterFrom?tw.enterFrom.x:PF_W/2, y:tw.enterFrom?tw.enterFrom.y:-60, hp:1, r:_bd?_bd.hitR:18, hue:tw.hue!=null?tw.hue:320, boss:true, score:0, drops:[], coro:null }); b.design=tw.design; b._shareHpWith=primary; b.invuln=true; b.spellName=''; b.inSpell=false; return b; }
+function* runBoss(spec){ const boss=makeBoss(spec); hud.setBoss(boss);
+  const twin=spec.twin?makeTwinBody(spec.twin,boss):null; if(twin) boss._twin=twin;
+  if(twin) yield* parallel(moveTo(boss,spec.enterTo.x,spec.enterTo.y,BOSS_ENTER,EASE.inOut), moveTo(twin,spec.twin.enterTo.x,spec.twin.enterTo.y,BOSS_ENTER,EASE.inOut));
+  else yield* moveTo(boss,spec.enterTo.x,spec.enterTo.y,BOSS_ENTER,EASE.inOut);
+  boss.invuln=false; if(twin) twin.invuln=false;
   for(let pi=0;pi<spec.phases.length;pi++){ const ph=spec.phases[pi]; boss.phaseIndex=pi; boss.phasesLeft=spec.phases.length-pi; yield* runPhase(boss,ph,pi);
     sfx.bomb&&sfx.bomb(); cancelBullets({all:true,toItems:CANCEL_TO_ITEM}); screenFlash('#ffffff',0.35); shake(6,0.3);
     for(const d of (ph.drops||[])) dropItem(boss.x+rng.range(-20,20),boss.y+rng.range(-10,10),d);
@@ -1973,6 +2173,7 @@ function* bossRetreat(boss,spec){ boss.invuln=true; boss.survivalActive=false; s
   for(const d of (spec.retreatDrops||[])) dropItem(boss.x+rng.range(-24,24),boss.y+rng.range(-12,12),d);
   for(let i=0;i<3;i++){ for(let k=0;k<10;k++){ const a=rng()*TAU,s=40+rng()*90; spawnParticle(boss.x,boss.y,Math.cos(a)*s,Math.sin(a)*s,{life:0.55,kind:'sparkle',hue:hueShift(boss.hue,rng.range(-24,24)),r:2.6}); } yield* waitT(0.14); }
   yield* moveTo(boss,boss.x+rng.range(-30,30),-100,1.3,EASE.in);
+  if(boss._twin) boss._twin.dead=true;
   hud.clearBoss(); boss.dead=true; yield* waitT(0.4);
 }
 function* runPhase(boss,ph,pi){
@@ -1992,7 +2193,7 @@ function* runPhase(boss,ph,pi){
   else { boss.survivalActive=false; boss.timer=null; while(boss.hp>0) yield; }
   Director.endGroup(g);
 }
-function* bossDefeat(boss,spec){ sfx.bomb&&sfx.bomb(); boss.invuln=true; slowmo(SLOWMO_DEFEAT,SLOWMO_DEFEAT_DUR); shake(10,1.4); for(let i=0;i<6;i++){ cancelBullets({x:boss.x,y:boss.y,radius:60+i*60,frac:1.0,toItems:true}); spawnDeathPuff(boss.x+rng.range(-30,30),boss.y+rng.range(-20,20),(boss.hue+i*40)%360); yield* waitT(0.12); } screenFlash('#ffffff',0.9); for(const d of (spec.drops||[])) dropItem(boss.x+rng.range(-40,40),boss.y+rng.range(-20,20),d); hud.clearBoss(); boss.dead=true; yield* waitT(1.2); }
+function* bossDefeat(boss,spec){ sfx.bomb&&sfx.bomb(); boss.invuln=true; const bodies=boss._twin?[boss,boss._twin]:[boss]; slowmo(SLOWMO_DEFEAT,SLOWMO_DEFEAT_DUR); shake(10,1.4); for(let i=0;i<6;i++){ for(const bd of bodies){ cancelBullets({x:bd.x,y:bd.y,radius:60+i*60,frac:1.0,toItems:true}); spawnDeathPuff(bd.x+rng.range(-30,30),bd.y+rng.range(-20,20),(bd.hue+i*40)%360); } yield* waitT(0.12); } screenFlash('#ffffff',0.9); for(const d of (spec.drops||[])) dropItem(boss.x+rng.range(-40,40),boss.y+rng.range(-20,20),d); if(boss._twin) boss._twin.dead=true; hud.clearBoss(); boss.dead=true; yield* waitT(1.2); }
 
 // ---- boss descriptors (hoisted from stageScript; read-only data, shared instance) ----
 const MIDBOSS_SPEC = { name:'Ariel', design:'wisp', hue:140, enterFrom:{x:PF_W/2,y:-60}, enterTo:{x:PF_W/2,y:150}, score:80000, drops:['bomb','bigpower','point','point','point','point','power'],
@@ -2038,9 +2239,73 @@ const TASOKARE_SPEC = { name:'Tasokare', design:'phantom', hue:212, enterFrom:{x
       { kind:'spell', name:'"Twilight Hour — Last Word"', survival:26, drops:[], body:'raw', raw:function*(b){ let a=0,wave=0; Director.fork(function*(){ while(true){ pat.delayedTurn(b,{count:16,spread:TAU,baseAngle:a*2,speed:80,delay:0.8,turnAim:true,speed2:160,hue:205,style:'orb'}); yield* waitT(1.7); } },b); Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:9,speed:60,gravity:42,hue:(195+T*40)%360,style:'orb'}); yield* waitT(0.36); } },b); while(true){ spiral(b,{angle:a,arms:5,speed:135+wave*3,hue:(210+T*60)%360,style:'small'}); spiral(b,{angle:-a*1.4,arms:5,speed:135+wave*3,hue:(258+T*60)%360,style:'small'}); a+=0.22; wave+=0.04; yield* waitT(0.04); } } }
     ] };
 
+// ---- STAGE 3 BOSS: the twin sisters 宵 & 暁 — 2体同時出現 (体力共有). 宵 (Yoi, indigo, the primary/left)
+// holds the single shared HP pool + drives the phase machine; 暁 (Akatsuki, amber, reached via b._twin, the
+// right) mirrors her. EVERY phase fires from BOTH bodies, the right reflected (negated spin / mirrored
+// half-fans), so the field is left-right symmetric — true-twin danmaku. There is NO midboss; this fight
+// alone carries the stage (5 phases incl. a survival last-word "Until Dawn"). HP per phase sits in the
+// Stage-2 boss band: two bodies double the on-screen DENSITY, but the player still sinks single-stream DPS
+// into the shared pool, so the pool is tuned like one boss (the difficulty is the symmetric crossfire). ----
+// _twinSway glides the pair symmetrically (left → x, right → PF_W−x) for a phase; forked on the primary so
+// it inherits the phase epoch (torn down at phase end) exactly like the single-boss _sway above.
+const _twinSway=(xA,xB,y,dur)=>function(b){ const tw=b._twin; Director.fork(function*(){ while(true){
+    yield* parallel(moveTo(b,xA,y,dur,EASE.inOut), tw?moveTo(tw,PF_W-xA,y,dur,EASE.inOut):waitT(dur));
+    yield* parallel(moveTo(b,xB,y,dur,EASE.inOut), tw?moveTo(tw,PF_W-xB,y,dur,EASE.inOut):waitT(dur));
+  } },b); };
+const TWINS_SPEC = { name:'宵 & 暁', design:'twinYoi', hue:265, enterFrom:{x:PF_W*0.32,y:-80}, enterTo:{x:PF_W*0.30,y:128}, score:700000,
+    drops:['bigpower','power','point','point','point','point','point'],
+    twin:{ design:'twinAkatsuki', hue:32, enterFrom:{x:PF_W*0.68,y:-80}, enterTo:{x:PF_W*0.70,y:128} },
+    phases:[
+      // 1 — nonspell: a symmetric volley — aimed fans + counter-rotating mirrored rings
+      { kind:'nonspell', hp:1340, body:'raw', raw:function*(b){ const tw=b._twin;
+          Director.fork(function*(){ while(true){ fan(b,{n:5,spread:0.55,speed:142,aim:true,hue:262,style:'mid'}); if(tw) fan(tw,{n:5,spread:0.55,speed:142,aim:true,hue:35,style:'mid'}); yield* waitT(0.95); } },b);
+          let rot=0; while(true){ ring(b,{count:16,speed:100,hue:262,style:'orb',rot:rot}); if(tw) ring(tw,{count:16,speed:100,hue:35,style:'orb',rot:-rot}); rot+=0.17; yield* waitT(1.2); } },
+        onEnter:_twinSway(PF_W*0.26,PF_W*0.40,126,2.1) },
+      // 2 — spell: counter-rotating mirrored spirals weave a lattice between the sisters
+      { kind:'spell', name:'Twin Sign "Moonlit Lattice"', hp:1720, drops:['point','point','point','power'], cutinHue:265, body:'raw', raw:function*(b){ const tw=b._twin; let a=0,k=0;
+          while(true){ spiral(b,{angle:a,arms:3,speed:122,hue:262,style:'small'}); if(tw) spiral(tw,{angle:-a,arms:3,speed:122,hue:35,style:'small'});
+            if(k%26===0){ aimedShot(b,{n:3,spread:0.3,speed:160,hue:200,style:'mid'}); if(tw) aimedShot(tw,{n:3,spread:0.3,speed:160,hue:52,style:'mid'}); }
+            a+=0.16; k++; yield* waitT(0.05); } },
+        onEnter:_twinSway(PF_W*0.30,PF_W*0.34,124,2.6) },
+      // 3 — spell: crossing soul-orbs — each sister sprays a half-fan toward the player that drifts then homes; the two streams cross
+      { kind:'spell', name:'Soul Sign "Crossing Hitodama"', hp:1720, drops:['point','point','point','power'], cutinHue:32, body:'raw', raw:function*(b){ const tw=b._twin;
+          if(tw) Director.fork(function*(){ while(true){ ring(tw,{count:13,speed:80,hue:38,style:'pellet',rot:T*0.5}); yield* waitT(1.05); ring(b,{count:13,speed:80,hue:262,style:'pellet',rot:-T*0.5}); yield* waitT(1.05); } },b);
+          while(true){ pat.delayedTurn(b,{count:13,spread:Math.PI,baseAngle:HALFPI+0.35,speed:86,delay:0.85,turnAim:true,speed2:158,hue:262,style:'orb'});
+            if(tw) pat.delayedTurn(tw,{count:13,spread:Math.PI,baseAngle:HALFPI-0.35,speed:86,delay:0.85,turnAim:true,speed2:158,hue:38,style:'orb'});
+            yield* waitT(1.4); } },
+        onEnter:_twinSway(PF_W*0.32,PF_W*0.32,122,2.4) },
+      // 4 — nonspell: a crossfire — expanding rings + aimed walls from both, swaying wider so they cross over
+      { kind:'nonspell', hp:1560, body:'raw', raw:function*(b){ const tw=b._twin;
+          Director.fork(function*(){ while(true){ ring(b,{count:20,speed:88,accel:78,hue:262,style:'orb'}); if(tw) ring(tw,{count:20,speed:88,accel:78,hue:35,style:'orb'}); yield* waitT(1.5); } },b);
+          while(true){ wall(b,{n:6,spread:0.7,speed:172,hue:210,style:'dart'}); if(tw) wall(tw,{n:6,spread:0.7,speed:172,hue:48,style:'dart'}); yield* waitT(1.0); } },
+        onEnter:_twinSway(PF_W*0.24,PF_W*0.46,128,1.7) },
+      // 5 — survival Last Word: the sisters hold the flanks, the grove fills with woven indigo+amber until dawn
+      { kind:'spell', name:'"Until Dawn — Last Word"', survival:28, drops:[], cutinHue:265, body:'raw', raw:function*(b){ const tw=b._twin; let a=0,wave=0;
+          Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:11,speed:58,gravity:42,hue:(255+T*30)%360,style:'orb'}); yield* waitT(0.34); } },b);
+          while(true){ spiral(b,{angle:a,arms:4,speed:132+wave*3,hue:(258+T*40)%360,style:'small'}); if(tw) spiral(tw,{angle:-a,arms:4,speed:132+wave*3,hue:(30+T*40)%360,style:'small'});
+            a+=0.2; wave+=0.04; yield* waitT(0.04); } },
+        onEnter:_twinSway(PF_W*0.28,PF_W*0.28,120,3.0) }
+    ] };
+// STAGE 3 MIDBOSS — only ONE of the sisters, 宵 (Yoi, indigo), appears solo to test the player: a single
+// body (NO twin → the ordinary single-boss runBoss path), 2 phases (1 nonspell + 1 spell), then RETREATS
+// (spec.retreat → bossRetreat, same seam as Stage 2's Tasokare intro) to return WITH 暁 for the full fight.
+// Plays over the 道中 (stage3) BGM — there is NO dedicated midboss track. Her solo spell is its OWN pattern
+// (a night soul-orb pursuit), NOT a reused full-fight phase.
+const YOI_INTRO_SPEC = { name:'宵', design:'twinYoi', hue:265, enterFrom:{x:PF_W/2,y:-70}, enterTo:{x:PF_W/2,y:144}, score:95000, retreat:true, retreatDrops:['bomb'],
+    phases:[
+      { kind:'nonspell', hp:1180, body:'raw', raw:function*(b){
+          Director.fork(function*(){ while(true){ fan(b,{n:5,spread:0.6,speed:142,aim:true,hue:285,style:'mid'}); yield* waitT(1.0); } },b);
+          let rot=0; while(true){ ring(b,{count:18,speed:96,hue:262,style:'orb',rot:rot}); rot+=0.18; yield* waitT(1.4); } },
+        onEnter:_sway(PF_W*0.35,PF_W*0.65,144,2.0) },
+      { kind:'spell', name:'宵 Sign "Nightfall Pursuit"', hp:1480, drops:['point','point','point','power'], cutinHue:265, body:'raw', raw:function*(b){ let off=0, base=0;
+          Director.fork(function*(){ while(true){ ring(b,{count:12,speed:74,hue:282,style:'pellet',rot:base}); base-=0.2; yield* waitT(1.0); } },b);
+          while(true){ pat.delayedTurn(b,{count:15,spread:TAU,baseAngle:off,speed:88,delay:0.9,turnAim:true,speed2:165,hue:205,style:'orb'}); off+=0.45; yield* waitT(1.5);
+            pat.aimedSpread(b,{count:5,spread:0.5,speed:150,hue:285,style:'pellet'}); yield* waitT(0.9); } } }
+    ] };
+
 // ---- THE STAGE TIMELINE (declarative data + interpreter) ----
 // Boss registry: id -> spec. (Phase 8/9: resolveBoss(id, rank, diff) will apply difficulty here.)
-const BOSSES = { ariel:MIDBOSS_SPEC, flowerKing:FINALBOSS_SPEC, tasokareIntro:TASOKARE_INTRO_SPEC, tasokare:TASOKARE_SPEC };
+const BOSSES = { ariel:MIDBOSS_SPEC, flowerKing:FINALBOSS_SPEC, tasokareIntro:TASOKARE_INTRO_SPEC, tasokare:TASOKARE_SPEC, twins:TWINS_SPEC, yoiIntro:YOI_INTRO_SPEC };
 
 // A stage is ONE data object; runStage() compiles its timeline into the existing Director
 // coroutines. STAGES[0] is a 1:1 transcription of the former imperative stageScript — same waves,
@@ -2106,6 +2371,45 @@ const STAGES = [
       // final boss (full fight) — the one real music switch to boss2
       {banner:'WARNING'}, {sfx:'warn'}, {flash:{color:'#9a6cff',i:0.4}}, {shake:{mag:4,dur:0.6}}, {music:'boss'}, {wait:2.0},
       {boss:'tasokare'},
+      {stageEnd:true},                 // hand off to Stage 3 (was {stageClear:true}; Stage 2 is no longer the terminal stage)
+    ] },
+  // STAGE 3 — "Grove of the Lost" (迷いの竹林). Structure mirrors Stage 2: road → 山場 → MIDBOSS (宵 alone,
+  // 2 phases → retreat, on the 道中 BGM) → more road → 山場 → the 2体同時出現 twin boss (宵 & 暁, shared HP).
+  // Road counts sized for the power=max real-play entry (~Stage 2). The only music switch is the FINAL boss.
+  { id:3, title:'Stage 3', theme:'bamboo',
+    music:{ stage:'stage3', boss:'boss3' },     // NO midboss track — 宵's solo appearance underscores on the 道中 (stage3)
+    timeline:[
+      {banner:'Stage 3'}, {wait:INTRO_FADE},
+      // opening: a layered descent through the grove — two sheared cascades hold their lanes while an echelon
+      // sweep slashes across and a slow centre trail fills behind (jade + lantern-gold + indigo hues).
+      {parallel:[ {wave:'drifters',  opts:{n:12,x:PF_W*0.27,band:PF_W*0.34,amp:24,spacing:0.32,speed:48,speedJit:0.8,hue:140,halvePower:true,sparse:true}},
+                  {wave:'drifters',  opts:{n:12,x:PF_W*0.73,band:PF_W*0.34,amp:24,spacing:0.32,speed:54,speedJit:0.8,hue:45, halvePower:true,sparse:true}, delay:1.0},
+                  {wave:'sideSweep', opts:{n:9,side:'left',y:66,yStep:15,spacing:0.16,hue:150,halvePower:true,sparse:true}, delay:2.6},
+                  {wave:'drifters',  opts:{n:7,x:PF_W*0.50,band:PF_W*0.22,amp:28,spacing:0.5,speed:50,speedJit:0.9,hue:265,halvePower:true,sparse:true}, delay:4.4} ]}, {waitClear:true}, {wait:WAVE_GAP},
+      // a turret pair (lantern-gold) + a twin stream behind them
+      {wave:'turrets', opts:{xs:[PF_W*0.28,PF_W*0.72],y:124,hold:5.0,hue:45}}, {waitClear:true}, {wait:WAVE_GAP},
+      {parallel:[ {wave:'stream', opts:{n:9,x:PF_W*0.33,amp:54,spacing:0.42,hue:140,halvePower:true}},
+                  {wave:'stream', opts:{n:9,x:PF_W*0.67,amp:54,spacing:0.42,hue:265,halvePower:true}, delay:0.3} ]}, {waitClear:true}, {wait:WAVE_GAP},
+      // ── 山場 (pre-midboss) ── a wraith SEXTET (centre + flanks); the overlapping homing-ring danmaku
+      {wave:'wraith', opts:{xs:[PF_W*0.40,PF_W*0.60,PF_W*0.25,PF_W*0.75,PF_W*0.12,PF_W*0.88],y:114,hold:6.0,spacing:0.45,hue:152,halvePower:true}}, {waitClear:true}, {wait:1.4},
+      // ── MIDBOSS ── only 宵 (Yoi) appears, 2 phases, then retreats. NO music switch (stays on the 道中 track).
+      {banner:'WARNING'}, {sfx:'warn'},
+      {boss:'yoiIntro'},
+      {wait:CALM_BEFORE_BOSS},
+      // ── post-midboss road ── a fresh layered descent: two sheared cascades hold lanes while two echelon
+      // sweeps slash in from opposite edges with opposing slants (a crossing X over time), indigo/gold/jade.
+      {parallel:[ {wave:'drifters',  opts:{n:13,x:PF_W*0.28,band:PF_W*0.34,amp:24,spacing:0.30,speed:50,speedJit:0.8,hue:265,halvePower:true,sparse:true}},
+                  {wave:'sideSweep', opts:{n:10,side:'right',y:56, yStep:14,spacing:0.16,hue:45, halvePower:true,sparse:true}, delay:1.2},
+                  {wave:'drifters',  opts:{n:13,x:PF_W*0.72,band:PF_W*0.34,amp:24,spacing:0.30,speed:56,speedJit:0.8,hue:140,halvePower:true,sparse:true}, delay:2.6},
+                  {wave:'sideSweep', opts:{n:10,side:'left', y:150,yStep:-13,spacing:0.16,hue:265,halvePower:true,sparse:true}, delay:4.0} ]}, {waitClear:true}, {wait:WAVE_GAP},
+      // a lantern-gold V-formation presses down the centre while a jade trail fills behind it
+      {parallel:[ {wave:'vFormation', opts:{half:5,apexX:PF_W/2,apexY:74,hue:45,halvePower:true}},
+                  {wave:'drifters',   opts:{n:8,x:PF_W*0.5,band:PF_W*0.5,amp:30,spacing:0.42,speed:52,speedJit:0.9,hue:152,halvePower:true,sparse:true}, delay:1.6} ]}, {waitClear:true}, {wait:WAVE_GAP},
+      // ── 山場 (pre-final) ── a wraith OCTET holds centre + flanks: the road's true peak
+      {wave:'wraith', opts:{xs:[PF_W*0.44,PF_W*0.56,PF_W*0.31,PF_W*0.69,PF_W*0.18,PF_W*0.82,PF_W*0.08,PF_W*0.92],y:112,hold:7.0,spacing:0.42,hue:148,halvePower:true}}, {waitClear:true}, {wait:1.6},
+      // ── FINAL BOSS ── the full twin-sister fight (2体同時出現, shared HP). The one music switch to boss3.
+      {banner:'WARNING'}, {sfx:'warn'}, {flash:{color:'#7ad7a0',i:0.4}}, {shake:{mag:4,dur:0.6}}, {music:'boss'}, {wait:2.0},
+      {boss:'twins'},
       {stageClear:true},
     ] },
 ];
