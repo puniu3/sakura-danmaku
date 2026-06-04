@@ -21,6 +21,7 @@ design/portraits/
 theme-demo.html
 sfx-demo.html
 balance-demo.html
+stage3-demo.html
 
 # Endurance-bar presentation tuning harness (throwaway; port the chosen look into
 # index.html drawSurvivalBar on 反映, then this can be deleted)
