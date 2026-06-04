@@ -1125,7 +1125,7 @@ const sfx = {
 // ============================ RENDER =================================
 const HUE_BUCKET=12, SPRITE_PAD=2, GLOW_SOFTNESS=0.55, CORE_FRACTION=0.42, BULLET_SPRITE_PX_PER_UNIT=1.7;
 const MAX_SHAKE=11, TRAUMA_DECAY=1.8, FLASH_DECAY=9.0, SPAWN_FADE=0.10;
-const CANCEL_WAVE_SPEED=520, CANCEL_WAVE_LIFE=0.6, POPTEXT_LIFE=0.9, BOSS_AURA_SPIN=0.6;
+const CANCEL_WAVE_SPEED=520, CANCEL_WAVE_LIFE=0.6, BOSS_AURA_SPIN=0.6;
 // PALETTE = stage-independent UI/entity identity (HUD, ship, boss rims, hp bars). Per-stage
 // sky/petal/ground colours live in THEMES (see THEMES section) and are read via activeTheme.
 const PALETTE={
@@ -1139,7 +1139,7 @@ const PALETTE={
 };
 let canvas=null, ctx=null, dpr=1, _lastNow=0, _fps=60, _fpsAcc=0, _fpsN=0;
 const cam={ trauma:0, shakeX:0, shakeY:0, flash:0, flashHue:0, timeScale:1, slowT:0, slowTarget:1 };
-const waves=[], pops=[], petals=[];
+const waves=[], petals=[];
 let _banner={active:false,t:0,name:''};
 // spell-card declaration cut-in — a brief screen-dim "暗転" only (playtest found portrait art noisy; see drawCutin).
 let _cutin={active:false};
@@ -1549,12 +1549,8 @@ function drawLaserBulletContrast(alpha){ if(!player||player.dead||!(player.graze
 function reqFlash(intensity,hue){ cam.flash=Math.max(cam.flash,intensity==null?1:intensity); cam.flashHue=hue||0; }
 function reqShake(amount){ cam.trauma=Math.min(1,cam.trauma+(amount==null?0.6:amount)); }
 function reqCancelWave(x,y,hue,strength){ waves.push({x,y,hue:hue==null?200:hue,t:0,life:CANCEL_WAVE_LIFE,strength:strength==null?1:strength}); }
-function reqSlowmo(scale,dur){ cam.slowTarget=scale==null?0.25:scale; cam.slowT=dur==null?0.5:dur; }
-function reqPop(x,y,text,hue){ pops.push({x,y,text,hue:hue==null?48:hue,t:0}); }
-function updateCam(dt){ cam.trauma=Math.max(0,cam.trauma-TRAUMA_DECAY*dt); const sh=cam.trauma*cam.trauma*MAX_SHAKE; cam.shakeX=(Math.random()*2-1)*sh; cam.shakeY=(Math.random()*2-1)*sh; cam.flash=Math.max(0,cam.flash-FLASH_DECAY*dt); if(cam.slowT>0){ cam.slowT-=dt; cam.timeScale+=(cam.slowTarget-cam.timeScale)*Math.min(1,dt*12); if(cam.slowT<=0) cam.slowTarget=1; } else cam.timeScale+=(1-cam.timeScale)*Math.min(1,dt*6); Render.timeScale=cam.timeScale; }
-function drawWaves(dt){ ctx.save(); ctx.globalCompositeOperation='lighter'; for(let i=waves.length-1;i>=0;i--){ const w=waves[i]; w.t+=dt; const k=w.t/w.life; if(k>=1){ waves.splice(i,1); continue; } const r=k*CANCEL_WAVE_SPEED*w.life; ctx.globalAlpha=(1-k)*0.7*w.strength; ctx.lineWidth=(1-k)*6+1; ctx.strokeStyle='hsl('+w.hue+',100%,75%)'; ctx.beginPath(); ctx.arc(w.x,w.y,r,0,TAU); ctx.stroke(); ctx.lineWidth=1; ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.beginPath(); ctx.arc(w.x,w.y,r*0.92,0,TAU); ctx.stroke(); } ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over'; ctx.restore(); }
-function drawPops(dt){ ctx.save(); ctx.textAlign='center'; for(let i=pops.length-1;i>=0;i--){ const p=pops[i]; p.t+=dt; const k=p.t/POPTEXT_LIFE; if(k>=1){ pops.splice(i,1); continue; } ctx.globalAlpha=1-k; ctx.font='bold 11px "Trebuchet MS",sans-serif'; ctx.fillStyle='hsl('+p.hue+',90%,70%)'; ctx.fillText(p.text,p.x,p.y-26*easeOut(k)); } ctx.globalAlpha=1; ctx.textAlign='left'; ctx.restore(); }
-function drawFlash(){ if(cam.flash<=0) return; ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.fillStyle='hsla('+cam.flashHue+',80%,90%,'+cam.flash+')'; ctx.fillRect(0,0,PF_W,PF_H); ctx.restore(); }
+function reqSlowmo(scale,dur){ cam.slowTarget=scale==null?0.25:scale; cam.slowT=dur==null?0.5:dur; }function updateCam(dt){ cam.trauma=Math.max(0,cam.trauma-TRAUMA_DECAY*dt); const sh=cam.trauma*cam.trauma*MAX_SHAKE; cam.shakeX=(Math.random()*2-1)*sh; cam.shakeY=(Math.random()*2-1)*sh; cam.flash=Math.max(0,cam.flash-FLASH_DECAY*dt); if(cam.slowT>0){ cam.slowT-=dt; cam.timeScale+=(cam.slowTarget-cam.timeScale)*Math.min(1,dt*12); if(cam.slowT<=0) cam.slowTarget=1; } else cam.timeScale+=(1-cam.timeScale)*Math.min(1,dt*6); Render.timeScale=cam.timeScale; }
+function drawWaves(dt){ ctx.save(); ctx.globalCompositeOperation='lighter'; for(let i=waves.length-1;i>=0;i--){ const w=waves[i]; w.t+=dt; const k=w.t/w.life; if(k>=1){ waves.splice(i,1); continue; } const r=k*CANCEL_WAVE_SPEED*w.life; ctx.globalAlpha=(1-k)*0.7*w.strength; ctx.lineWidth=(1-k)*6+1; ctx.strokeStyle='hsl('+w.hue+',100%,75%)'; ctx.beginPath(); ctx.arc(w.x,w.y,r,0,TAU); ctx.stroke(); ctx.lineWidth=1; ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.beginPath(); ctx.arc(w.x,w.y,r*0.92,0,TAU); ctx.stroke(); } ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over'; ctx.restore(); }function drawFlash(){ if(cam.flash<=0) return; ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.fillStyle='hsla('+cam.flashHue+',80%,90%,'+cam.flash+')'; ctx.fillRect(0,0,PF_W,PF_H); ctx.restore(); }
 function drawVignette(t){ if(_vig) ctx.drawImage(_vig,0,0,PF_W,PF_H); }
 
 // ---- HUD ----
@@ -1631,12 +1627,12 @@ function RenderFrame(now,alpha){ const dt=_lastNow?Math.min(0.05,(now-_lastNow)/
   ctx.save(); ctx.beginPath(); ctx.rect(PF_X,PF_Y,PF_W,PF_H); ctx.clip();
   ctx.save(); ctx.translate(PF_X,PF_Y); drawBackground(T); drawScenery(); updateAndDrawPetals(paused?0:dt,T); const spellI=(game.boss&&game.boss.inSpell&&!game.boss.dead)?(game.spellIntensity!=null?game.spellIntensity:1):0; drawSpellBackground(T,spellI); if(game.state===STATE.PLAYING||game.state===STATE.PAUSED||game.boss){ ctx.fillStyle='rgba(22,9,38,0.36)'; ctx.fillRect(0,0,PF_W,PF_H); } if(game.state===STATE.PLAYING) drawPocLine(); ctx.restore();
   ctx.save(); ctx.translate(PF_X,PF_Y); drawCutin(paused?0:dt); ctx.restore();   // cut-in: above background, BELOW bullets/sprites (no shake — it's a backdrop)
-  ctx.save(); ctx.translate(PF_X+cam.shakeX,PF_Y+cam.shakeY); drawGrazeLaser(T); drawItems(T); drawPlayerShots(alpha); if(game.boss&&!game.boss.dead){ drawBoss(game.boss,T); const _tw=game.boss._twin; if(_tw&&!_tw.dead) drawBoss(_tw,T); } drawEnemies(ctx,T,alpha); drawParticles(); drawLaserBulletContrast(alpha); drawEnemyBullets(alpha); drawPlayer(T); drawWaves(dt); drawPops(dt); ctx.restore();  // laser drawn first (back-most) so enemy bullets & items stay visible on top; contrast backing keeps on-beam bullets readable
+  ctx.save(); ctx.translate(PF_X+cam.shakeX,PF_Y+cam.shakeY); drawGrazeLaser(T); drawItems(T); drawPlayerShots(alpha); if(game.boss&&!game.boss.dead){ drawBoss(game.boss,T); const _tw=game.boss._twin; if(_tw&&!_tw.dead) drawBoss(_tw,T); } drawEnemies(ctx,T,alpha); drawParticles(); drawLaserBulletContrast(alpha); drawEnemyBullets(alpha); drawPlayer(T); drawWaves(dt); ctx.restore();  // laser drawn first (back-most) so enemy bullets & items stay visible on top; contrast backing keeps on-beam bullets readable
   ctx.save(); ctx.translate(PF_X,PF_Y); drawBanner(paused?0:dt); drawFlash(); drawVignette(T); ctx.restore();
   ctx.restore();
   ctx.setTransform(dpr,0,0,dpr,0,0); drawHUD(); drawTouchControls(); drawOverlays();
 }
-const Render={ timeScale:1, init:RenderInit, resize:RenderResize, frame:RenderFrame, flash:reqFlash, shake:reqShake, cancelWave:reqCancelWave, slowmo:reqSlowmo, popText:reqPop, banner:triggerBanner, cutin:triggerCutin };
+const Render={ timeScale:1, init:RenderInit, resize:RenderResize, frame:RenderFrame, flash:reqFlash, shake:reqShake, cancelWave:reqCancelWave, slowmo:reqSlowmo, banner:triggerBanner, cutin:triggerCutin };
 
 // ============================ THEMES =================================
 // Per-stage sky/petal/ground colours. setTheme(key) re-bakes the petal sprites and the scenery
@@ -1940,7 +1936,7 @@ function nearestHomingTarget(x,y){ let best=null,bd=1e9; for(let i=0;i<enemies.l
 function clampAngle(a,lo,hi){ while(a>Math.PI) a-=TAU; while(a<-Math.PI) a+=TAU; return a<lo?lo:(a>hi?hi:a); }
 
 // ---- graze power-up: activation + the super-shot (ignores power level; fires regardless of fireHeld) ----
-function activateGrazePower(){ player.grazePowerT=GRAZE_POWER_DURATION; player.fireCd=0; clearBulletsToSparkles(player.x,player.y,GRAZE_ACTIVATE_CLEAR_R); /* clear nearby enemy bullets on activation */ sfx.extend&&sfx.extend(); Render.flash(0.5,GRAZE_HUE); Render.shake(0.35); Render.popText(player.x,player.y-22,'POWER UP!',GRAZE_HUE); for(let i=0;i<16;i++){ const a=rng()*TAU,s=80+rng()*120; spawnParticle(player.x,player.y,Math.cos(a)*s,Math.sin(a)*s,{life:0.5,kind:'sparkle',hue:GRAZE_HUE,r:3}); } }
+function activateGrazePower(){ player.grazePowerT=GRAZE_POWER_DURATION; player.fireCd=0; clearBulletsToSparkles(player.x,player.y,GRAZE_ACTIVATE_CLEAR_R); /* clear nearby enemy bullets on activation */ sfx.extend&&sfx.extend(); Render.flash(0.5,GRAZE_HUE); Render.shake(0.35); for(let i=0;i<16;i++){ const a=rng()*TAU,s=80+rng()*120; spawnParticle(player.x,player.y,Math.cos(a)*s,Math.sin(a)*s,{life:0.5,kind:'sparkle',hue:GRAZE_HUE,r:3}); } }
 // end the power-up. Homing shots are intentionally LEFT in flight — they persist until they hit or expire (GRAZE_HOMING_LIFE).
 // Only the laser stops, since it's gated on grazePowerT>0. (In-flight homing keeps its pierceSpell flag, so it can still trim a survival timer until it lands.)
 function endGrazePower(){ player.grazePowerT=0; player.fireCd=0; }
@@ -1979,7 +1975,7 @@ function clearBulletsToSparkles(cx,cy,radius){ const r2=radius*radius; enemyBull
 function onPlayerHit(srcBullet,enemy){ if(player.state!=='alive'||player.invuln>0) return;
   if(player.grazePowerT>0){ // a hit during power-up does NOT release it and grants NO i-frames — it only trims the remaining time (no miss). The bullet is consumed so one distinct bullet = one -1s (no per-frame re-hit).
     player.grazePowerT=Math.max(0,player.grazePowerT-GRAZE_HIT_PENALTY); if(srcBullet) srcBullet.alive=false;
-    sfx.graze&&sfx.graze(); Render.flash(0.22,GRAZE_HUE); Render.shake(0.22); Render.popText(player.x,player.y-18,'-1s',GRAZE_HUE);
+    sfx.graze&&sfx.graze(); Render.flash(0.22,GRAZE_HUE); Render.shake(0.22);
     for(let i=0;i<8;i++){ const a=rng()*TAU,s=50+rng()*80; spawnParticle(player.x,player.y,Math.cos(a)*s,Math.sin(a)*s,{life:0.3,kind:'sparkle',hue:GRAZE_HUE,r:2.2}); }
     if(player.grazePowerT<=0) endGrazePower();   // a hit that drains it to 0 ends the power-up → clean up trailing shots
     return; }
@@ -1989,14 +1985,14 @@ function finalizeDeath(){ player.state='dead'; player.dead=true; endGrazePower()
 function addScore(n){ game.score+=n; while(game.extendsTaken<Math.floor(game.score/EXTEND_INTERVAL)){ game.extendsTaken++; spawnExtendItem(); } if(game.score>game.hi) game.hi=game.score; }
 // score-extend no longer adds a life directly — it drops a 1UP at the screen top, straight above the player,
 // to be collected (grantExtend('item') fires on pickup). No rng → deterministic, golden-neutral.
-function spawnExtendItem(){ const px=(player&&player.x!=null)?player.x:PF_W/2; spawnItem('oneup',px,-ITEM_R,0,EXTEND_ITEM_FALL); Render.popText(px,30,'1UP!',ITEM_HUE.oneup); Render.flash(0.25,ITEM_HUE.oneup); }
+function spawnExtendItem(){ const px=(player&&player.x!=null)?player.x:PF_W/2; spawnItem('oneup',px,-ITEM_R,0,EXTEND_ITEM_FALL); Render.flash(0.25,ITEM_HUE.oneup); }
 function addGraze(n){ n=n||1; game.grazeCount+=n; addScore(GRAZE_SCORE*n); sfx.graze&&sfx.graze();
   // graze-milestone power-up: each crossed threshold (re)activates; interval grows +10 each time.
   while(player&&player.state==='alive'&&game.grazeCount>=game.grazePowerThreshold){ activateGrazePower(); game.grazePowerInterval+=GRAZE_POWER_STEP; game.grazePowerThreshold+=game.grazePowerInterval; } }
 function onGraze(bullet){ if(player.invuln>0) return; addGraze(1); spawnParticle(bullet.x,bullet.y,(rng()-0.5)*40,-30,{life:0.18,kind:'graze',hue:55,r:2}); }
 // At the life cap, a collected 1UP converts to its EXTEND_INTERVAL (1M) value in score instead of a life.
 // Pre-bump extendsTaken so the +1M crossing doesn't itself spawn a fresh 1UP (the score's own extend is suppressed).
-function grantExtend(reason){ if(player.lives>=MAX_LIVES){ game.extendsTaken++; addScore(EXTEND_INTERVAL); sfx.extend&&sfx.extend(); Render.flash(0.4,150); Render.popText(player.x,player.y-22,'1UP→+1M',ITEM_HUE.oneup); return; } player.lives++; sfx.extend&&sfx.extend(); Render.flash(0.4,150); }
+function grantExtend(reason){ if(player.lives>=MAX_LIVES){ game.extendsTaken++; addScore(EXTEND_INTERVAL); sfx.extend&&sfx.extend(); Render.flash(0.4,150); return; } player.lives++; sfx.extend&&sfx.extend(); Render.flash(0.4,150); }
 
 const HISCORE_KEY='danmaku_hiscore_v1';            // legacy v1 int (kept one release for migration)
 const SAVE_KEY='danmaku_save_v2';
