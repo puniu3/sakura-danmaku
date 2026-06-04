@@ -121,14 +121,9 @@ const DEFAULT_R = 4.5;
 // ============================ ENGINE CORE ============================
 // ---- math helpers ----
 function clamp(v,lo,hi){ return v<lo?lo:(v>hi?hi:v); }
-function lerp(a,b,t){ return a+(b-a)*t; }
 function approach(cur,tgt,maxDelta){ const d=tgt-cur; if(d>maxDelta) return cur+maxDelta; if(d<-maxDelta) return cur-maxDelta; return tgt; }
 function hypot(dx,dy){ return Math.sqrt(dx*dx+dy*dy); }
 function dist2(ax,ay,bx,by){ const dx=ax-bx,dy=ay-by; return dx*dx+dy*dy; }
-function dist(ax,ay,bx,by){ return Math.sqrt(dist2(ax,ay,bx,by)); }
-function angleTo(ax,ay,bx,by){ return Math.atan2(by-ay,bx-ax); }
-function normalizeAngle(a){ a%=TAU; if(a<-Math.PI) a+=TAU; else if(a>=Math.PI) a-=TAU; return a; }
-function angleDiff(a,b){ return normalizeAngle(a-b); }
 function swapRemove(arr,i){ const last=arr.length-1; if(i!==last) arr[i]=arr[last]; arr.pop(); }
 function polarVel(a,speed){ return { vx:Math.cos(a)*speed, vy:Math.sin(a)*speed }; }
 
@@ -161,7 +156,6 @@ function makePool(factory,n){
     shrink(toCap){ toCap=Math.max(toCap|0,this.count); if(this.items.length>toCap) this.items.length=toCap; this.cap=this.items.length; },   // release backing capacity down to toCap (never below live count); for STAGE_INTERMISSION
     _grow(){ const add=Math.max(64,this.items.length>>1); for(let k=0;k<add;k++){ const o=this.factory(); o.alive=false; this.items.push(o); } this.cap=this.items.length; },
   };
-  pool.spawn=pool.acquire; pool.alloc=pool.acquire; pool.forEach=pool.forEachLive; pool.list=pool.items;
   return pool;
 }
 
@@ -1560,10 +1554,10 @@ function compileSpell(ph){ if(ph.body && ph.body!=='raw'){ const m=SPELLS[ph.bod
 // scales them by difficulty. New difficulties / per-stage ranks append here.
 const BALANCE = {
   difficulties: {
-    easy:   { countMul:0.7, spdMul:0.85, hpMul:0.8,  lives:4, bombs:3 },
-    normal: { countMul:1.0, spdMul:1.0,  hpMul:1.0,  lives:3, bombs:2 },
-    hard:   { countMul:1.2, spdMul:1.08, hpMul:1.15, lives:3, bombs:2 },
-    lunatic:{ countMul:1.4, spdMul:1.15, hpMul:1.3,  lives:2, bombs:2 },
+    easy:   { countMul:0.7, hpMul:0.8,  lives:4, bombs:3 },
+    normal: { countMul:1.0, hpMul:1.0,  lives:3, bombs:2 },
+    hard:   { countMul:1.2, hpMul:1.15, lives:3, bombs:2 },
+    lunatic:{ countMul:1.4, hpMul:1.3,  lives:2, bombs:2 },
   },
 };
 /*END:CONTENT*/
@@ -1801,7 +1795,6 @@ function onPlayerHit(srcBullet,enemy){ if(player.state!=='alive'||player.invuln>
     return; }
   player.state='pendingdeath'; player.pendingDeath=DEATHBOMB_TIME; if(srcBullet) srcBullet.alive=false; }
 function finalizeDeath(){ player.state='dead'; player.dead=true; endGrazePower(); game.scoreMul=1; player.lives--; player.bombs=START_BOMBS; player.respawnT=0.55; sfx.death&&sfx.death(); Render.shake(0.7); Render.slowmo(0.4,0.5); clearBulletsToSparkles(player.x,player.y,DEATH_CLEAR_R); for(let i=0;i<26;i++){ const a=rng()*TAU, s=60+rng()*160; spawnParticle(player.x,player.y,Math.cos(a)*s,Math.sin(a)*s,{life:0.5,kind:'death',hue:330,r:3}); } player.power=Math.max(0,player.power-Math.floor(player.power*0.25)-15); game.fullpower=(player.power>=MAXPOWER); dropItems('power',DEATH_POWER_DROP,player.x,player.y-10,80); if(player.lives<0){ player.state='gameover'; setState(STATE.GAMEOVER); } }
-function addInvuln(seconds){ player.invuln=Math.max(player.invuln,seconds); }
 
 function addScore(n){ game.score+=n; while(game.extendsTaken<Math.floor(game.score/EXTEND_INTERVAL)){ game.extendsTaken++; spawnExtendItem(); } if(game.score>game.hi) game.hi=game.score; }
 // score-extend no longer adds a life directly — it drops a 1UP at the screen top, straight above the player,
@@ -1863,8 +1856,8 @@ function onEnemyHit(e,shot){ damageEnemy(e,shot.dmg,shot.pierceSpell?GRAZE_PIERC
 const SPAWN_MARGIN=40, OFFSCREEN_PAD=32;
 const INTRO_FADE=2.5, CALM_BEFORE_BOSS=4.0, WAVE_GAP=1.2, BOSS_ENTER=2.2, SPELL_ANNOUNCE=1.6, PHASE_HEAL=0.5;
 const R_POP_LIGHT=9, R_POP_MED=11, R_POP_HEAVY=14;
-const HP_POP_LIGHT=10, HP_POP_MED=20, HP_POP_HEAVY=42, ENEMY_HP_MUL=0.8;
-const MIDBOSS_HP_NONSPELL=1100, MIDBOSS_HP_SPELL=1500, FB_SURVIVAL_TIME=28;
+const HP_POP_LIGHT=8, HP_POP_MED=16, HP_POP_HEAVY=33.6;   // real per-pop HP (the former global ×0.8 ENEMY_HP_MUL is folded in here and into every boss-phase hp below)
+const MIDBOSS_HP_NONSPELL=880, MIDBOSS_HP_SPELL=1200, FB_SURVIVAL_TIME=28;
 const SLOWMO_DEFEAT=0.35, SLOWMO_DEFEAT_DUR=2.2, CANCEL_TO_ITEM=true, CANCEL_ITEM_MAX=12;   // cap point items MINTED per cancelBullets call so a dense field-clear can't mint dozens
 const EASE={ linear:t=>t, inOut:t=>t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2, out:t=>1-(1-t)*(1-t), in:t=>t*t };
 
@@ -1908,7 +1901,7 @@ function* spawnWave(gen){ yield* gen; }
 function* delayed(sec,gen){ yield* waitT(sec); yield* gen; }   // stagger a wave inside parallel(): wait, then run the (lazily-iterated) generator
 
 // ---- enemy ----
-function spawnEnemy(spec){ const _hp=(spec.hp||1)*(spec.boss?1:ENEMY_HP_MUL); const e={ x:spec.x, y:spec.y, vx:0, vy:0, hp:_hp, maxHp:_hp, r:spec.r||R_POP_MED, hue:spec.hue!=null?spec.hue:200, boss:!!spec.boss, bodyDamage:!!spec.bodyDamage, score:spec.score||1000, drops:spec.drops||[], dead:false, invuln:false, born:T, _spec:spec, _steered:false }; enemies.push(e); if(spec.coro) Director.fork(()=>spec.coro(e),e); return e; }
+function spawnEnemy(spec){ const _hp=(spec.hp||1); const e={ x:spec.x, y:spec.y, vx:0, vy:0, hp:_hp, maxHp:_hp, r:spec.r||R_POP_MED, hue:spec.hue!=null?spec.hue:200, boss:!!spec.boss, bodyDamage:!!spec.bodyDamage, score:spec.score||1000, drops:spec.drops||[], dead:false, invuln:false, born:T, _spec:spec, _steered:false }; enemies.push(e); if(spec.coro) Director.fork(()=>spec.coro(e),e); return e; }
 function enemyIntegrate(e,dt){ if(e._steered){ e._steered=false; return; } e.x+=e.vx*dt; e.y+=e.vy*dt; }
 function damageEnemy(e,dmg,opts){ if(!e||e.dead) return false;
   // endurance (耐久/survival) spell: invulnerable to normal damage; only pierce-shots act, by trimming the
@@ -1987,7 +1980,7 @@ function* runPhase(boss,ph,pi){
   else hud.clearSpell();
   const survival=ph.survival||0;
   // survival phases expose a notional HP pool (GRAZE_SURVIVAL_HP) so the graze power-up's pierce can trim the timer.
-  boss.maxHp=boss.hpMax=(survival>0)?(ph.hp!=null?ph.hp*ENEMY_HP_MUL:GRAZE_SURVIVAL_HP):((ph.hp||1)*ENEMY_HP_MUL);
+  boss.maxHp=boss.hpMax=(survival>0)?(ph.hp!=null?ph.hp:GRAZE_SURVIVAL_HP):(ph.hp||1);
   boss.hp=boss.maxHp;
   const g=Director.beginGroup();
   Director.fork(()=>compileSpell(ph)(boss),boss);
@@ -2009,11 +2002,11 @@ const MIDBOSS_SPEC = { name:'Ariel', design:'wisp', hue:140, enterFrom:{x:PF_W/2
     ] };
 const FINALBOSS_SPEC = { name:'Flower King', design:'mandala', hue:300, enterFrom:{x:PF_W/2,y:-80}, enterTo:{x:PF_W/2,y:140}, score:500000, drops:['bigpower','power','point','point','point','point','point'],
     phases:[
-      { kind:'nonspell', hp:1800, body:'raw', raw:function*(b){ while(true){ ring(b,{count:24,speed:110,hue:(300+T*20)%360,style:'mid'}); yield* waitT(0.55); aimedShot(b,{n:5,spread:0.4,speed:200,hue:0,style:'dart'}); yield* waitT(0.55); } } },
-      { kind:'spell', name:'Spring Sign "Petal Storm"', hp:2400, drops:['power','point','point','point'], body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:14,speed:45,gravity:42.5,hue:330,style:'petal'}); yield* waitT(0.4); } },b); while(true){ fan(b,{n:9,spread:1.1,speed:160,aim:true,hue:290,style:'mid'}); yield* waitT(1.1); } } },
-      { kind:'nonspell', hp:2000, body:'raw', raw:function*(b){ let a=0; Director.fork(function*(){ while(true){ yield* moveTo(b,PF_W*0.3,140,1.4,EASE.inOut); yield* moveTo(b,PF_W*0.7,140,1.4,EASE.inOut); } },b); while(true){ spiral(b,{angle:a,arms:4,speed:135,hue:(300+T*40)%360,style:'small'}); a+=0.4; yield* waitT(0.045); } } },
-      { kind:'spell', name:'Night Sign "Lunar Rain"', hp:2800, drops:['power','point','point','point'], body:'raw', raw:function*(b){ while(true){ for(let k=0;k<3;k++){ ring(b,{count:32,speed:70,accel:90,hue:(220+k*30)%360,style:'orb'}); yield* waitT(0.18); } wall(b,{n:13,speed:210,hue:0,style:'dart'}); yield* waitT(1.3); } } },
-      { kind:'spell', name:'Time Sign "Spiral Mandala"', hp:3200, drops:['power','point','point','point'], body:'raw', raw:function*(b){ let a=0; Director.fork(function*(){ while(true){ ring(b,{count:18,speed:105,hue:(280+T*15)%360,style:'mid',rot:T*0.4}); yield* waitT(0.9); } },b); while(true){ spiral(b,{angle:a,arms:5,speed:145,hue:(0+T*50)%360,style:'small'}); spiral(b,{angle:-a*1.6,arms:5,speed:145,hue:(180+T*50)%360,style:'small'}); a+=0.23; yield* waitT(0.04); } } },
+      { kind:'nonspell', hp:1440, body:'raw', raw:function*(b){ while(true){ ring(b,{count:24,speed:110,hue:(300+T*20)%360,style:'mid'}); yield* waitT(0.55); aimedShot(b,{n:5,spread:0.4,speed:200,hue:0,style:'dart'}); yield* waitT(0.55); } } },
+      { kind:'spell', name:'Spring Sign "Petal Storm"', hp:1920, drops:['power','point','point','point'], body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:14,speed:45,gravity:42.5,hue:330,style:'petal'}); yield* waitT(0.4); } },b); while(true){ fan(b,{n:9,spread:1.1,speed:160,aim:true,hue:290,style:'mid'}); yield* waitT(1.1); } } },
+      { kind:'nonspell', hp:1600, body:'raw', raw:function*(b){ let a=0; Director.fork(function*(){ while(true){ yield* moveTo(b,PF_W*0.3,140,1.4,EASE.inOut); yield* moveTo(b,PF_W*0.7,140,1.4,EASE.inOut); } },b); while(true){ spiral(b,{angle:a,arms:4,speed:135,hue:(300+T*40)%360,style:'small'}); a+=0.4; yield* waitT(0.045); } } },
+      { kind:'spell', name:'Night Sign "Lunar Rain"', hp:2240, drops:['power','point','point','point'], body:'raw', raw:function*(b){ while(true){ for(let k=0;k<3;k++){ ring(b,{count:32,speed:70,accel:90,hue:(220+k*30)%360,style:'orb'}); yield* waitT(0.18); } wall(b,{n:13,speed:210,hue:0,style:'dart'}); yield* waitT(1.3); } } },
+      { kind:'spell', name:'Time Sign "Spiral Mandala"', hp:2560, drops:['power','point','point','point'], body:'raw', raw:function*(b){ let a=0; Director.fork(function*(){ while(true){ ring(b,{count:18,speed:105,hue:(280+T*15)%360,style:'mid',rot:T*0.4}); yield* waitT(0.9); } },b); while(true){ spiral(b,{angle:a,arms:5,speed:145,hue:(0+T*50)%360,style:'small'}); spiral(b,{angle:-a*1.6,arms:5,speed:145,hue:(180+T*50)%360,style:'small'}); a+=0.23; yield* waitT(0.04); } } },
       { kind:'spell', name:'"Eternal Spring — Last Word"', survival:FB_SURVIVAL_TIME, drops:[], body:'raw', raw:function*(b){ let a=0,wave=0; Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:10,speed:60,gravity:42.5,hue:(330+T*30)%360,style:'petal'}); yield* waitT(0.3); } },b); Director.fork(function*(){ while(true){ burst(b,{count:40,speed:130,hue:(T*60)%360,style:'orb'}); yield* waitT(2.2); } },b); while(true){ spiral(b,{angle:a,arms:6,speed:140+wave*4,hue:(T*70)%360,style:'small'}); spiral(b,{angle:-a*1.4,arms:6,speed:140+wave*4,hue:(120+T*70)%360,style:'small'}); a+=0.21; wave+=0.05; yield* waitT(0.035); } } }
     ] };
 
@@ -2026,22 +2019,22 @@ const FINALBOSS_SPEC = { name:'Flower King', design:'mandala', hue:300, enterFro
 const _sway=(cx0,cx1,y,dur)=>function(b){ Director.fork(function*(){ while(true){ yield* moveTo(b,cx0,y,dur,EASE.inOut); yield* moveTo(b,cx1,y,dur,EASE.inOut); } },b); };
 const TASOKARE_INTRO_SPEC = { name:'Tasokare', design:'phantom', hue:212, enterFrom:{x:PF_W/2,y:-70}, enterTo:{x:PF_W/2,y:150}, score:90000, retreat:true, retreatDrops:['bomb'],
     phases:[
-      { kind:'nonspell', hp:1505, body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ aimedShot(b,{n:5,spread:0.6,speed:140,hue:285,style:'mid'}); yield* waitT(1.05); } },b); while(true){ ring(b,{count:18,speed:90,accel:55,hue:210,style:'orb'}); yield* waitT(1.6); } }, onEnter:_sway(PF_W*0.34,PF_W*0.66,150,2.0) },
-      { kind:'spell', name:'Spirit Sign "Twilight Pursuit"', hp:1925, drops:['point','point','point','power'], body:'raw', raw:function*(b){ let off=0; while(true){ pat.delayedTurn(b,{count:14,spread:TAU,baseAngle:off,speed:88,delay:0.9,turnAim:true,speed2:165,hue:205,style:'orb'}); off+=0.5; yield* waitT(1.5); pat.aimedSpread(b,{count:7,spread:0.5,speed:150,hue:280,style:'pellet'}); yield* waitT(0.9); } } }
+      { kind:'nonspell', hp:1204, body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ aimedShot(b,{n:5,spread:0.6,speed:140,hue:285,style:'mid'}); yield* waitT(1.05); } },b); while(true){ ring(b,{count:18,speed:90,accel:55,hue:210,style:'orb'}); yield* waitT(1.6); } }, onEnter:_sway(PF_W*0.34,PF_W*0.66,150,2.0) },
+      { kind:'spell', name:'Spirit Sign "Twilight Pursuit"', hp:1540, drops:['point','point','point','power'], body:'raw', raw:function*(b){ let off=0; while(true){ pat.delayedTurn(b,{count:14,spread:TAU,baseAngle:off,speed:88,delay:0.9,turnAim:true,speed2:165,hue:205,style:'orb'}); off+=0.5; yield* waitT(1.5); pat.aimedSpread(b,{count:7,spread:0.5,speed:150,hue:280,style:'pellet'}); yield* waitT(0.9); } } }
     ] };
 const TASOKARE_SPEC = { name:'Tasokare', design:'phantom', hue:212, enterFrom:{x:PF_W/2,y:-80}, enterTo:{x:PF_W/2,y:140}, score:600000, drops:['bigpower','power','point','point','point','point','point'],
     phases:[
-      { kind:'nonspell', hp:1505, body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ aimedShot(b,{n:7,spread:0.7,speed:150,hue:285,style:'mid'}); yield* waitT(0.85); } },b); while(true){ ring(b,{count:22,speed:95,accel:55,hue:210,style:'orb'}); yield* waitT(1.3); } }, onEnter:_sway(PF_W*0.3,PF_W*0.7,140,1.9) },
+      { kind:'nonspell', hp:1204, body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ aimedShot(b,{n:7,spread:0.7,speed:150,hue:285,style:'mid'}); yield* waitT(0.85); } },b); while(true){ ring(b,{count:22,speed:95,accel:55,hue:210,style:'orb'}); yield* waitT(1.3); } }, onEnter:_sway(PF_W*0.3,PF_W*0.7,140,1.9) },
       // a COMPLEXIFIED evolution of the midboss pursuit (same delayed-turn family, escalated): the
       // homing soul-orb ring is now woven with a second ring that veers to a fixed sweep, over a slow
       // counter-rotating base ring — a pursuing lattice rather than the single homing ring of the intro.
-      { kind:'spell', name:'Phantom Sign "Twilight Labyrinth"', hp:2065, drops:['power','point','point','point'], body:'raw', raw:function*(b){ let off=0, base=0;
+      { kind:'spell', name:'Phantom Sign "Twilight Labyrinth"', hp:1652, drops:['power','point','point','point'], body:'raw', raw:function*(b){ let off=0, base=0;
         Director.fork(function*(){ while(true){ ring(b,{count:14,speed:72,hue:282,style:'pellet',rot:base}); base-=0.20; yield* waitT(0.95); } },b);
         while(true){ pat.delayedTurn(b,{count:16,spread:TAU,baseAngle:off,speed:90,delay:0.85,turnAim:true,speed2:178,hue:205,style:'orb'});
           pat.delayedTurn(b,{count:16,spread:TAU,baseAngle:off+0.20,speed:112,delay:0.6,turn:1.15,speed2:150,hue:190,style:'pellet'});
           off+=0.42; yield* waitT(1.3); } } },
-      { kind:'nonspell', hp:1750, body:'raw', raw:function*(b){ let a=0; Director.fork(function*(){ while(true){ yield* moveTo(b,PF_W*0.3,135,1.6,EASE.inOut); yield* moveTo(b,PF_W*0.7,135,1.6,EASE.inOut); } },b); Director.fork(function*(){ while(true){ burst(b,{count:22,speed:120,hue:(195+T*40)%360,style:'orb'}); yield* waitT(1.9); } },b); while(true){ spiral(b,{angle:a,arms:3,speed:128,hue:(210+T*50)%360,style:'small'}); spiral(b,{angle:-a*1.3,arms:3,speed:128,hue:(258+T*50)%360,style:'small'}); a+=0.32; yield* waitT(0.05); } } },
-      { kind:'spell', name:'Twilight Sign "Hitodama Drift"', hp:2170, drops:['power','point','point','point'], body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:10,speed:55,gravity:40,hue:(200+T*30)%360,style:'orb'}); yield* waitT(0.5); } },b); while(true){ pat.randomScatter(b,{count:18,baseAngle:HALFPI,spread:Math.PI*1.25,speedMin:70,speedMax:150,jitterHue:30,hue:215,style:'pellet'}); yield* waitT(0.7); ring(b,{count:16,speed:100,accel:70,hue:280,style:'orb'}); yield* waitT(0.7); } } },
+      { kind:'nonspell', hp:1400, body:'raw', raw:function*(b){ let a=0; Director.fork(function*(){ while(true){ yield* moveTo(b,PF_W*0.3,135,1.6,EASE.inOut); yield* moveTo(b,PF_W*0.7,135,1.6,EASE.inOut); } },b); Director.fork(function*(){ while(true){ burst(b,{count:22,speed:120,hue:(195+T*40)%360,style:'orb'}); yield* waitT(1.9); } },b); while(true){ spiral(b,{angle:a,arms:3,speed:128,hue:(210+T*50)%360,style:'small'}); spiral(b,{angle:-a*1.3,arms:3,speed:128,hue:(258+T*50)%360,style:'small'}); a+=0.32; yield* waitT(0.05); } } },
+      { kind:'spell', name:'Twilight Sign "Hitodama Drift"', hp:1736, drops:['power','point','point','point'], body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:10,speed:55,gravity:40,hue:(200+T*30)%360,style:'orb'}); yield* waitT(0.5); } },b); while(true){ pat.randomScatter(b,{count:18,baseAngle:HALFPI,spread:Math.PI*1.25,speedMin:70,speedMax:150,jitterHue:30,hue:215,style:'pellet'}); yield* waitT(0.7); ring(b,{count:16,speed:100,accel:70,hue:280,style:'orb'}); yield* waitT(0.7); } } },
       { kind:'spell', name:'"Twilight Hour — Last Word"', survival:26, drops:[], body:'raw', raw:function*(b){ let a=0,wave=0; Director.fork(function*(){ while(true){ pat.delayedTurn(b,{count:16,spread:TAU,baseAngle:a*2,speed:80,delay:0.8,turnAim:true,speed2:160,hue:205,style:'orb'}); yield* waitT(1.7); } },b); Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:9,speed:60,gravity:42,hue:(195+T*40)%360,style:'orb'}); yield* waitT(0.36); } },b); while(true){ spiral(b,{angle:a,arms:5,speed:135+wave*3,hue:(210+T*60)%360,style:'small'}); spiral(b,{angle:-a*1.4,arms:5,speed:135+wave*3,hue:(258+T*60)%360,style:'small'}); a+=0.22; wave+=0.04; yield* waitT(0.04); } } }
     ] };
 
