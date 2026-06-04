@@ -82,7 +82,7 @@ const START_POWER = 100;
 const MAXPOWER = 400, POWER_BREAKS = [0,40,80,150,200,300,400];
 const POWER_PER_ITEM = 8, POWER_PER_BIG = 40;
 
-const START_BOMBS = 2, MAX_BOMBS = 6;   // cap matches MAX_LIVES (6-slot HUD). No 'bomb' item drops yet — bomb pickups to be added later via stage tuning.
+const START_BOMBS = 2, MAX_BOMBS = 6;   // cap matches MAX_LIVES (6-slot HUD). 'bomb' items drop on each stage's midboss defeat (Stage 1 Ariel / Stage 2 Tasokare-intro); collectItem caps at MAX_BOMBS.
 const BOMB_INVULN = 2.5, BOMB_BOSS_DPS = 140, BOMB_DOT_TIME = 2.2, BOMB_FLASH = 0.6;
 const DEATHBOMB_TIME = 9/120;
 const START_LIVES = 3, MAX_LIVES = 6;
@@ -2002,7 +2002,7 @@ function* runPhase(boss,ph,pi){
 function* bossDefeat(boss,spec){ sfx.bomb&&sfx.bomb(); boss.invuln=true; slowmo(SLOWMO_DEFEAT,SLOWMO_DEFEAT_DUR); shake(10,1.4); for(let i=0;i<6;i++){ cancelBullets({x:boss.x,y:boss.y,radius:60+i*60,frac:1.0,toItems:true}); spawnDeathPuff(boss.x+rng.range(-30,30),boss.y+rng.range(-20,20),(boss.hue+i*40)%360); yield* waitT(0.12); } screenFlash('#ffffff',0.9); for(const d of (spec.drops||[])) dropItem(boss.x+rng.range(-40,40),boss.y+rng.range(-20,20),d); hud.clearBoss(); boss.dead=true; yield* waitT(1.2); }
 
 // ---- boss descriptors (hoisted from stageScript; read-only data, shared instance) ----
-const MIDBOSS_SPEC = { name:'Ariel', design:'wisp', hue:140, enterFrom:{x:PF_W/2,y:-60}, enterTo:{x:PF_W/2,y:150}, score:80000, drops:['bigpower','point','point','point','point','power'],
+const MIDBOSS_SPEC = { name:'Ariel', design:'wisp', hue:140, enterFrom:{x:PF_W/2,y:-60}, enterTo:{x:PF_W/2,y:150}, score:80000, drops:['bomb','bigpower','point','point','point','point','power'],
     phases:[
       { kind:'nonspell', hp:MIDBOSS_HP_NONSPELL, body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ fan(b,{n:7,spread:0.7,speed:150,aim:true,hue:150,style:'mid'}); yield* waitT(0.85); } },b); while(true){ ring(b,{count:20,speed:95,hue:110,style:'mid'}); yield* waitT(1.5); } }, onEnter:function(b){ Director.fork(function*(){ while(true){ yield* moveTo(b,PF_W*0.35,150,1.6,EASE.inOut); yield* moveTo(b,PF_W*0.65,150,1.6,EASE.inOut); } },b); } },
       { kind:'spell', name:'Verdant Sign "Petal Whirlpool"', hp:MIDBOSS_HP_SPELL, drops:['point','point','point','point','power'], body:'twinSpiralWall', params:{ arms:3, spd:120, da:0.27, gap:0.05, cross:1.3, hueA:140, hueA2:170, wallN:9, wallSpd:175, hueB:320, wallGap:2.0 } }
@@ -2024,7 +2024,7 @@ const FINALBOSS_SPEC = { name:'Flower King', design:'mandala', hue:300, enterFro
 // _sway: an onEnter helper that forks a left↔right glide for the phase (inherits the phase epoch, so
 // endGroup tears it down at phase end — same lifetime contract as the existing MIDBOSS sway).
 const _sway=(cx0,cx1,y,dur)=>function(b){ Director.fork(function*(){ while(true){ yield* moveTo(b,cx0,y,dur,EASE.inOut); yield* moveTo(b,cx1,y,dur,EASE.inOut); } },b); };
-const TASOKARE_INTRO_SPEC = { name:'Tasokare', design:'phantom', hue:212, enterFrom:{x:PF_W/2,y:-70}, enterTo:{x:PF_W/2,y:150}, score:90000, retreat:true, retreatDrops:[],
+const TASOKARE_INTRO_SPEC = { name:'Tasokare', design:'phantom', hue:212, enterFrom:{x:PF_W/2,y:-70}, enterTo:{x:PF_W/2,y:150}, score:90000, retreat:true, retreatDrops:['bomb'],
     phases:[
       { kind:'nonspell', hp:1505, body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ aimedShot(b,{n:5,spread:0.6,speed:140,hue:285,style:'mid'}); yield* waitT(1.05); } },b); while(true){ ring(b,{count:18,speed:90,accel:55,hue:210,style:'orb'}); yield* waitT(1.6); } }, onEnter:_sway(PF_W*0.34,PF_W*0.66,150,2.0) },
       { kind:'spell', name:'Spirit Sign "Twilight Pursuit"', hp:1925, drops:['point','point','point','power'], body:'raw', raw:function*(b){ let off=0; while(true){ pat.delayedTurn(b,{count:14,spread:TAU,baseAngle:off,speed:88,delay:0.9,turnAim:true,speed2:165,hue:205,style:'orb'}); off+=0.5; yield* waitT(1.5); pat.aimedSpread(b,{count:7,spread:0.5,speed:150,hue:280,style:'pellet'}); yield* waitT(0.9); } } }
