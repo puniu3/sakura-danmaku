@@ -92,6 +92,11 @@ const GRAZE_SCORE = 50;
 const EXTEND_INTERVAL = 1e6;   // score-extend fires every fixed 1M (was a [1M,3M,6M,10M] table); HUD shows a fill meter toward the next
 const EXTEND_ITEM_FALL = 70;   // score-extend drops a 1UP from the top, straight above the player, to be collected
 const POINT_BASE = 10000, POINT_MIN = 2000;   // point-item value anchors (collect high = POINT_BASE, low = POINT_MIN). spell-capture bonus 廃止 2026-06-04 (no one missed it)
+
+// score-pitched point-pickup: blip note rises with gained score on a major 6/9 pentatonic ladder (C5..C7; chord-tone steps so adjacent are consonant). Audio-only, no rng → golden-neutral.
+const PITCH_DEGS=[0,2,4,7,9], PITCH_ROOT=72, PITCH_TOP=96;
+const PITCH_STEPS=(function(){ const s=[]; for(let o=0; PITCH_ROOT+12*o<=PITCH_TOP; o++) for(const d of PITCH_DEGS){ const m=PITCH_ROOT+d+12*o; if(m<=PITCH_TOP) s.push(m); } return s.sort((a,b)=>a-b); })();
+function pitchInfoFor(score){ const sT=Math.max(0,Math.min(1,(score-POINT_MIN)/(POINT_BASE*SCORE_MUL_MAX_APPLY-POINT_MIN))); return PITCH_STEPS[Math.round(Math.sqrt(sT)*(PITCH_STEPS.length-1))]; }
 // score multiplier (player state): each point-item pickup +GAIN (internal cap CAP), decays DECAY/s; applied & displayed capped at MAX_APPLY.
 // Internal headroom (CAP > MAX_APPLY) keeps a hot chain pinned at the cap so the readout doesn't flicker 1.9<->2.0 each pickup/decay.
 const SCORE_MUL_MAX_APPLY = 2.0, SCORE_MUL_CAP = 2.1, SCORE_MUL_GAIN = 0.1, SCORE_MUL_DECAY = 0.2;
@@ -293,9 +298,9 @@ function frame(nowMs){
 const Audio = (function(){
   let muted=(()=>{ try{ return localStorage.getItem('bh.muted')==='1'; }catch(e){ return false; } })();
   let masterVol=(()=>{ try{ const v=parseFloat(localStorage.getItem('bh.vol')); return isFinite(v)?Math.min(1,Math.max(0,v)):1; }catch(e){ return 1; } })();
-  let ctx=null, masterGain=null, limiter=null, musicGain=null, sfxGain=null, noiseBuf=null;
+  let ctx=null, masterGain=null, limiter=null, musicGain=null, sfxGain=null, cueGain=null, cueHP=null, noiseBuf=null;
   let curTrack='none', pumpTimer=0, nextNoteTime=0, stepIndex=0, lastShoot=0;
-  const MASTER_BASE_GAIN=0.42, SCHEDULE_AHEAD=0.10, PUMP_MS=25, MUSIC_FADE=0.18, SHOOT_MIN_GAP=0.045;
+  const MASTER_BASE_GAIN=0.90, SCHEDULE_AHEAD=0.10, PUMP_MS=25, MUSIC_FADE=0.18, SHOOT_MIN_GAP=0.045;
   function mtof(m){ return 440*Math.pow(2,(m-69)/12); }
   function now(){ return ctx?ctx.currentTime:0; }
   function rnd(a,b){ return a+Math.random()*(b-a); }
@@ -304,7 +309,7 @@ const Audio = (function(){
   function tone(opts){ if(!ctx) return; const dest=opts.dest||sfxGain, t0=opts.t0!=null?opts.t0:now(); const f0=opts.f0, f1=opts.f1!=null?opts.f1:f0; const peak=opts.peak!=null?opts.peak:0.3; const atk=opts.atk!=null?opts.atk:0.004,dec=opts.dec!=null?opts.dec:0.02,sus=opts.sus!=null?opts.sus:0.4,rel=opts.rel!=null?opts.rel:0.08; const dur=opts.dur!=null?opts.dur:(atk+dec+rel); const osc=ctx.createOscillator(); osc.type=opts.type||'sine'; osc.frequency.setValueAtTime(f0,t0); if(f1!==f0){ if(opts.glideExp) osc.frequency.exponentialRampToValueAtTime(Math.max(1,f1),t0+dur); else osc.frequency.linearRampToValueAtTime(f1,t0+dur); } if(opts.detune) osc.detune.setValueAtTime(opts.detune,t0); const holdAt=t0+Math.max(atk+dec,dur-rel); const g=envGain(dest,t0,peak,atk,dec,sus,rel,holdAt); if(opts.filter){ const bq=ctx.createBiquadFilter(); bq.type=opts.filter; bq.frequency.setValueAtTime(opts.filterFreq||1200,t0); if(opts.filterFreq1!=null) bq.frequency.linearRampToValueAtTime(opts.filterFreq1,t0+dur); if(opts.q!=null) bq.Q.value=opts.q; osc.connect(bq); bq.connect(g); } else osc.connect(g); const stopAt=holdAt+rel+0.02; osc.start(t0); osc.stop(stopAt); osc.onended=function(){ try{ osc.disconnect(); g.disconnect(); }catch(e){} }; }
   function noise(opts){ if(!ctx) return; const dest=opts.dest||sfxGain, t0=opts.t0!=null?opts.t0:now(); const peak=opts.peak!=null?opts.peak:0.25, atk=opts.atk!=null?opts.atk:0.002, rel=opts.rel!=null?opts.rel:0.12; const dur=opts.dur!=null?opts.dur:(atk+rel); const src=ctx.createBufferSource(); src.buffer=noiseBuf; src.loop=true; let node=src; if(opts.filter){ const bq=ctx.createBiquadFilter(); bq.type=opts.filter; bq.frequency.setValueAtTime(opts.filterFreq||2000,t0); if(opts.filterFreq1!=null) bq.frequency.exponentialRampToValueAtTime(Math.max(60,opts.filterFreq1),t0+dur); if(opts.q!=null) bq.Q.value=opts.q; src.connect(bq); node=bq; } const g=ctx.createGain(); g.gain.setValueAtTime(0.0001,t0); g.gain.exponentialRampToValueAtTime(Math.max(0.0002,peak),t0+atk); g.gain.exponentialRampToValueAtTime(0.0001,t0+dur); node.connect(g); g.connect(dest); src.start(t0); src.stop(t0+dur+0.02); src.onended=function(){ try{ src.disconnect(); g.disconnect(); }catch(e){} }; }
   function tryResume(){ if(!ctx||muted) return; if(ctx.state==='suspended'||ctx.state==='interrupted'){ try{ const p=ctx.resume(); if(p&&p.catch) p.catch(function(){}); }catch(e){} } }
-  function build(){ const AC=window.AudioContext||window.webkitAudioContext; ctx=new AC(); ctx.onstatechange=function(){ if(!document.hidden) tryResume(); }; limiter=ctx.createDynamicsCompressor(); limiter.threshold.value=-6; limiter.knee.value=0; limiter.ratio.value=20; limiter.attack.value=0.003; limiter.release.value=0.1; limiter.connect(ctx.destination); masterGain=ctx.createGain(); masterGain.gain.value=MASTER_BASE_GAIN*masterVol; masterGain.connect(limiter); musicGain=ctx.createGain(); musicGain.gain.value=0.0001; musicGain.connect(masterGain); sfxGain=ctx.createGain(); sfxGain.gain.value=1.0; sfxGain.connect(masterGain); noiseBuf=makeNoiseBuffer(); }
+  function build(){ const AC=window.AudioContext||window.webkitAudioContext; ctx=new AC(); ctx.onstatechange=function(){ if(!document.hidden) tryResume(); }; limiter=ctx.createDynamicsCompressor(); limiter.threshold.value=-1.5; limiter.knee.value=0; limiter.ratio.value=20; limiter.attack.value=0.002; limiter.release.value=0.1; limiter.connect(ctx.destination); masterGain=ctx.createGain(); masterGain.gain.value=MASTER_BASE_GAIN*masterVol; masterGain.connect(limiter); musicGain=ctx.createGain(); musicGain.gain.value=0.0001; musicGain.connect(masterGain); sfxGain=ctx.createGain(); sfxGain.gain.value=1.0; sfxGain.connect(masterGain); cueGain=ctx.createGain(); cueGain.gain.value=1.35; cueHP=ctx.createBiquadFilter(); cueHP.type='highpass'; cueHP.frequency.value=180; cueHP.Q.value=0.7; cueHP.connect(cueGain); cueGain.connect(masterGain); noiseBuf=makeNoiseBuffer(); }
   function sfxShoot(){ if(!ctx) return; const t=now(); if(t-lastShoot<SHOOT_MIN_GAP) return; lastShoot=t; const base=760*Math.pow(2,rnd(-0.1,0.1)); tone({type:'sine',f0:base*1.3,f1:base,glideExp:true,peak:0.05,atk:0.001,dec:0.012,sus:0.2,rel:0.05,dur:0.06}); noise({filter:'bandpass',filterFreq:base*2.2,q:3,peak:0.012,atk:0.0005,rel:0.02,dur:0.022}); }
   function sfxEnemyHit(){ if(!ctx) return; tone({type:'square',f0:rnd(300,360),f1:180,glideExp:true,peak:0.08,atk:0.001,dec:0.015,sus:0.1,rel:0.04,dur:0.05,filter:'lowpass',filterFreq:1400}); }
   function sfxEnemyDeath(){ if(!ctx) return; const t=now(); noise({t0:t,filter:'bandpass',filterFreq:2400,filterFreq1:300,q:1.2,peak:0.2,atk:0.002,rel:0.22,dur:0.26}); tone({t0:t,type:'sawtooth',f0:rnd(420,500),f1:90,glideExp:true,peak:0.14,atk:0.002,dec:0.04,sus:0.3,rel:0.18,dur:0.26,filter:'lowpass',filterFreq:2000,filterFreq1:500}); }
@@ -312,8 +317,17 @@ const Audio = (function(){
   function sfxBomb(){ if(!ctx) return; const t=now(); tone({t0:t,type:'sawtooth',f0:1200,f1:80,glideExp:true,peak:0.3,atk:0.005,dec:0.1,sus:0.6,rel:0.5,dur:0.85,filter:'lowpass',filterFreq:3000,filterFreq1:400}); tone({t0:t,type:'sine',f0:160,f1:50,glideExp:true,peak:0.34,atk:0.005,dec:0.1,sus:0.5,rel:0.5,dur:0.8}); noise({t0:t,filter:'lowpass',filterFreq:6000,filterFreq1:300,peak:0.24,atk:0.01,rel:0.7,dur:0.8}); }
   function sfxPlayerDeath(){ if(!ctx) return; const t=now(); noise({t0:t,filter:'lowpass',filterFreq:4000,filterFreq1:200,peak:0.3,atk:0.002,rel:0.5,dur:0.55}); tone({t0:t,type:'triangle',f0:440,f1:70,glideExp:true,peak:0.26,atk:0.004,dec:0.08,sus:0.5,rel:0.45,dur:0.7}); tone({t0:t,type:'sine',f0:120,f1:40,glideExp:true,peak:0.3,atk:0.004,dec:0.1,sus:0.5,rel:0.4,dur:0.6}); }
   function sfxSpellDeclare(){ if(!ctx) return; const t=now(); const chord=[57,60,64,69]; for(let i=0;i<chord.length;i++) tone({t0:t,type:'sawtooth',f0:mtof(chord[i]),peak:0.11,atk:0.004,dec:0.06,sus:0.5,rel:0.5,dur:0.7,filter:'lowpass',filterFreq:3500,filterFreq1:1400}); const shim=[76,79,83,88]; for(let j=0;j<shim.length;j++) tone({t0:t+0.04+j*0.05,type:'triangle',f0:mtof(shim[j]),peak:0.08,atk:0.002,dec:0.02,sus:0.3,rel:0.18,dur:0.22}); }
-  function sfxItemGet(){ if(!ctx) return; const t=now(); tone({t0:t,type:'square',f0:mtof(84),peak:0.1,atk:0.001,dec:0.02,sus:0.3,rel:0.06,dur:0.09}); tone({t0:t+0.05,type:'square',f0:mtof(91),peak:0.1,atk:0.001,dec:0.02,sus:0.3,rel:0.08,dur:0.12}); }
+  function sfxItemGet(midi){ if(!ctx) return; const t=now(), m=midi||84; tone({t0:t,type:'square',f0:mtof(m),peak:0.1,atk:0.001,dec:0.02,sus:0.3,rel:0.06,dur:0.09}); tone({t0:t+0.05,type:'square',f0:mtof(m+7),peak:0.1,atk:0.001,dec:0.02,sus:0.3,rel:0.08,dur:0.12}); }
   function sfxExtend(){ if(!ctx) return; const t=now(); const notes=[72,76,79,84]; for(let i=0;i<notes.length;i++){ tone({t0:t+i*0.11,type:'triangle',f0:mtof(notes[i]),peak:0.16,atk:0.002,dec:0.03,sus:0.4,rel:0.18,dur:0.26}); tone({t0:t+i*0.11,type:'square',f0:mtof(notes[i]-12),peak:0.05,atk:0.002,dec:0.03,sus:0.3,rel:0.12,dur:0.2}); } }
+
+  function duckBus(t){ if(!musicGain) return; const lin=0.501; const mNow=Math.max(0.0001,musicGain.gain.value); musicGain.gain.cancelScheduledValues(t); musicGain.gain.setValueAtTime(mNow,t); musicGain.gain.linearRampToValueAtTime(Math.max(0.0001,mNow*lin),t+0.03); musicGain.gain.setValueAtTime(Math.max(0.0001,mNow*lin),t+0.45); musicGain.gain.exponentialRampToValueAtTime(mNow,t+0.85); sfxGain.gain.cancelScheduledValues(t); sfxGain.gain.setValueAtTime(1.0,t); sfxGain.gain.linearRampToValueAtTime(lin,t+0.03); sfxGain.gain.setValueAtTime(lin,t+0.45); sfxGain.gain.exponentialRampToValueAtTime(1.0,t+0.85); }   // 1UP sidechain: dip BGM + other SFX so the cadence sits on top
+  function sfxOneUpCadence(){ if(!ctx) return; const t=now(); duckBus(t+0.02);
+    const nt=(t0,m,pk,dur,rel,type)=>tone({t0,dest:cueHP,type:type||'triangle',f0:mtof(m),peak:pk,atk:0.003,dec:0.04,sus:0.5,rel:rel,dur:dur});
+    nt(t, 96, 0.11, 0.13, 0.08);                                          // C7 hook (top of the pickup ladder)
+    for(const m of [79,86,89,95]) nt(t+0.12, m, 0.07, 0.18, 0.10);        // V7  (G5 D6 F6 + leading-tone B6)
+    for(const m of [72,84,88,91,96]) nt(t+0.30, m, 0.075, 0.70, 0.50);    // I   (C major) -> resolve to C7
+    nt(t+0.30, 60, 0.05, 0.70, 0.50, 'sine');                            // C4 tonic sub (sine; a square sub's HF odd-harmonics read as distortion on small iPad speakers)
+  }
   function sfxBossWarn(){ if(!ctx) return; const t=now(); for(let k=0;k<2;k++){ const tt=t+k*0.28; tone({t0:tt,type:'sawtooth',f0:mtof(69),peak:0.18,atk:0.01,dec:0.02,sus:0.7,rel:0.06,dur:0.18,filter:'bandpass',filterFreq:900,q:3}); tone({t0:tt+0.14,type:'sawtooth',f0:mtof(65),peak:0.18,atk:0.01,dec:0.02,sus:0.7,rel:0.06,dur:0.14,filter:'bandpass',filterFreq:900,q:3}); } }
   // ---- BGM ENGINE (generated from design/bgm-engine.js + design/bgm-tracks.js; rebuild via design/build-game.js) ----
   /*BGM:GEN*/
@@ -1109,14 +1123,14 @@ const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER,
     tone({t0:t,type:'sine',f0:base*1.35,f1:base,glideExp:true,peak:0.10,atk:0.001,dec:0.016,sus:0.3,rel:0.06,dur:0.075});
     tone({t0:t,type:'triangle',f0:base*0.5,f1:base*0.42,glideExp:true,peak:0.05,atk:0.001,dec:0.02,sus:0.25,rel:0.05,dur:0.07});   // sub body adds weight without raising the pitch
     noise({t0:t,filter:'bandpass',filterFreq:base*2.4,filterFreq1:base*1.2,q:2.5,peak:0.028,atk:0.0006,rel:0.03,dur:0.03}); }
-  return { unlock, toggleMute, setMuted, isMuted, sfxShoot, sfxEnemyHit, sfxEnemyDeath, sfxGraze, sfxBomb, sfxPlayerDeath, sfxSpellDeclare, sfxItemGet, sfxExtend, sfxBossWarn, sfxPowerShot, playMusic, fadeOutMusic, suspendForHidden, resumeFromHidden };
+  return { unlock, toggleMute, setMuted, isMuted, sfxShoot, sfxEnemyHit, sfxEnemyDeath, sfxGraze, sfxBomb, sfxPlayerDeath, sfxSpellDeclare, sfxItemGet, sfxExtend, sfxOneUpCadence, sfxBossWarn, sfxPowerShot, playMusic, fadeOutMusic, suspendForHidden, resumeFromHidden };
 })();
 
 // sfx shim (method-name facade used by systems/stage)
 const sfx = {
   shoot:()=>Audio.sfxShoot(), powerShot:()=>Audio.sfxPowerShot(), bomb:()=>Audio.sfxBomb(), deathbomb:()=>Audio.sfxBomb(),
   death:()=>Audio.sfxPlayerDeath(), graze:()=>Audio.sfxGraze(),
-  item:(k)=>Audio.sfxItemGet(), powerup:()=>Audio.sfxItemGet(), extend:()=>Audio.sfxExtend(),
+  item:(k,m)=>Audio.sfxItemGet(m), powerup:()=>Audio.sfxItemGet(), extend:()=>Audio.sfxExtend(), oneup:()=>Audio.sfxOneUpCadence(),
   capture:()=>Audio.sfxSpellDeclare(), enemyHit:()=>Audio.sfxEnemyHit(), enemyDeath:()=>Audio.sfxEnemyDeath(),
   spell:()=>Audio.sfxSpellDeclare(), warn:()=>Audio.sfxBossWarn(),
   start:()=>{}, pause:()=>{}, gameover:()=>{}, stageclear:()=>{}
@@ -1992,7 +2006,7 @@ function addGraze(n){ n=n||1; game.grazeCount+=n; addScore(GRAZE_SCORE*n); sfx.g
 function onGraze(bullet){ if(player.invuln>0) return; addGraze(1); spawnParticle(bullet.x,bullet.y,(rng()-0.5)*40,-30,{life:0.18,kind:'graze',hue:55,r:2}); }
 // At the life cap, a collected 1UP converts to its EXTEND_INTERVAL (1M) value in score instead of a life.
 // Pre-bump extendsTaken so the +1M crossing doesn't itself spawn a fresh 1UP (the score's own extend is suppressed).
-function grantExtend(reason){ if(player.lives>=MAX_LIVES){ game.extendsTaken++; addScore(EXTEND_INTERVAL); sfx.extend&&sfx.extend(); Render.flash(0.4,150); return; } player.lives++; sfx.extend&&sfx.extend(); Render.flash(0.4,150); }
+function grantExtend(reason){ if(player.lives>=MAX_LIVES){ game.extendsTaken++; addScore(EXTEND_INTERVAL); sfx.oneup&&sfx.oneup(); Render.flash(0.4,150); return; } player.lives++; sfx.oneup&&sfx.oneup(); Render.flash(0.4,150); }
 
 const HISCORE_KEY='danmaku_hiscore_v1';            // legacy v1 int (kept one release for migration)
 const SAVE_KEY='danmaku_save_v2';
@@ -2034,8 +2048,8 @@ function updateItems(dt){ const pAlive=(player.state==='alive'||player.state==='
   }
 }
 function pointItemValue(yAtCollect){ const top=POC_LINE_Y, bot=PF_H; let t=(yAtCollect-top)/(bot-top); t=t<0?0:(t>1?1:t); return Math.round(POINT_BASE-t*(POINT_BASE-POINT_MIN)); }
-function takePoint(it){ game.pointTotal++; addScore(Math.round(pointItemValue(it.y)*Math.min(SCORE_MUL_MAX_APPLY,game.scoreMul))); if(it.kind==='point') game.scoreMul=Math.min(SCORE_MUL_CAP,game.scoreMul+SCORE_MUL_GAIN); }   // score at current (capped) mult FIRST, THEN bump — point items only (fullpower power scores x mult but does NOT pump it)
-function collectItem(it){ switch(it.kind){ case 'power': game.fullpower?takePoint(it):addPower(POWER_PER_ITEM); break; case 'bigpower': game.fullpower?takePoint(it):addPower(POWER_PER_BIG); break; case 'full': game.fullpower?takePoint(it):addPower(MAXPOWER); break; case 'oneup': grantExtend('item'); break; case 'bomb': player.bombs=Math.min(MAX_BOMBS,player.bombs+1); break; case 'point': takePoint(it); break; } sfx.item&&sfx.item(it.kind); spawnParticle(it.x,it.y,0,-40,{life:0.25,kind:'pickup',hue:it.hue,r:3}); }
+function takePoint(it){ game.pointTotal++; const score=Math.round(pointItemValue(it.y)*Math.min(SCORE_MUL_MAX_APPLY,game.scoreMul)); addScore(score); if(it.kind==='point') game.scoreMul=Math.min(SCORE_MUL_CAP,game.scoreMul+SCORE_MUL_GAIN); return pitchInfoFor(score); }   // score FIRST at current (capped) mult, THEN bump; returns the score-pitched pickup note (audio-only)
+function collectItem(it){ let midi; switch(it.kind){ case 'power': game.fullpower?(midi=takePoint(it)):addPower(POWER_PER_ITEM); break; case 'bigpower': game.fullpower?(midi=takePoint(it)):addPower(POWER_PER_BIG); break; case 'full': game.fullpower?(midi=takePoint(it)):addPower(MAXPOWER); break; case 'oneup': grantExtend('item'); break; case 'bomb': player.bombs=Math.min(MAX_BOMBS,player.bombs+1); break; case 'point': midi=takePoint(it); break; } if(it.kind!=='oneup') sfx.item&&sfx.item(it.kind, midi); spawnParticle(it.x,it.y,0,-40,{life:0.25,kind:'pickup',hue:it.hue,r:3}); }
 function onEnemyHit(e,shot){ damageEnemy(e,shot.dmg,shot.pierceSpell?GRAZE_PIERCE:null); }
 
 // ============================ STAGE / ENEMIES =======================
