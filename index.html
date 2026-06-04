@@ -96,6 +96,10 @@ const POINT_BASE = 10000, POINT_MIN = 2000;   // point-item value anchors (colle
 // Internal headroom (CAP > MAX_APPLY) keeps a hot chain pinned at the cap so the readout doesn't flicker 1.9<->2.0 each pickup/decay.
 const SCORE_MUL_MAX_APPLY = 2.0, SCORE_MUL_CAP = 2.1, SCORE_MUL_GAIN = 0.1, SCORE_MUL_DECAY = 0.2;
 const ITEM_GRAV = 120, ITEM_TERMINAL = 130, ITEM_R = 11, ITEM_COLLECT_R = 30;
+// grace below the visible bottom (PF_H) an item stays alive-but-clipped before it actually despawns.
+// at terminal velocity (130px/s) 100px ≈ 0.77s — enough to dart up to the POC line and auto-collect
+// an item that just slipped off the bottom (was 40px ≈ 0.3s, which gave no realistic reaction window).
+const ITEM_DESPAWN_GRACE = 100;
 // magnet: speed ramps at full ACC toward MAXSPD; heading slews loosely at TURN (rad/s);
 // PULL is the min closing-speed fraction (radial floor) that guarantees the radius shrinks → no orbit.
 const ITEM_MAGNET_ACC = 2400, ITEM_MAGNET_MAXSPD = 1100, ITEM_MAGNET_TURN = 9, ITEM_MAGNET_PULL = 0.45;
@@ -1845,7 +1849,7 @@ function updateItems(dt){ const pAlive=(player.state==='alive'||player.state==='
     } else { it.vy+=ITEM_GRAV*dt; if(it.vy>ITEM_TERMINAL) it.vy=ITEM_TERMINAL; it.vx*=0.992; if(it.spd!=null){ it.spd=null; it.dir=null; } }
     it.x+=it.vx*dt; it.y+=it.vy*dt;
     if(pAlive){ const ddx=it.x-player.x, ddy=it.y-player.y; if(ddx*ddx+ddy*ddy<=ITEM_COLLECT_R*ITEM_COLLECT_R){ collectItem(it); swapRemove(items,i); continue; } }
-    if(it.y>PF_H+40){ swapRemove(items,i); }
+    if(it.y>PF_H+ITEM_DESPAWN_GRACE){ swapRemove(items,i); }
   }
 }
 function pointItemValue(yAtCollect){ const top=POC_LINE_Y, bot=PF_H; let t=(yAtCollect-top)/(bot-top); t=t<0?0:(t>1?1:t); return Math.round(POINT_BASE-t*(POINT_BASE-POINT_MIN)); }
