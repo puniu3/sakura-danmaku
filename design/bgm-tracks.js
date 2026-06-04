@@ -15,10 +15,9 @@ const SCALES = {
   Amin:  [0,2,4,5,7,9,11],   // A natural minor: A B C D E F G
   Aharm: [0,2,4,5,8,9,11],   // A harmonic minor: A B C D E F G#
   Charm: [0,2,3,5,7,8,11],   // C harmonic minor: C D Eb F G Ab B
-  Dharm: [1,2,4,5,7,9,10],   // D harmonic minor: D E F G A Bb C#   (Stage 2)
-  Fharm: [0,1,4,5,7,8,10],   // F harmonic minor: F G Ab Bb C Db E   (Stage 2 boss climax lift)
-  Eharm: [0,3,4,6,7,9,11],   // E harmonic minor: E F# G A B C D#   (Stage 3)
-  Gharm: [0,2,3,6,7,9,10],   // G harmonic minor: G A Bb C D Eb F#   (Stage 3 boss climax lift)
+  Dharm: [1,2,4,5,7,9,10],   // D harmonic minor: D E F G A Bb C#   (Stage 2 road)
+  Dphryg:[0,2,3,5,7,9,10],   // D Phrygian: D Eb F G A Bb C   (Stage 2 boss "Threshold Pursuit" — b2, no leading tone)
+  Ehira: [0,4,6,7,11],       // E hirajoshi: E F# G B C   (Stage 3 road "Take-no-Komichi" — 和 pentatonic)
   Ein:   [0,4,5,9,11],       // E In / 都節 (Miyako-bushi): E F A B C   (Stage 3 boss "Mirror of Two Moons")
 };
 function parseChord(sym) {
@@ -78,6 +77,7 @@ function bassBar(sym, nextSym, style) {
     case 'gallop': [0,4,8,12].forEach(b => { a[b]=r; a[b+2]=r; a[b+3]=(b===12?appr:r); }); break;
     case 'drive8': for (let i = 0; i < 16; i += 2) a[i] = r; a[8] = oct; a[14] = appr; break;
     case 'sparseRoot': a[0]=r; a[6]=r; a[10]=fifth; break;   // breathing 和-feel (Stage 3 boss "Mirror of Two Moons")
+    case 'motorPedal': for (let i = 0; i < 16; i += 2) a[i] = r; a[8] = oct; break;   // relentless straight-8th root pedal (Stage 2 boss "Threshold Pursuit")
     default: a[0] = r; a[8] = r;
   }
   return a;
@@ -99,6 +99,9 @@ function drumBar(g) {
     case 'taikoBoomBap': k[0]=1; k[10]=1; s[8]=1; h[4]=1; h[12]=2; break;
     // ---- its fuller antiphonal "call" section (still 和-spacious, not a rock beat) ----
     case 'taikoCall':    k[0]=1; k[6]=1; k[10]=1; s[4]=1; s[12]=1; h[2]=1; h[8]=2; h[14]=1; break;
+    // ---- Stage 2 boss "Threshold Pursuit": relentless motorik (four-on-floor + straight-8th hats) ----
+    case 'motorik':       [0,4,8,12].forEach(i=>k[i]=1); k[10]=1; [4,12].forEach(i=>s[i]=1); for (let i=0;i<16;i+=2) h[i]=1; break;
+    case 'motorikClimax': for (let i=0;i<16;i+=2) k[i]=1; [4,12].forEach(i=>s[i]=1); s[7]=1; s[15]=1; for (let i=0;i<16;i++) h[i]=1; break;
     default: break;
   }
   return { k, s, h };
@@ -366,98 +369,74 @@ const STAGE2 = {
 };
 
 // ================================================================ STAGE 2 BOSS
-// "Tasokare's Lament" — D harmonic minor, key-lift to F harmonic minor, 164 BPM. An INDEPENDENT theme
-// (not the Stage-1 boss reshaped): where that boss is warm and tuneful-stepwise, this hook is angular —
-// wide 4th/5th leaps and the augmented-2nd — over a recurring descending lament cadence. Menacing, not pretty.
-const B2_HOOK = [
-  [0,74],[2,81],[4,82],[8,85],[10,82],[12,79],[14,77],   // D↑A Bb (leap) → C#6 Bb G F  — wide leaps, then fall
-  [16,76],[18,74],[20,81],[24,82],[26,77],[28,76],[30,74], // E D A(leap) Bb F E D  — angular
-];
-const B2_CLOSE = [ [0,82],[4,81],[8,79],[12,77],[16,76],[20,74],[24,73],[28,74] ]; // descending lament: Bb A G F E D C# D
-const B2_B = [ // dramatic lift, D harmonic minor
-  [0,86],[6,82],[10,85],[16,81],[24,77],
-  [32,79],[40,82],[48,85],[56,86],
-  [64,85],[72,82],[80,79],[88,77],
-  [96,81],[104,85],[112,82],[120,86],
-];
-const B2_BRIDGE = [ // sinking lament to A, then a leading-tone climb back
-  [0,81],[8,77],[16,74],[24,70],
-  [32,69],[40,73],[48,74],[56,77],
-  [64,79],[72,82],[80,85],[88,82],
-  [96,81],[104,77],[112,74],[120,73],
-];
-const B2_OUTRO = [ [0,74],[2,81],[6,85],[12,82],[16,79],[24,77],[32,74],[48,74] ];
+// "Threshold Pursuit" — D Phrygian, 150 BPM. An INDEPENDENT theme that ESCAPES the Stage-1-boss mold
+// (8-part shell + min-3rd-up climax + gallop + leap-then-fall hook) on three different axes: a cold
+// MOTORIK machine-chase on a hypnotic pedal-D ostinato riff (NOT a leap-fall hook), in modal D PHRYGIAN
+// (b2 Eb stabs; no leading tone, no functional V7→i), with NO key-lift — the climax intensifies in the
+// SAME key via the motorikClimax beat. Tasokare (黄昏) as an inexorable force closing on the threshold (彼岸).
+const B2_RIFF  = [[0,74],[2,74],[3,75],[4,74],[6,77],[8,74],[10,75],[11,74],[12,79],[14,77]];   // D D Eb D F D Eb D G F  (b2 Eb stabs)
+const B2_RIFF2 = [[0,81],[2,81],[3,82],[4,81],[6,84],[8,81],[10,82],[11,81],[12,86],[14,84]];   // A A Bb A C A Bb A D C  (riff a 5th up)
+const B2_LOOM  = [[0,82],[8,81],[16,79],[24,77],[32,75],[40,77],[48,79],[56,81],[64,82],[72,84],[80,82],[88,79],[96,77],[104,75],[112,74],[120,75]]; // descending Phrygian loom
+const B2_OUTRO = [[0,74],[2,75],[6,77],[8,74],[16,79],[24,77],[32,75],[48,74]];
 const BOSS2 = {
-  title: "Tasokare's Lament", keyName: 'D harmonic minor → F', bpm: 164, gain: 0.62,
-  // DISTINCT timbre from the Stage 1 boss (which is warm triangle-led): a cold saw+hollow-square lead,
-  // a sharp chiptune-ghost square arp, and a grittier bass. With a galloping bass + midGallop groove +
-  // the faster tempo it reads as a relentless ghost-chase, not the Stage-1 boss's tuneful warm drive.
+  title: 'Threshold Pursuit', keyName: 'D Phrygian (no key-lift)', bpm: 150, gain: 0.62,
+  // Cold motorik timbre: a hollow square+saw lead, a sharp square arp, a gritty driving saw bass on the
+  // straight-8th motorPedal, dark cold pad. Relentless straight-pulse, no swing — a machine bearing down.
   voices: {
-    lead: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:0.9, filter:'lowpass', filterFreq:2600 }, { type:'square', octave:0, detune:8, gain:0.55, filter:'lowpass', filterFreq:2200 }, { type:'sawtooth', octave:1, detune:0, gain:0.2 } ], atk:0.004, dec:0.05, sus:0.45, rel:0.12, maxGate:6 },
-    harm: { layers:[ { type:'sawtooth', octave:0, detune:-6, gain:1.0 } ], atk:0.006, dec:0.05, sus:0.42, rel:0.13, filter:'lowpass', filterFreq:2400, maxGate:6 },
-    counter: { layers:[ { type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:1800 } ], atk:0.005, dec:0.05, sus:0.38, rel:0.11, maxGate:5 },
-    arp: { layers:[ { type:'square', octave:0, detune:9, gain:1.0 } ], atk:0.002, dec:0.022, sus:0.13, rel:0.05, filter:'lowpass', filterFreq:3600, maxGate:1 },
-    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.05, sus:0.58, rel:0.08, filter:'lowpass', filterFreq:1050, maxGate:3 },
-    pad: { octave:0, voices:3, detune:12, type:'sawtooth', atk:0.07, dec:0.12, sus:0.66, rel:0.4, filter:'lowpass', filterFreq:1300 } },
-  gains: { lead:0.14, harm:0.075, counter:0.085, arp:0.065, bass:0.17, sub:0.14, pad:0.055, kick:1.1, snare:1.05, crash:1.05 },
+    lead: { layers:[ { type:'square', octave:0, detune:0, gain:0.8, filter:'lowpass', filterFreq:2600 }, { type:'sawtooth', octave:0, detune:0, gain:0.5, filter:'lowpass', filterFreq:2400 }, { type:'square', octave:1, detune:0, gain:0.18 } ], atk:0.003, dec:0.04, sus:0.4, rel:0.09, maxGate:4 },
+    harm: { layers:[ { type:'square', octave:0, detune:-5, gain:1.0, filter:'lowpass', filterFreq:2200 } ], atk:0.004, dec:0.04, sus:0.38, rel:0.1, maxGate:4 },
+    counter: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:1900 } ], atk:0.004, dec:0.04, sus:0.36, rel:0.09, maxGate:4 },
+    arp: { layers:[ { type:'square', octave:0, detune:7, gain:1.0 } ], atk:0.002, dec:0.02, sus:0.12, rel:0.04, filter:'lowpass', filterFreq:3400, maxGate:1 },
+    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.003, dec:0.04, sus:0.55, rel:0.07, filter:'lowpass', filterFreq:1100, maxGate:3 },
+    pad: { octave:0, voices:3, detune:10, type:'sawtooth', atk:0.05, dec:0.1, sus:0.6, rel:0.3, filter:'lowpass', filterFreq:1250 } },
+  gains: { lead:0.135, harm:0.07, counter:0.08, arp:0.06, bass:0.175, sub:0.14, pad:0.05, kick:1.15, snare:1.08, crash:1.05 },
   sections: {
-    intro:  makeSection({ bars:8, scale:'Dharm', chords:['Dm','Dm','A7','A7','Gm','Gm','A7','A7'], lead:cat(B2_HOOK, off(64,B2_HOOK)), harm:true, bassStyle:'half', arpRate:2, groove:'fourLite', sub:true, crash:true }),
-    A1:     makeSection({ bars:8, scale:'Dharm', chords:['Dm','Bb','F','A7','Dm','Bb','Gm','A7'], lead:cat(B2_HOOK, off(32,B2_HOOK), off(64,B2_HOOK), off(96,B2_CLOSE)), bassStyle:'gallop', arpRate:1, groove:'midGallop', sub:true, crash:true }),
-    A2:     makeSection({ bars:8, scale:'Dharm', chords:['Dm','Bb','F','A7','Dm','Gm','A7','Dm'], lead:cat(B2_HOOK, off(32,B2_HOOK), off(64,B2_HOOK), off(96,B2_CLOSE)), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'midGallop', sub:true, crash:true }),
-    B:      makeSection({ bars:8, scale:'Dharm', chords:['Bb','F','Gm','Dm','Bb','F','A7','Dm'], lead:B2_B, harm:true, counter:true, bassStyle:'pump8', arpRate:1, groove:'midGallop', sub:true, crash:true }),
-    bridge: makeSection({ bars:8, scale:'Dharm', chords:['Gm','Gm','Dm','A7','Bb','Bb','A7','A7'], lead:B2_BRIDGE, bassStyle:'half', arpRate:2, groove:'bossBridge', sub:true }),
-    climax: makeSection({ bars:8, scale:'Fharm', chords:['Fm','Db','Ab','C7','Fm','Db','Bbm','C7'], lead:cat(transpose(B2_HOOK,3), off(32,transpose(B2_HOOK,3)), off(64,transpose(B2_HOOK,3)), off(96,transpose(B2_CLOSE,3))), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
-    A3:     makeSection({ bars:8, scale:'Dharm', chords:['Dm','Bb','F','A7','Dm','Gm','A7','Dm'], lead:cat(B2_HOOK, off(32,B2_HOOK), off(64,B2_HOOK), off(96,B2_CLOSE)), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
-    outro:  makeSection({ bars:4, scale:'Dharm', chords:['Gm','A7','Dm','D'], lead:B2_OUTRO, bassStyle:'half', arpRate:2, groove:'midGallop', sub:true, crash:true }),
+    intro:  makeSection({ bars:4, scale:'Dphryg', chords:['Dm','Dm','Eb','Eb'], lead:cat(B2_RIFF, off(32,B2_RIFF)), bassStyle:'motorPedal', arpRate:2, groove:'introTick', sub:true, crash:true }),
+    A1:     makeSection({ bars:8, scale:'Dphryg', chords:['Dm','Dm','Eb','Dm','Dm','Dm','Eb','Eb'], lead:cat(B2_RIFF, off(16,B2_RIFF), off(32,B2_RIFF), off(48,B2_RIFF), off(64,B2_RIFF2), off(80,B2_RIFF2), off(96,B2_RIFF2), off(112,B2_RIFF2)), bassStyle:'motorPedal', arpRate:1, groove:'motorik', sub:true }),
+    A2:     makeSection({ bars:8, scale:'Dphryg', chords:['Dm','Eb','Dm','Cm','Dm','Eb','Bb','Dm'], lead:cat(B2_RIFF, off(16,B2_RIFF), off(32,B2_RIFF2), off(48,B2_RIFF2), off(64,B2_RIFF), off(80,B2_RIFF), off(96,B2_RIFF2), off(112,B2_RIFF2)), harm:true, bassStyle:'motorPedal', arpRate:1, groove:'motorik', sub:true }),
+    loom:   makeSection({ bars:8, scale:'Dphryg', chords:['Bb','Cm','Dm','Eb','Bb','Gm','Eb','Dm'], lead:B2_LOOM, bassStyle:'motorPedal', arpRate:0, groove:'motorik', sub:true, crash:true }),
+    climax: makeSection({ bars:8, scale:'Dphryg', chords:['Dm','Eb','Dm','Eb','Dm','Cm','Eb','Dm'], lead:cat(B2_RIFF2, off(16,B2_RIFF2), off(32,B2_RIFF), off(48,B2_RIFF), off(64,B2_RIFF2), off(80,B2_RIFF2), off(96,B2_RIFF), off(112,B2_RIFF)), harm:true, counter:true, bassStyle:'motorPedal', arpRate:1, groove:'motorikClimax', sub:true, crash:true }),
+    outro:  makeSection({ bars:4, scale:'Dphryg', chords:['Eb','Cm','Dm','Dm'], lead:B2_OUTRO, bassStyle:'motorPedal', arpRate:1, groove:'motorik', sub:true }),
   },
-  arrangement: ['intro','A1','A2','B','bridge','climax','A3','outro'],
+  arrangement: ['intro','A1','A2','loom','climax','outro'],
 };
 
 // ================================================================ STAGE 3
-// "Mayoi Bamboo" — E harmonic minor, 120 BPM. An INDEPENDENT tune (not a Stage-1/2 reskin): a winding,
-// searching koto-plucked line that wanders like the lost grove — the harmonic-minor augmented-2nd shimmer
-// here is C ↔ D# (a different colour from Stage 2's Bb↔C#), over a slower walking groove. Distinct key &
-// timbre from both earlier 道中 themes.
-const S3_HOOK = [
-  [0,76],[6,79],[10,78],            // E … G F#  — a searching off-beat rise/step
-  [16,83],[20,84],[24,87],[28,84],  // B → C6 → D#6 → C6  (the augmented-2nd shimmer C↔D#)
-  [32,81],[40,79],[44,78],          // A G F#  — winding descent
-  [48,76],[54,75],[58,76],          // E → D#5 → E  (leading-tone resolution)
-];
-const S3_HOOK2 = [ // variation tail, hangs on B (the V) for the half-cadence
-  [0,76],[6,79],[10,81],
-  [16,84],[20,87],[28,84],
-  [32,83],[40,79],
-  [48,81],[56,83],[60,83],
-];
+// "Take-no-Komichi" (竹の小径) — E hirajoshi (和 pentatonic), 116 BPM. An INDEPENDENT tune that ESCAPES the
+// Stage-2-road mold (the shared "off-beat + harmonic-minor augmented-2nd shimmer b6↔#7" hook over walk8/
+// midGroove): a gentle koto-plucked wander in the DARK 和 PENTATONIC. Hirajoshi has NO leading tone and NO
+// augmented 2nd, so the shared road-hook device is structurally impossible — that is the break. Ties the
+// lost bamboo grove 和-wise to its 都節 boss while staying road-distinct (hirajoshi ≠ 都節). Pure Em/C harmony.
+const S3_HOOK = [ [0,71],[4,72],[8,76],[12,79],[16,78],[20,76],[24,72],[28,71] ];   // B C E G | F# E C B
+const S3_HOOK2 = [ [0,76],[4,79],[8,83],[12,84],[16,83],[20,79],[24,78],[28,76] ];  // E G B C | B G F# E
+const S3_CLOSE = [ [0,79],[8,78],[16,76],[24,72] ];                                 // G F# E C
 const S3_B = [ // 8-bar contrasting lift — lyrical, upper register
-  [0,88],[8,84],[12,87],
-  [16,83],[24,79],[28,81],
-  [32,78],[40,79],[48,83],[56,88],
-  [64,87],[72,84],[80,81],[88,79],
-  [96,81],[104,83],[112,84],[120,87],
+  [0,84],[8,88],[16,83],[24,79],
+  [32,78],[40,83],[48,84],[56,88],
+  [64,90],[72,88],[80,84],[88,83],
+  [96,84],[104,88],[112,83],[120,79],
 ];
-const S3_BRIDGE = [ [0,71],[8,76],[16,79],[24,84],[32,87],[40,84],[48,81],[56,79] ];
-const S3_OUTRO = [ [0,84],[8,83],[16,81],[24,79],[32,78],[40,76],[48,76] ];
+const S3_BRIDGE = [ [0,72],[8,76],[16,79],[24,83],[32,84],[40,83],[48,79],[56,78] ];
+const S3_OUTRO = [ [0,83],[8,79],[16,78],[24,76],[32,72],[40,71],[48,76] ];
 const STAGE3 = {
-  title: 'Mayoi Bamboo', keyName: 'E harmonic minor', bpm: 120, gain: 0.55,
+  title: 'Take-no-Komichi', keyName: 'E hirajoshi (和 pentatonic)', bpm: 116, gain: 0.55,
   // DISTINCT timbre: a koto-plucked lead (triangle + a faint square bell octave-up, short sustain), a round
-  // sine bass, a glassy bell arp, and a forward dark pad — a wandering night-grove piece, not the Stage-1
-  // bright march nor the Stage-2 floating twilight.
+  // sine bass, a glassy bell arp, and a forward dark pad — a wandering night-grove piece, the strongest
+  // scale-break against the Stage-2 road's functional harmonic minor.
   voices: {
-    lead: { layers:[ { type:'triangle', octave:0, detune:0, gain:1.0 }, { type:'square', octave:1, detune:0, gain:0.16, filter:'lowpass', filterFreq:3000 }, { type:'sine', octave:0, detune:-5, gain:0.4 } ], atk:0.004, dec:0.10, sus:0.32, rel:0.18, maxGate:5 },
+    lead: { layers:[ { type:'triangle', octave:0, detune:0, gain:1.0 }, { type:'square', octave:1, detune:0, gain:0.14, filter:'lowpass', filterFreq:2800 }, { type:'sine', octave:0, detune:-5, gain:0.4 } ], atk:0.003, dec:0.08, sus:0.28, rel:0.16, maxGate:5 },
     arp:  { layers:[ { type:'triangle', octave:1, detune:0, gain:1.0 } ], atk:0.002, dec:0.04, sus:0.12, rel:0.07, filter:'lowpass', filterFreq:3200, maxGate:1 },
     bass: { layers:[ { type:'sine', octave:0, detune:0, gain:1.0 }, { type:'triangle', octave:0, detune:0, gain:0.35 } ], atk:0.006, dec:0.07, sus:0.6, rel:0.12, filter:'lowpass', filterFreq:640, maxGate:4 },
     pad:  { octave:0, voices:3, detune:11, type:'sawtooth', atk:0.18, dec:0.2, sus:0.76, rel:0.6, filter:'lowpass', filterFreq:1100 } },
   gains: { lead:0.13, harm:0.07, counter:0.07, arp:0.058, bass:0.15, sub:0.13, pad:0.072 },
   sections: {
-    intro: makeSection({ bars:4, scale:'Eharm', chords:['Em','Em','C','B7'], bassStyle:'half', arpRate:2, groove:'introTick', sub:true, crash:true }),
-    A:     makeSection({ bars:8, scale:'Eharm', chords:['Em','C','G','B7','Em','Am','B7','Em'], lead:cat(S3_HOOK, off(64,S3_HOOK2)), bassStyle:'walk8', arpRate:2, groove:'midGroove', sub:true }),
-    A2:    makeSection({ bars:8, scale:'Eharm', chords:['Em','C','G','B7','Em','Am','B7','Em'], lead:cat(S3_HOOK, off(64,S3_HOOK2)), harm:true, bassStyle:'walk8', arpRate:2, groove:'midGroove', sub:true }),
-    B:     makeSection({ bars:8, scale:'Eharm', chords:['C','G','Am','Em','C','G','B7','B7'], lead:S3_B, counter:true, bassStyle:'walk8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
-    bridge:makeSection({ bars:4, scale:'Eharm', chords:['Am','B7','Em','B7'], lead:S3_BRIDGE, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
-    A2b:   makeSection({ bars:8, scale:'Eharm', chords:['Em','C','G','B7','Em','Am','B7','Em'], lead:cat(S3_HOOK, off(64,S3_HOOK2)), harm:true, counter:true, bassStyle:'walk8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
-    outro: makeSection({ bars:4, scale:'Eharm', chords:['Em','C','Am','B7'], lead:S3_OUTRO, bassStyle:'walk8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
+    intro: makeSection({ bars:4, scale:'Ehira', chords:['Em','Em','C','Em'], bassStyle:'walk8', arpRate:2, groove:'introTick', sub:true, crash:true }),
+    A:     makeSection({ bars:8, scale:'Ehira', chords:['Em','Em','C','C','Em','Em','C','Em'], lead:cat(S3_HOOK, off(32,S3_HOOK2), off(64,S3_HOOK), off(96,S3_CLOSE)), bassStyle:'walk8', arpRate:2, groove:'fourLite', sub:true }),
+    A2:    makeSection({ bars:8, scale:'Ehira', chords:['Em','Em','C','C','Em','Em','C','Em'], lead:cat(S3_HOOK, off(32,S3_HOOK2), off(64,S3_HOOK), off(96,S3_CLOSE)), harm:true, bassStyle:'walk8', arpRate:2, groove:'fourLite', sub:true }),
+    B:     makeSection({ bars:8, scale:'Ehira', chords:['C','Em','Em','C','Em','Em','C','Em'], lead:S3_B, counter:true, bassStyle:'walk8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
+    bridge:makeSection({ bars:4, scale:'Ehira', chords:['C','Em','Em','Em'], lead:S3_BRIDGE, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
+    A2b:   makeSection({ bars:8, scale:'Ehira', chords:['Em','Em','C','C','Em','Em','C','Em'], lead:cat(S3_HOOK, off(32,S3_HOOK2), off(64,S3_HOOK), off(96,S3_CLOSE)), harm:true, counter:true, bassStyle:'walk8', arpRate:1, groove:'fourLite', sub:true, crash:true }),
+    outro: makeSection({ bars:4, scale:'Ehira', chords:['Em','C','C','Em'], lead:S3_OUTRO, bassStyle:'walk8', arpRate:1, groove:'fourLite', sub:true, crash:true }),
   },
   arrangement: ['intro','A','A2','B','bridge','A2b','outro'],
 };
