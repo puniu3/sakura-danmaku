@@ -1993,7 +1993,7 @@ function spawnExtendItem(){ const px=(player&&player.x!=null)?player.x:PF_W/2; s
 function addGraze(n){ n=n||1; game.grazeCount+=n; addScore(GRAZE_SCORE*n); sfx.graze&&sfx.graze();
   // graze-milestone power-up: each crossed threshold (re)activates; interval grows +10 each time.
   while(player&&player.state==='alive'&&game.grazeCount>=game.grazePowerThreshold){ activateGrazePower(); game.grazePowerInterval+=GRAZE_POWER_STEP; game.grazePowerThreshold+=game.grazePowerInterval; } }
-function onGraze(bullet){ if(player.invuln>0) return; addGraze(1); spawnParticle(bullet.x,bullet.y,(rng()-0.5)*40,-30,{life:0.18,kind:'graze',hue:55,r:2}); Render.popText(bullet.x,bullet.y,'+'+GRAZE_SCORE,90); }
+function onGraze(bullet){ if(player.invuln>0) return; addGraze(1); spawnParticle(bullet.x,bullet.y,(rng()-0.5)*40,-30,{life:0.18,kind:'graze',hue:55,r:2}); }
 // At the life cap, a collected 1UP converts to its EXTEND_INTERVAL (1M) value in score instead of a life.
 // Pre-bump extendsTaken so the +1M crossing doesn't itself spawn a fresh 1UP (the score's own extend is suppressed).
 function grantExtend(reason){ if(player.lives>=MAX_LIVES){ game.extendsTaken++; addScore(EXTEND_INTERVAL); sfx.extend&&sfx.extend(); Render.flash(0.4,150); Render.popText(player.x,player.y-22,'1UP→+1M',ITEM_HUE.oneup); return; } player.lives++; sfx.extend&&sfx.extend(); Render.flash(0.4,150); }
