@@ -104,7 +104,7 @@ const ITEM_DESPAWN_GRACE = 100;
 // PULL is the min closing-speed fraction (radial floor) that guarantees the radius shrinks → no orbit.
 const ITEM_MAGNET_ACC = 2400, ITEM_MAGNET_MAXSPD = 1100, ITEM_MAGNET_TURN = 9, ITEM_MAGNET_PULL = 0.45;
 const POC_LINE_Y = 140;
-const ITEM_HUE = { power:15, point:205, bigpower:15, oneup:340, full:280, bomb:165 };  // bomb = teal (was 200≈point's 205 → indistinguishable); 165 reads clearly apart from point's blue. Diverges from HUD bomb cyan by design (item identity prioritised over HUD-match).
+const ITEM_HUE = { power:15, point:205, bigpower:15, oneup:340, full:280, bomb:165 };  // bomb = teal (was 200≈point's 205 → indistinguishable); 165 reads clearly apart from point's blue. HUD bomb star now matches this hue (PALETTE.bomb = teal hsl(165,92%,74%), the item's top-stop colour) so HUD↔item read as one resource.
 
 const STATE = { TITLE:0, PLAYING:1, PAUSED:2, GAMEOVER:3, STAGECLEAR:4,
   // reserved for the multi-stage campaign flow (screens wired when stages 2-6 land; unused at 1 stage).
@@ -1131,7 +1131,7 @@ const CANCEL_WAVE_SPEED=520, CANCEL_WAVE_LIFE=0.6, POPTEXT_LIFE=0.9, BOSS_AURA_S
 const PALETTE={
   hudBg:'#160b22', hudPanel:'#241338', hudEdge:'#4b2d72',
   uiText:'#ffe9fb', uiDim:'#9d83c0', uiGold:'#ffd45e',
-  life:'#ff5d8f', bomb:'#74e0ff', graze:'#b9ff6a',
+  life:'#ff5d8f', bomb:'#80fadb', graze:'#b9ff6a',  // bomb = teal hsl(165,92%,74%) = the bomb item's top-stop colour (ITEM_HUE.bomb=165) so HUD↔item read as one resource
   power0:'#ffb347', power1:'#ffe08a', powerBg:'#2a1840',
   ship:'#f7fbff', shipTrim:'#8fd0ff', engine:'#6cf0ff', hitRing:'#ff3b6b', option:'#bff0ff',
   bossBody:'#2a1030', bossRim:'#ff7ae0', auraA:'#ff5ec4', auraB:'#7a5cff',
@@ -1569,7 +1569,7 @@ function drawHUD(){ ctx.save(); ctx.translate(PF_W,0); ctx.fillStyle=PALETTE.hud
     const emw=HUD_W-44, eh=4, my=y+5, ef=(game.score%EXTEND_INTERVAL)/EXTEND_INTERVAL; ctx.fillStyle=PALETTE.powerBg; roundRect(lx,my,emw,eh,2); ctx.fill(); ctx.fillStyle=PALETTE.uiGold; roundRect(lx,my,emw*ef,eh,2); ctx.fill();
   } y+=18;
   label('Player'); y+=16; for(let i=0;i<MAX_LIVES&&i<6;i++){ ctx.fillStyle=(i<lives)?PALETTE.life:'rgba(255,93,143,0.18)'; icon_heart(lx+i*18,y); } y+=26;
-  label('Bomb'); y+=16; for(let i=0;i<MAX_BOMBS&&i<6;i++){ ctx.fillStyle=(i<bombs)?PALETTE.bomb:'rgba(116,224,255,0.18)'; icon_star(lx+i*18,y); } y+=28;
+  label('Bomb'); y+=16; for(let i=0;i<MAX_BOMBS&&i<6;i++){ ctx.fillStyle=(i<bombs)?PALETTE.bomb:'rgba(128,250,219,0.18)'; icon_star(lx+i*18,y); } y+=28;
   label('Power'); y+=8; const barw=HUD_W-44, ph=12, pf=Math.max(0,Math.min(1,pw/MAXPOWER)); ctx.fillStyle=PALETTE.powerBg; roundRect(lx,y,barw,ph,4); ctx.fill(); const pg=ctx.createLinearGradient(lx,0,lx+barw,0); pg.addColorStop(0,PALETTE.power0); pg.addColorStop(1,PALETTE.power1); ctx.fillStyle=pg; roundRect(lx,y,barw*pf,ph,4); ctx.fill(); ctx.fillStyle=game.fullpower?PALETTE.uiGold:PALETTE.uiText; ctx.font='9px sans-serif'; ctx.textAlign='right'; ctx.fillText(game.fullpower?'MAX':(pw/100).toFixed(2),lx+barw,y-3); ctx.textAlign='left'; y+=30;
   { const active=player&&player.grazePowerT>0; label('Graze'); ctx.fillStyle=active?'hsl('+GRAZE_HUE+',100%,72%)':PALETTE.graze; ctx.font='bold 16px "Trebuchet MS",sans-serif'; ctx.textAlign='right'; ctx.fillText(''+(game.grazeCount||0),HUD_W-22,y+2); ctx.textAlign='left';
     // graze-power gauge: when active = remaining-time fraction (power hue); else = progress toward next milestone
