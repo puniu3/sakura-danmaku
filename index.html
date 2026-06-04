@@ -2172,7 +2172,10 @@ function waveWraith(opts){ return (function*(){ const xs=opts.xs||[PF_W*0.5], y=
 // sprite every `interval`s so the stalk streams OUT of the body, instead of pat.lineOfBullets laying the whole
 // rod out in a single frame (which made its far end pop in detached, ~5x the body radius below the enemy).
 // A generator → call sites `yield*` it inside their fire fork; uses no rng (golden-irrelevant, Stage 3 only).
-function* stalkFile(e,o){ const n=o.count||4, iv=o.interval!=null?o.interval:0.05; for(let i=0;i<n;i++){ pat.lineOfBullets(e,{count:1,gap:0,startGap:0,angle:o.angle,speed:o.speed,hue:o.hue,style:o.style||'arrow'}); if(i<n-1) yield* waitT(iv); } }
+// `interval` default 0.10s (not tighter): consecutive bullets are spaced speed*interval apart, so this is the
+// in-line bullet density. At 0.05 the file was so tight (column ~3px, lantern ~7px) it caught a whole cluster
+// in the graze radius per pass → unintended graze floods; 0.10 halves the density to a readable stalk.
+function* stalkFile(e,o){ const n=o.count||4, iv=o.interval!=null?o.interval:0.10; for(let i=0;i<n;i++){ pat.lineOfBullets(e,{count:1,gap:0,startGap:0,angle:o.angle,speed:o.speed,hue:o.hue,style:o.style||'arrow'}); if(i<n-1) yield* waitT(iv); } }
 // waveStalkColumn — light sprites fall in VERTICAL FILES (descending bamboo stalks). Each of opts.cols
 // columns is a tight train of opts.per sprites down its own lane; sprites drop a short straight
 // lineOfBullets dart-file as they pass. opts.cross (bool) slants alternating columns into an X.
