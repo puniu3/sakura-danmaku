@@ -82,10 +82,10 @@ const START_POWER = 100;
 const MAXPOWER = 400, POWER_BREAKS = [0,40,80,150,200,300,400];
 const POWER_PER_ITEM = 8, POWER_PER_BIG = 40;
 
-const START_BOMBS = 2, MAX_BOMBS = 8;
+const START_BOMBS = 2, MAX_BOMBS = 6;   // cap matches MAX_LIVES (6-slot HUD). No 'bomb' item drops yet — bomb pickups to be added later via stage tuning.
 const BOMB_INVULN = 2.5, BOMB_BOSS_DPS = 140, BOMB_DOT_TIME = 2.2, BOMB_FLASH = 0.6;
 const DEATHBOMB_TIME = 9/120;
-const START_LIVES = 3, MAX_LIVES = 9;
+const START_LIVES = 3, MAX_LIVES = 6;
 const RESPAWN_INVULN = 3.0, RESPAWN_BLINK = 0.09, DEATH_CLEAR_R = 72, DEATH_POWER_DROP = 8;
 
 const GRAZE_SCORE = 50;
@@ -1811,7 +1811,9 @@ function addGraze(n){ n=n||1; game.grazeCount+=n; addScore(GRAZE_SCORE*n); sfx.g
   // graze-milestone power-up: each crossed threshold (re)activates; interval grows +10 each time.
   while(player&&player.state==='alive'&&game.grazeCount>=game.grazePowerThreshold){ activateGrazePower(); game.grazePowerInterval+=GRAZE_POWER_STEP; game.grazePowerThreshold+=game.grazePowerInterval; } }
 function onGraze(bullet){ if(player.invuln>0) return; addGraze(1); spawnParticle(bullet.x,bullet.y,(rng()-0.5)*40,-30,{life:0.18,kind:'graze',hue:55,r:2}); Render.popText(bullet.x,bullet.y,'+'+GRAZE_SCORE,90); }
-function grantExtend(reason){ if(player.lives>=MAX_LIVES) return; player.lives++; sfx.extend&&sfx.extend(); Render.flash(0.4,150); }
+// At the life cap, a collected 1UP converts to its EXTEND_INTERVAL (1M) value in score instead of a life.
+// Pre-bump extendsTaken so the +1M crossing doesn't itself spawn a fresh 1UP (the score's own extend is suppressed).
+function grantExtend(reason){ if(player.lives>=MAX_LIVES){ game.extendsTaken++; addScore(EXTEND_INTERVAL); sfx.extend&&sfx.extend(); Render.flash(0.4,150); Render.popText(player.x,player.y-22,'1UP→+1M',ITEM_HUE.oneup); return; } player.lives++; sfx.extend&&sfx.extend(); Render.flash(0.4,150); }
 
 const HISCORE_KEY='danmaku_hiscore_v1';            // legacy v1 int (kept one release for migration)
 const SAVE_KEY='danmaku_save_v2';
