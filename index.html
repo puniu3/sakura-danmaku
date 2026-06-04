@@ -89,14 +89,18 @@ const START_LIVES = 3, MAX_LIVES = 9;
 const RESPAWN_INVULN = 3.0, RESPAWN_BLINK = 0.09, DEATH_CLEAR_R = 72, DEATH_POWER_DROP = 8;
 
 const GRAZE_SCORE = 50;
-const EXTEND_THRESHOLDS = [1e6,3e6,6e6,1e7];
-const POINT_BASE = 10000, POINT_MIN = 2000, SPELL_CAPTURE_BONUS = 500000;
+const EXTEND_INTERVAL = 1e6;   // score-extend fires every fixed 1M (was a [1M,3M,6M,10M] table); HUD shows a fill meter toward the next
+const EXTEND_ITEM_FALL = 70;   // score-extend drops a 1UP from the top, straight above the player, to be collected
+const POINT_BASE = 10000, POINT_MIN = 2000, SPELL_CAPTURE_FLAT = 50000;   // every spell capture awards a flat 50k (auxiliary; the collection loop is the score driver)
+// score multiplier (player state): each point-item pickup +GAIN (internal cap CAP), decays DECAY/s; applied & displayed capped at MAX_APPLY.
+// Internal headroom (CAP > MAX_APPLY) keeps a hot chain pinned at the cap so the readout doesn't flicker 1.9<->2.0 each pickup/decay.
+const SCORE_MUL_MAX_APPLY = 2.0, SCORE_MUL_CAP = 2.1, SCORE_MUL_GAIN = 0.1, SCORE_MUL_DECAY = 0.2;
 const ITEM_GRAV = 120, ITEM_TERMINAL = 130, ITEM_R = 11, ITEM_COLLECT_R = 30;
 // magnet: speed ramps at full ACC toward MAXSPD; heading slews loosely at TURN (rad/s);
 // PULL is the min closing-speed fraction (radial floor) that guarantees the radius shrinks → no orbit.
 const ITEM_MAGNET_ACC = 2400, ITEM_MAGNET_MAXSPD = 1100, ITEM_MAGNET_TURN = 9, ITEM_MAGNET_PULL = 0.45;
 const POC_LINE_Y = 140;
-const ITEM_HUE = { power:15, point:205, bigpower:15, oneup:340, full:280, star:55, bomb:200 };
+const ITEM_HUE = { power:15, point:205, bigpower:15, oneup:340, full:280, bomb:200 };
 
 const STATE = { TITLE:0, PLAYING:1, PAUSED:2, GAMEOVER:3, STAGECLEAR:4,
   // reserved for the multi-stage campaign flow (screens wired when stages 2-6 land; unused at 1 stage).
@@ -1316,7 +1320,7 @@ function drawPlayerShots(alpha){ const it=playerShots.items,n=playerShots.count;
     if(kind==='homing'){ const R=s.r*1.7; const g=ctx.createRadialGradient(px,py,1,px,py,R); g.addColorStop(0,'rgba(255,255,255,0.95)'); g.addColorStop(0.4,'hsla('+s.hue+',100%,75%,0.85)'); g.addColorStop(1,'hsla('+s.hue+',100%,62%,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(px,py,R,0,TAU); ctx.fill(); ctx.fillStyle='rgba(255,255,255,0.92)'; ctx.beginPath(); ctx.arc(px,py,s.r*0.5,0,TAU); ctx.fill(); continue; }
     const spr=getPlayerShotSprite(kind,s.hue||330); if(kind==='needle'){ ctx.save(); ctx.translate(px,py); ctx.rotate(Math.atan2(s.vy,s.vx)+HALFPI); ctx.drawImage(spr,-spr.width/2,-spr.height/2); ctx.restore(); } else ctx.drawImage(spr,px-spr.width/2,py-spr.height/2); } ctx.globalCompositeOperation='source-over'; ctx.restore(); }
 function drawEnemies(c,t,alpha){ for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(!e||e.dead||e.boss) continue; const x=e.x,y=e.y,hue=e.hue; c.save(); c.globalCompositeOperation='lighter'; const g=c.createRadialGradient(x,y,1,x,y,e.r*1.9); g.addColorStop(0,'hsla('+hue+',90%,75%,0.55)'); g.addColorStop(1,'hsla('+hue+',90%,60%,0)'); c.fillStyle=g; c.beginPath(); c.arc(x,y,e.r*1.9,0,TAU); c.fill(); c.restore(); c.save(); c.translate(x,y); const wf=Math.sin(t*12+e.born*7)*0.35+0.95; c.fillStyle='hsla('+hue+',80%,86%,0.5)'; c.beginPath(); c.ellipse(-e.r*0.7,0,e.r*0.7,e.r*1.1*wf,0.5,0,TAU); c.fill(); c.beginPath(); c.ellipse(e.r*0.7,0,e.r*0.7,e.r*1.1*wf,-0.5,0,TAU); c.fill(); c.fillStyle='hsl('+hue+',70%,93%)'; c.beginPath(); c.arc(0,0,e.r*0.6,0,TAU); c.fill(); c.fillStyle='hsl('+hue+',75%,55%)'; c.beginPath(); c.arc(0,-e.r*0.15,e.r*0.32,0,TAU); c.fill(); c.restore(); } }
-const ITEM_LABEL={ power:'P', bigpower:'P', point:'★', oneup:'♥', full:'F', bomb:'B', star:'★' };
+const ITEM_LABEL={ power:'P', bigpower:'P', point:'★', oneup:'♥', full:'F', bomb:'B' };
 function drawItems(t){
   for(let i=0;i<items.length;i++){ const it=items[i]; if(!it||it.dead) continue;
     const hue=ITEM_HUE[it.kind]!=null?ITEM_HUE[it.kind]:55, x=it.x, y=it.y;
@@ -1382,7 +1386,12 @@ function icon_heart(x,y){ ctx.beginPath(); ctx.moveTo(x,y+4); ctx.bezierCurveTo(
 function icon_star(x,y){ ctx.save(); ctx.translate(x,y-1); ctx.beginPath(); for(let i=0;i<10;i++){ const r=(i&1)?2.6:6, a=-HALFPI+i*Math.PI/5, X=Math.cos(a)*r, Y=Math.sin(a)*r; i?ctx.lineTo(X,Y):ctx.moveTo(X,Y); } ctx.closePath(); ctx.fill(); ctx.restore(); }
 function drawHUD(){ ctx.save(); ctx.translate(PF_W,0); ctx.fillStyle=PALETTE.hudBg; ctx.fillRect(0,0,HUD_W,PF_H); ctx.fillStyle=PALETTE.hudPanel; ctx.fillRect(8,8,HUD_W-16,PF_H-16); ctx.strokeStyle=PALETTE.hudEdge; ctx.lineWidth=2; ctx.strokeRect(8,8,HUD_W-16,PF_H-16); ctx.textAlign='left'; let y=34; const lx=22; const label=s=>{ ctx.fillStyle=PALETTE.uiDim; ctx.font='10px "Trebuchet MS",sans-serif'; ctx.textAlign='left'; ctx.fillText(s,lx,y); }; const val=(s,col)=>{ ctx.fillStyle=col||PALETTE.uiText; ctx.font='bold 17px "Trebuchet MS",sans-serif'; ctx.textAlign='right'; ctx.fillText(s,HUD_W-22,y); ctx.textAlign='left'; };
   const lives=player?player.lives:0, bombs=player?player.bombs:0, pw=player?player.power:0;
-  label('HiScore'); val(pad(game.hi||0,9),PALETTE.uiGold); y+=22; label('Score'); val(pad(game.score||0,9),PALETTE.uiText); y+=34;
+  label('HiScore'); val(pad(game.hi||0,9),PALETTE.uiGold); y+=22; label('Score'); val(pad(game.score||0,9),PALETTE.uiText); y+=16;
+  { // score multiplier readout (dim at x1.0, heats toward the cap) + extend fill meter (progress to the next 1M -> 1UP)
+    const mul=Math.min(SCORE_MUL_MAX_APPLY,game.scoreMul), t=Math.max(0,(mul-1)/(SCORE_MUL_MAX_APPLY-1));
+    ctx.fillStyle=(t<0.01)?PALETTE.uiDim:'hsl('+(48-t*40)+',100%,'+(60+t*10)+'%)'; ctx.font='bold 12px "Trebuchet MS",sans-serif'; ctx.textAlign='right'; ctx.fillText('x'+mul.toFixed(1),HUD_W-22,y); ctx.textAlign='left';
+    const emw=HUD_W-44, eh=4, my=y+5, ef=(game.score%EXTEND_INTERVAL)/EXTEND_INTERVAL; ctx.fillStyle=PALETTE.powerBg; roundRect(lx,my,emw,eh,2); ctx.fill(); ctx.fillStyle=PALETTE.uiGold; roundRect(lx,my,emw*ef,eh,2); ctx.fill();
+  } y+=18;
   label('Player'); y+=16; for(let i=0;i<MAX_LIVES&&i<6;i++){ ctx.fillStyle=(i<lives)?PALETTE.life:'rgba(255,93,143,0.18)'; icon_heart(lx+i*18,y); } y+=26;
   label('Bomb'); y+=16; for(let i=0;i<MAX_BOMBS&&i<6;i++){ ctx.fillStyle=(i<bombs)?PALETTE.bomb:'rgba(116,224,255,0.18)'; icon_star(lx+i*18,y); } y+=28;
   label('Power'); y+=8; const barw=HUD_W-44, ph=12, pf=Math.max(0,Math.min(1,pw/MAXPOWER)); ctx.fillStyle=PALETTE.powerBg; roundRect(lx,y,barw,ph,4); ctx.fill(); const pg=ctx.createLinearGradient(lx,0,lx+barw,0); pg.addColorStop(0,PALETTE.power0); pg.addColorStop(1,PALETTE.power1); ctx.fillStyle=pg; roundRect(lx,y,barw*pf,ph,4); ctx.fill(); ctx.fillStyle=game.fullpower?PALETTE.uiGold:PALETTE.uiText; ctx.font='9px sans-serif'; ctx.textAlign='right'; ctx.fillText(game.fullpower?'MAX':(pw/100).toFixed(2),lx+barw,y-3); ctx.textAlign='left'; y+=30;
@@ -1650,13 +1659,13 @@ function attachTouch(el){
 let player=null, game=null, run=null;
 // difficulty knobs now live in BALANCE.difficulties (CONTENT DATA); resolveWave/resolveBoss apply them.
 function makePlayer(){ return { x:PLAYER_START.x, y:PLAYER_START.y, r:PLAYER_R, focus:false, state:'alive', dead:false, invuln:0, blink:false, fireCd:0, power:START_POWER, bombs:START_BOMBS, lives:START_LIVES, itemR:14, bombActive:0, bossDot:0, pendingDeath:0, respawnT:0, options:[], mvx:0, mvy:0, grazePowerT:0 }; }
-function makeGame(){ return { state:STATE.TITLE, score:0, hi:0, grazeCount:0, pointTotal:0, extendsTaken:0, stateT:0, fullpower:false, paused:false, boss:null, spellIntensity:0, powerMax:MAXPOWER, grazePowerThreshold:GRAZE_POWER_FIRST, grazePowerInterval:GRAZE_POWER_FIRST }; }
+function makeGame(){ return { state:STATE.TITLE, score:0, hi:0, grazeCount:0, pointTotal:0, scoreMul:1, extendsTaken:0, stateT:0, fullpower:false, paused:false, boss:null, spellIntensity:0, powerMax:MAXPOWER, grazePowerThreshold:GRAZE_POWER_FIRST, grazePowerInterval:GRAZE_POWER_FIRST }; }
 function initGameSystems(){ game=makeGame(); player=makePlayer(); loadHiScore(); setState(STATE.TITLE); }
 
 function updateGameSystems(dt){ game.stateT+=dt;
   switch(game.state){
     case STATE.TITLE: updateTitle(dt); break;
-    case STATE.PLAYING: playerUpdate(dt); updateItems(dt); applyBossDot(dt); break;
+    case STATE.PLAYING: playerUpdate(dt); updateItems(dt); applyBossDot(dt); if(game.scoreMul>1) game.scoreMul=Math.max(1,game.scoreMul-SCORE_MUL_DECAY*dt); break;
     case STATE.PAUSED: break;
     case STATE.GAMEOVER:
       if(!game._goFade && game.stateT>GAMEOVER_AUTORET-GAMEOVER_FADE){ game._goFade=true; Audio.fadeOutMusic(GAMEOVER_FADE); }   // begin the gentle tail fade so silence lands right at the auto-return
@@ -1683,7 +1692,7 @@ function setState(s){ const prev=game.state; game.state=s; game.stateT=0;
 function startRun(diff, fromStage){
   run = { difficulty:(diff||'normal'), stage:(fromStage||0), continuesUsed:0, practice:false };
   const D = BALANCE.difficulties[run.difficulty] || BALANCE.difficulties.normal;
-  _cutin.active=false; game.score=0; game.grazeCount=0; game.pointTotal=0; game.extendsTaken=0; game.fullpower=false; game.boss=null; game.spellIntensity=0; game.grazePowerThreshold=GRAZE_POWER_FIRST; game.grazePowerInterval=GRAZE_POWER_FIRST;
+  _cutin.active=false; game.score=0; game.grazeCount=0; game.pointTotal=0; game.scoreMul=1; game.extendsTaken=0; game.fullpower=false; game.boss=null; game.spellIntensity=0; game.grazePowerThreshold=GRAZE_POWER_FIRST; game.grazePowerInterval=GRAZE_POWER_FIRST;
   player=makePlayer(); player.lives=D.lives; player.bombs=D.bombs;
   enterStage(run.stage);
 }
@@ -1787,16 +1796,19 @@ function onPlayerHit(srcBullet,enemy){ if(player.state!=='alive'||player.invuln>
     if(player.grazePowerT<=0) endGrazePower();   // a hit that drains it to 0 ends the power-up → clean up trailing shots
     return; }
   player.state='pendingdeath'; player.pendingDeath=DEATHBOMB_TIME; if(srcBullet) srcBullet.alive=false; }
-function finalizeDeath(){ player.state='dead'; player.dead=true; endGrazePower(); player.lives--; player.bombs=START_BOMBS; player.respawnT=0.55; sfx.death&&sfx.death(); Render.shake(0.7); Render.slowmo(0.4,0.5); clearBulletsToSparkles(player.x,player.y,DEATH_CLEAR_R); for(let i=0;i<26;i++){ const a=rng()*TAU, s=60+rng()*160; spawnParticle(player.x,player.y,Math.cos(a)*s,Math.sin(a)*s,{life:0.5,kind:'death',hue:330,r:3}); } player.power=Math.max(0,player.power-Math.floor(player.power*0.25)-15); game.fullpower=(player.power>=MAXPOWER); dropItems('power',DEATH_POWER_DROP,player.x,player.y-10,80); if(player.lives<0){ player.state='gameover'; setState(STATE.GAMEOVER); } }
+function finalizeDeath(){ player.state='dead'; player.dead=true; endGrazePower(); game.scoreMul=1; player.lives--; player.bombs=START_BOMBS; player.respawnT=0.55; sfx.death&&sfx.death(); Render.shake(0.7); Render.slowmo(0.4,0.5); clearBulletsToSparkles(player.x,player.y,DEATH_CLEAR_R); for(let i=0;i<26;i++){ const a=rng()*TAU, s=60+rng()*160; spawnParticle(player.x,player.y,Math.cos(a)*s,Math.sin(a)*s,{life:0.5,kind:'death',hue:330,r:3}); } player.power=Math.max(0,player.power-Math.floor(player.power*0.25)-15); game.fullpower=(player.power>=MAXPOWER); dropItems('power',DEATH_POWER_DROP,player.x,player.y-10,80); if(player.lives<0){ player.state='gameover'; setState(STATE.GAMEOVER); } }
 function addInvuln(seconds){ player.invuln=Math.max(player.invuln,seconds); }
 
-function addScore(n){ game.score+=n; while(game.extendsTaken<EXTEND_THRESHOLDS.length&&game.score>=EXTEND_THRESHOLDS[game.extendsTaken]){ game.extendsTaken++; grantExtend('score'); } if(game.score>game.hi) game.hi=game.score; }
+function addScore(n){ game.score+=n; while(game.extendsTaken<Math.floor(game.score/EXTEND_INTERVAL)){ game.extendsTaken++; spawnExtendItem(); } if(game.score>game.hi) game.hi=game.score; }
+// score-extend no longer adds a life directly — it drops a 1UP at the screen top, straight above the player,
+// to be collected (grantExtend('item') fires on pickup). No rng → deterministic, golden-neutral.
+function spawnExtendItem(){ const px=(player&&player.x!=null)?player.x:PF_W/2; spawnItem('oneup',px,-ITEM_R,0,EXTEND_ITEM_FALL); Render.popText(px,30,'1UP!',ITEM_HUE.oneup); Render.flash(0.25,ITEM_HUE.oneup); }
 function addGraze(n){ n=n||1; game.grazeCount+=n; addScore(GRAZE_SCORE*n); sfx.graze&&sfx.graze();
   // graze-milestone power-up: each crossed threshold (re)activates; interval grows +10 each time.
   while(player&&player.state==='alive'&&game.grazeCount>=game.grazePowerThreshold){ activateGrazePower(); game.grazePowerInterval+=GRAZE_POWER_STEP; game.grazePowerThreshold+=game.grazePowerInterval; } }
 function onGraze(bullet){ if(player.invuln>0) return; addGraze(1); spawnParticle(bullet.x,bullet.y,(rng()-0.5)*40,-30,{life:0.18,kind:'graze',hue:55,r:2}); Render.popText(bullet.x,bullet.y,'+'+GRAZE_SCORE,90); }
 function grantExtend(reason){ if(player.lives>=MAX_LIVES) return; player.lives++; sfx.extend&&sfx.extend(); Render.flash(0.4,150); }
-function onSpellCaptured(bonus){ const gained=bonus||SPELL_CAPTURE_BONUS; addScore(gained); sfx.capture&&sfx.capture(); Render.flash(0.5,280); Render.popText(PF_W/2,PF_H*0.4,'+'+gained,280); }
+function onSpellCaptured(bonus){ addScore(SPELL_CAPTURE_FLAT); sfx.capture&&sfx.capture(); Render.flash(0.5,280); Render.popText(PF_W/2,PF_H*0.4,'+'+SPELL_CAPTURE_FLAT,280); }   // flat 50k regardless of spec bonus (ph.bonus kept only as the "awards capture" gate at the call site)
 
 const HISCORE_KEY='danmaku_hiscore_v1';            // legacy v1 int (kept one release for migration)
 const SAVE_KEY='danmaku_save_v2';
@@ -1838,8 +1850,8 @@ function updateItems(dt){ const pAlive=(player.state==='alive'||player.state==='
   }
 }
 function pointItemValue(yAtCollect){ const top=POC_LINE_Y, bot=PF_H; let t=(yAtCollect-top)/(bot-top); t=t<0?0:(t>1?1:t); return Math.round(POINT_BASE-t*(POINT_BASE-POINT_MIN)); }
-function takePoint(it){ game.pointTotal++; addScore(pointItemValue(it.y)); }   // a point item: score by collect-height + bump the point counter
-function collectItem(it){ switch(it.kind){ case 'power': game.fullpower?takePoint(it):addPower(POWER_PER_ITEM); break; case 'bigpower': game.fullpower?takePoint(it):addPower(POWER_PER_BIG); break; case 'full': game.fullpower?takePoint(it):addPower(MAXPOWER); break; case 'oneup': grantExtend('item'); break; case 'bomb': player.bombs=Math.min(MAX_BOMBS,player.bombs+1); break; case 'point': takePoint(it); break; case 'star': addScore(500); break; } sfx.item&&sfx.item(it.kind); spawnParticle(it.x,it.y,0,-40,{life:0.25,kind:'pickup',hue:it.hue,r:3}); }
+function takePoint(it){ game.pointTotal++; addScore(Math.round(pointItemValue(it.y)*Math.min(SCORE_MUL_MAX_APPLY,game.scoreMul))); if(it.kind==='point') game.scoreMul=Math.min(SCORE_MUL_CAP,game.scoreMul+SCORE_MUL_GAIN); }   // score at current (capped) mult FIRST, THEN bump — point items only (fullpower power scores x mult but does NOT pump it)
+function collectItem(it){ switch(it.kind){ case 'power': game.fullpower?takePoint(it):addPower(POWER_PER_ITEM); break; case 'bigpower': game.fullpower?takePoint(it):addPower(POWER_PER_BIG); break; case 'full': game.fullpower?takePoint(it):addPower(MAXPOWER); break; case 'oneup': grantExtend('item'); break; case 'bomb': player.bombs=Math.min(MAX_BOMBS,player.bombs+1); break; case 'point': takePoint(it); break; } sfx.item&&sfx.item(it.kind); spawnParticle(it.x,it.y,0,-40,{life:0.25,kind:'pickup',hue:it.hue,r:3}); }
 function onEnemyHit(e,shot){ damageEnemy(e,shot.dmg,shot.pierceSpell?GRAZE_PIERCE:null); }
 
 // ============================ STAGE / ENEMIES =======================
