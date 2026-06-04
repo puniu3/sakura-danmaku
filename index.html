@@ -1860,7 +1860,7 @@ const INTRO_FADE=2.5, CALM_BEFORE_BOSS=4.0, WAVE_GAP=1.2, BOSS_ENTER=2.2, SPELL_
 const R_POP_LIGHT=9, R_POP_MED=11, R_POP_HEAVY=14;
 const HP_POP_LIGHT=10, HP_POP_MED=20, HP_POP_HEAVY=42, ENEMY_HP_MUL=0.8;
 const MIDBOSS_HP_NONSPELL=1100, MIDBOSS_HP_SPELL=1500, FB_SURVIVAL_TIME=28;
-const SLOWMO_DEFEAT=0.35, SLOWMO_DEFEAT_DUR=2.2, CANCEL_TO_ITEM=true;
+const SLOWMO_DEFEAT=0.35, SLOWMO_DEFEAT_DUR=2.2, CANCEL_TO_ITEM=true, CANCEL_ITEM_MAX=12;   // cap point items MINTED per cancelBullets call so a dense field-clear can't mint dozens
 const EASE={ linear:t=>t, inOut:t=>t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2, out:t=>1-(1-t)*(1-t), in:t=>t*t };
 
 // hud bridge (stage <-> render via game.boss)
@@ -1874,7 +1874,7 @@ function shake(mag,dur){ Render.shake(clamp((mag||6)/12,0,1)); }
 function banner(name){ Render.banner(name); }
 function cutin(o){ Render.cutin(o); }
 function spawnDeathPuff(x,y,hue){ spawnParticle(x,y,0,0,{life:0.5,kind:'ring',hue,r:8}); for(let i=0;i<12;i++){ const a=rng()*TAU, s=40+rng()*120; spawnParticle(x,y,Math.cos(a)*s,Math.sin(a)*s,{life:0.4+rng()*0.3,kind:'death',hue,r:2+rng()*2}); } }
-function cancelBullets(o){ o=o||{}; const all=o.all, cx=o.x, cy=o.y, rad=o.radius||1e9, r2=rad*rad, frac=o.frac!=null?o.frac:1; let cleared=0; enemyBullets.forEachLive(b=>{ if(!b.alive) return; if(!all){ const dx=b.x-cx,dy=b.y-cy; if(dx*dx+dy*dy>r2) return; } if(frac<1&&rng()>frac) return; b.alive=false; cleared++; addScore(20); spawnParticle(b.x,b.y,(rng()-0.5)*70,(rng()-0.5)*70,{life:0.4,kind:'sparkle',hue:b.hue||55,r:2.6}); if(o.toItems&&(cleared%8===0)) spawnItem('point',b.x,b.y,rng.range(-20,20),-40); }); if(cleared){ Render.cancelWave(all?PF_W/2:cx,all?PF_H*0.42:cy,200,1); Render.flash(0.2,55); } }
+function cancelBullets(o){ o=o||{}; const all=o.all, cx=o.x, cy=o.y, rad=o.radius||1e9, r2=rad*rad, frac=o.frac!=null?o.frac:1, itemCap=o.itemCap!=null?o.itemCap:CANCEL_ITEM_MAX; let cleared=0, minted=0; enemyBullets.forEachLive(b=>{ if(!b.alive) return; if(!all){ const dx=b.x-cx,dy=b.y-cy; if(dx*dx+dy*dy>r2) return; } if(frac<1&&rng()>frac) return; b.alive=false; cleared++; addScore(20); spawnParticle(b.x,b.y,(rng()-0.5)*70,(rng()-0.5)*70,{life:0.4,kind:'sparkle',hue:b.hue||55,r:2.6}); if(o.toItems&&(cleared%8===0)&&minted<itemCap){ minted++; spawnItem('point',b.x,b.y,rng.range(-20,20),-40); } }); if(cleared){ Render.cancelWave(all?PF_W/2:cx,all?PF_H*0.42:cy,200,1); Render.flash(0.2,55); } }
 
 // ---- Director: coroutine scheduler with phase epochs ----
 const Director=(function(){
