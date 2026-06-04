@@ -2365,7 +2365,11 @@ const diveCharge=(homeX,homeY,diveY,dx,dive,hold,back)=>function(b){ let side=(h
 const TASOKARE_INTRO_SPEC = { name:'Tasokare', design:'phantom', hue:212, enterFrom:{x:PF_W/2,y:-70}, enterTo:{x:PF_W/2,y:150}, score:90000, retreat:true, retreatDrops:['bomb'],
     phases:[
       { kind:'nonspell', hp:1204, body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ aimedShot(b,{n:5,spread:0.6,speed:140,hue:285,style:'mid'}); yield* waitT(1.05); } },b); while(true){ ring(b,{count:18,speed:90,accel:55,hue:210,style:'orb'}); yield* waitT(1.6); } }, onEnter:diveCharge(PF_W*0.5,150,280,120,0.62,0.85,1.1) },
-      { kind:'spell', name:'Spirit Sign "Twilight Pursuit"', hp:1540, drops:['point','point','point','power'], body:'raw', raw:function*(b){ let off=0; while(true){ pat.delayedTurn(b,{count:14,spread:TAU,baseAngle:off,speed:88,delay:0.9,turnAim:true,speed2:165,hue:205,style:'orb'}); off+=0.5; yield* waitT(1.5); pat.aimedSpread(b,{count:7,spread:0.5,speed:150,hue:280,style:'pellet'}); yield* waitT(0.9); } } }
+      // onEnter: glide back to the home HEIGHT (enterTo.y) while KEEPING the current x. The prior nonspell's
+      // diveCharge can leave the boss lunged low (y up to PF_H*0.58); this spell is otherwise static, so without
+      // the return it would fire pinned near the bottom — wasting the playfield. Only y is restored (x stays
+      // wherever the dive left it). Forked so it eases up as the spell opens.
+      { kind:'spell', name:'Spirit Sign "Twilight Pursuit"', hp:1540, drops:['point','point','point','power'], body:'raw', raw:function*(b){ let off=0; while(true){ pat.delayedTurn(b,{count:14,spread:TAU,baseAngle:off,speed:88,delay:0.9,turnAim:true,speed2:165,hue:205,style:'orb'}); off+=0.5; yield* waitT(1.5); pat.aimedSpread(b,{count:7,spread:0.5,speed:150,hue:280,style:'pellet'}); yield* waitT(0.9); } }, onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,b.x,150,0.9,EASE.out); },b); } }
     ] };
 const TASOKARE_SPEC = { name:'Tasokare', design:'phantom', hue:212, enterFrom:{x:PF_W/2,y:-80}, enterTo:{x:PF_W/2,y:140}, score:600000, drops:['bigpower','power','point','point','point','point','point'],
     phases:[
