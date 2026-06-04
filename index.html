@@ -104,7 +104,7 @@ const ITEM_DESPAWN_GRACE = 100;
 // PULL is the min closing-speed fraction (radial floor) that guarantees the radius shrinks → no orbit.
 const ITEM_MAGNET_ACC = 2400, ITEM_MAGNET_MAXSPD = 1100, ITEM_MAGNET_TURN = 9, ITEM_MAGNET_PULL = 0.45;
 const POC_LINE_Y = 140;
-const ITEM_HUE = { power:15, point:205, bigpower:15, oneup:340, full:280, bomb:200 };
+const ITEM_HUE = { power:15, point:205, bigpower:15, oneup:340, full:280, bomb:165 };  // bomb = teal (was 200≈point's 205 → indistinguishable); 165 reads clearly apart from point's blue. Diverges from HUD bomb cyan by design (item identity prioritised over HUD-match).
 
 const STATE = { TITLE:0, PLAYING:1, PAUSED:2, GAMEOVER:3, STAGECLEAR:4,
   // reserved for the multi-stage campaign flow (screens wired when stages 2-6 land; unused at 1 stage).
@@ -1328,7 +1328,7 @@ const ITEM_LABEL={ power:'P', bigpower:'P', point:'★', oneup:'♥', full:'F', 
 function drawItems(t){
   for(let i=0;i<items.length;i++){ const it=items[i]; if(!it||it.dead) continue;
     const hue=ITEM_HUE[it.kind]!=null?ITEM_HUE[it.kind]:55, x=it.x, y=it.y;
-    const big=(it.kind==='bigpower'||it.kind==='oneup'||it.kind==='full'); let s=big?8:6.5; if(it.kind==='oneup') s*=2;  // 1UP drawn double-size (縦横2倍) to stand out
+    const big=(it.kind==='bigpower'||it.kind==='oneup'||it.kind==='full'); let s=big?8:6.5; if(it.kind==='oneup') s*=2; else if(it.kind==='bomb') s=10;  // 1UP double-size; bomb enlarged (s10, > bigpower's 8) so its size + teal hue (165) make it unmistakable vs a point item
     // soft additive halo (small) just for visibility against busy fields
     ctx.save(); ctx.globalCompositeOperation='lighter'; const g=ctx.createRadialGradient(x,y,0,x,y,s*2.1); g.addColorStop(0,'hsla('+hue+',95%,72%,0.45)'); g.addColorStop(1,'hsla('+hue+',95%,60%,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,s*2.1,0,TAU); ctx.fill(); ctx.restore();
     // OPAQUE square token (source-over) with hard dark border -> clearly NOT a bullet
@@ -1337,7 +1337,7 @@ function drawItems(t){
     const bg=ctx.createLinearGradient(0,-s,0,s); bg.addColorStop(0,'hsl('+hue+',92%,74%)'); bg.addColorStop(1,'hsl('+hue+',88%,46%)');
     ctx.fillStyle=bg; roundRect(-s,-s,s*2,s*2,2.5); ctx.fill();                                     // colored body
     ctx.fillStyle='rgba(255,255,255,0.32)'; roundRect(-s+1.2,-s+1.2,s*2-2.4,s*0.85,2); ctx.fill();  // top sheen
-    ctx.fillStyle='#ffffff'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.font='bold '+(it.kind==='oneup'?18:big?9:8)+'px "Trebuchet MS",sans-serif';
+    ctx.fillStyle='#ffffff'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.font='bold '+(it.kind==='oneup'?18:it.kind==='bomb'?13:big?9:8)+'px "Trebuchet MS",sans-serif';
     ctx.fillText(ITEM_LABEL[it.kind]||'★',0,0.5);
     ctx.restore();
   }

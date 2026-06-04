@@ -25,3 +25,7 @@ balance-demo.html
 # Endurance-bar presentation tuning harness (throwaway; port the chosen look into
 # index.html drawSurvivalBar on 反映, then this can be deleted)
 endurance-demo.html
+
+# Bomb-item differentiation harness (throwaway; port the chosen token look into
+# index.html drawItems on 反映, then this can be deleted)
+bomb-item-demo.html
