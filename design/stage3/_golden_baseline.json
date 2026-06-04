@@ -1,0 +1,9 @@
+{
+  "_note": "Pre-change golden baseline captured 2026-06-05 from index.html?golden=1 at commit 5a961bd. Stage-3 edits (YOI_INTRO_SPEC, TWINS_SPEC, new WAVES, STAGES[2]) must leave these byte-identical.",
+  "bootRng": 0.19207037752494216,
+  "stage": { "len": 5400, "h": 3188712340, "sum": 305650, "last": { "nb": 81, "ne": 1, "cs": 3988456816 } },
+  "emitters": {
+    "midboss":  [ { "phase": 0, "h": 3222833128, "sum": 72890 }, { "phase": 1, "h": 4210648544, "sum": 280235 } ],
+    "finalboss": [ { "phase": 0, "h": 3405135362, "sum": 75702 }, { "phase": 1, "h": 1033312108, "sum": 186141 }, { "phase": 2, "h": 2629568616, "sum": 184605 }, { "phase": 3, "h": 1763764337, "sum": 131851 }, { "phase": 4, "h": 2896665380, "sum": 587426 }, { "phase": 5, "h": 95191675, "sum": 783208 } ]
+  }
+}

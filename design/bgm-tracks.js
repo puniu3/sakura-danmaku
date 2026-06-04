@@ -19,6 +19,7 @@ const SCALES = {
   Fharm: [0,1,4,5,7,8,10],   // F harmonic minor: F G Ab Bb C Db E   (Stage 2 boss climax lift)
   Eharm: [0,3,4,6,7,9,11],   // E harmonic minor: E F# G A B C D#   (Stage 3)
   Gharm: [0,2,3,6,7,9,10],   // G harmonic minor: G A Bb C D Eb F#   (Stage 3 boss climax lift)
+  Ein:   [0,4,5,9,11],       // E In / 都節 (Miyako-bushi): E F A B C   (Stage 3 boss "Mirror of Two Moons")
 };
 function parseChord(sym) {
   let bass = null, s = sym;
@@ -76,6 +77,7 @@ function bassBar(sym, nextSym, style) {
     case 'walk8': a[0]=r; a[2]=r; a[4]=fifth; a[6]=r; a[8]=oct; a[10]=fifth; a[12]=r; a[14]=appr; break;
     case 'gallop': [0,4,8,12].forEach(b => { a[b]=r; a[b+2]=r; a[b+3]=(b===12?appr:r); }); break;
     case 'drive8': for (let i = 0; i < 16; i += 2) a[i] = r; a[8] = oct; a[14] = appr; break;
+    case 'sparseRoot': a[0]=r; a[6]=r; a[10]=fifth; break;   // breathing 和-feel (Stage 3 boss "Mirror of Two Moons")
     default: a[0] = r; a[8] = r;
   }
   return a;
@@ -93,6 +95,10 @@ function drumBar(g) {
     case 'bossDrive': [0,6,8,14].forEach(i => k[i]=1); [4,12].forEach(i => s[i]=1); for (let i=0;i<16;i++) h[i] = (i===14?2:1); break;
     case 'bossClimax': for (let i=0;i<16;i+=2) k[i]=1; [4,12].forEach(i => s[i]=1); s[15]=1; for (let i=0;i<16;i++) h[i]=1; break;
     case 'bossBridge': [0,8].forEach(i => k[i]=1); [4,12].forEach(i => s[i]=1); break;
+    // ---- Stage 3 boss "Mirror of Two Moons": sparse 和太鼓 boom-bap (half-time ritual pulse) ----
+    case 'taikoBoomBap': k[0]=1; k[10]=1; s[8]=1; h[4]=1; h[12]=2; break;
+    // ---- its fuller antiphonal "call" section (still 和-spacious, not a rock beat) ----
+    case 'taikoCall':    k[0]=1; k[6]=1; k[10]=1; s[4]=1; s[12]=1; h[2]=1; h[8]=2; h[14]=1; break;
     default: break;
   }
   return { k, s, h };
@@ -127,7 +133,8 @@ function makeSection(spec) {
   const harm = new Array(L).fill(0);
   if (spec.harm && spec.scale) for (let i = 0; i < L; i++) if (lead[i]) harm[i] = dShift(lead[i], SCALES[spec.scale], -2);
   const counter = new Array(L).fill(0);
-  if (spec.counter) for (let i = 0; i < L; i++) { if (lead[i]) { const t = i + 2; if (t < L && !lead[t]) counter[t] = lead[i] - 12; } }
+  if (Array.isArray(spec.counter)) { for (const [st, n] of spec.counter) if (st >= 0 && st < L) counter[st] = n; }   // independent answer phrase (key-checked like lead) — the antiphonal Stage-3 boss "duet"
+  else if (spec.counter) for (let i = 0; i < L; i++) { if (lead[i]) { const t = i + 2; if (t < L && !lead[t]) counter[t] = lead[i] - 12; } }
   const kick = new Array(L).fill(0), snare = new Array(L).fill(0), hat = new Array(L).fill(0), crash = new Array(L).fill(0);
   for (let b = 0; b < bars; b++) {
     const d = drumBar(spec.groove || 'none');
@@ -456,52 +463,42 @@ const STAGE3 = {
 };
 
 // ================================================================ STAGE 3 BOSS
-// "Twin Moons Rising" — E harmonic minor, key-lift to G harmonic minor, 158 BPM. The 2体ボス theme: a
-// driving angular hook carried as a TWO-VOICE texture (harm = a parallel third, counter = a tight octave-down
-// echo two sixteenths later) so the line is constantly ANSWERED — a musical duet for the twin sisters. An
-// independent theme: distinct key, the C↔D# augmented-2nd colour, and a minor-third climax lift (E→G), not
-// the Stage-2 boss reshaped.
-const B3_HOOK = [
-  [0,76],[2,83],[4,84],[8,87],[10,84],[12,81],[14,79],   // E↑B C (leap) → D#6 C A G  — wide leaps, then fall
-  [16,78],[18,76],[20,83],[24,84],[26,79],[28,78],[30,76], // F# E B(leap) C G F# E  — angular
-];
-const B3_CLOSE = [ [0,84],[4,83],[8,81],[12,79],[16,78],[20,76],[24,75],[28,76] ]; // descending lament: C B A G F# E D# E
-const B3_B = [ // dramatic lift, E harmonic minor
-  [0,88],[6,84],[10,87],[16,83],[24,79],
-  [32,81],[40,84],[48,87],[56,88],
-  [64,87],[72,84],[80,81],[88,79],
-  [96,83],[104,87],[112,84],[120,88],
-];
-const B3_BRIDGE = [ // sinking, then a leading-tone climb back
-  [0,83],[8,79],[16,76],[24,72],
-  [32,71],[40,75],[48,76],[56,79],
-  [64,81],[72,84],[80,87],[88,84],
-  [96,83],[104,79],[112,76],[120,75],
-];
-const B3_OUTRO = [ [0,76],[2,83],[6,87],[12,84],[16,81],[24,79],[32,76],[48,76] ];
+// "Mirror of Two Moons" — E In / 都節 (Miyako-bushi), 140 BPM. A slow, ritual ANTIPHONAL DUET for the twin
+// sisters: 宵 (Yoi) states a sparse oscillating koto call in the lead; 暁 (Akatsuki) ANSWERS with her OWN
+// independent phrase in the counter lane (a real second melody in 宵's rests, not a -12 shadow), so the two
+// trade across the grove. The 都節 mode's b2 (F) + b6 (C) half-steps give a koto-and-incense night-shrine
+// air. Deliberately NOT the boss-family mold: no functional harmonic minor, no gallop, NO minor-3rd climax
+// key-lift — the peak is the unison B-section ("two moons rise"). Sparse 和太鼓 boom-bap, no modulation.
+const B3_CALL  = [[0,76],[4,77],[6,76],[8,81],[12,83],[16,81],[20,84],[24,83],[28,81]];   // 宵 calls:  E F E A B | A C B A
+const B3_ANS   = [[0,69],[4,71],[8,72],[12,71],[16,72],[18,76],[24,71],[28,69]];          // 暁 answers (independent, lower): A B C B | C E B A
+const B3_CALL2 = [[0,76],[4,81],[8,83],[12,84],[16,83],[20,81],[24,77],[28,76]];          // 宵 call var
+const B3_ANS2  = [[0,72],[4,69],[8,71],[12,72],[16,76],[20,72],[24,71],[28,69]];          // 暁 answer var
+const B3_UNI   = [[0,84],[2,88],[6,84],[8,83],[12,81],[16,77],[20,76],[24,72],[28,76]];   // B: the sisters in unison — "two moons rise"
+const B3_BRIDGE= [[0,72],[8,69],[16,76],[24,72],[32,71],[40,69],[48,72],[56,76]];
+const B3_OUTRO = [[0,76],[6,77],[12,81],[20,83],[28,81],[40,76],[56,76]];
 const BOSS3 = {
-  title: 'Twin Moons Rising', keyName: 'E harmonic minor → G', bpm: 158, gain: 0.62,
-  // DISTINCT timbre: a bright saw+square lead doubled an octave up (a "two-bell" sheen for the twins), a
-  // triangle harm a third below, a hollow square echo (counter), a chiptune square arp, gritty saw bass.
+  title: 'Mirror of Two Moons', keyName: 'E In (都節) — antiphonal', bpm: 140, gain: 0.6,
+  // 都節/In-mode duet timbre: a triangle+square-bell koto lead; the COUNTER lane is a full co-equal voice
+  // (doubled triangle+sine = 暁, with its own gain bump); a glassy bell arp; a round sine bass on the
+  // breathing sparseRoot line.
   voices: {
-    lead: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:0.9, filter:'lowpass', filterFreq:2700 }, { type:'triangle', octave:1, detune:0, gain:0.28 }, { type:'square', octave:0, detune:9, gain:0.4, filter:'lowpass', filterFreq:2300 } ], atk:0.004, dec:0.05, sus:0.46, rel:0.12, maxGate:6 },
-    harm: { layers:[ { type:'triangle', octave:0, detune:-5, gain:1.0 } ], atk:0.006, dec:0.05, sus:0.44, rel:0.13, filter:'lowpass', filterFreq:2600, maxGate:6 },
-    counter: { layers:[ { type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:1900 } ], atk:0.005, dec:0.05, sus:0.4, rel:0.11, maxGate:5 },
-    arp: { layers:[ { type:'square', octave:0, detune:7, gain:1.0 } ], atk:0.002, dec:0.022, sus:0.14, rel:0.05, filter:'lowpass', filterFreq:3500, maxGate:1 },
-    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.05, sus:0.6, rel:0.08, filter:'lowpass', filterFreq:1000, maxGate:3 },
-    pad: { octave:0, voices:3, detune:11, type:'sawtooth', atk:0.07, dec:0.12, sus:0.68, rel:0.4, filter:'lowpass', filterFreq:1380 } },
-  gains: { lead:0.142, harm:0.08, counter:0.085, arp:0.062, bass:0.17, sub:0.14, pad:0.056, kick:1.1, snare:1.05, crash:1.05 },
+    lead: { layers:[ { type:'triangle', octave:0, detune:0, gain:1.0 }, { type:'square', octave:1, detune:0, gain:0.18, filter:'lowpass', filterFreq:3200 }, { type:'sine', octave:0, detune:-4, gain:0.45 } ], atk:0.004, dec:0.09, sus:0.34, rel:0.16, maxGate:5 },
+    harm: { layers:[ { type:'triangle', octave:0, detune:-5, gain:1.0 } ], atk:0.006, dec:0.07, sus:0.4, rel:0.15, filter:'lowpass', filterFreq:2500, maxGate:5 },
+    counter: { layers:[ { type:'triangle', octave:0, detune:0, gain:1.0 }, { type:'sine', octave:0, detune:6, gain:0.5 } ], atk:0.006, dec:0.08, sus:0.42, rel:0.18, filter:'lowpass', filterFreq:2400, maxGate:6 },
+    arp: { layers:[ { type:'triangle', octave:1, detune:0, gain:1.0 } ], atk:0.002, dec:0.04, sus:0.12, rel:0.07, filter:'lowpass', filterFreq:3200, maxGate:1 },
+    bass: { layers:[ { type:'sine', octave:0, detune:0, gain:1.0 }, { type:'triangle', octave:0, detune:0, gain:0.4 } ], atk:0.006, dec:0.07, sus:0.6, rel:0.12, filter:'lowpass', filterFreq:680, maxGate:5 },
+    pad: { octave:0, voices:3, detune:11, type:'sawtooth', atk:0.16, dec:0.2, sus:0.74, rel:0.6, filter:'lowpass', filterFreq:1150 } },
+  gains: { lead:0.14, harm:0.078, counter:0.10, arp:0.058, bass:0.16, sub:0.14, pad:0.066, kick:1.15, snare:1.0, crash:1.0 },
   sections: {
-    intro:  makeSection({ bars:8, scale:'Eharm', chords:['Em','Em','B7','B7','Am','Am','B7','B7'], lead:cat(B3_HOOK, off(64,B3_HOOK)), harm:true, bassStyle:'half', arpRate:2, groove:'fourLite', sub:true, crash:true }),
-    A1:     makeSection({ bars:8, scale:'Eharm', chords:['Em','C','G','B7','Em','C','Am','B7'], lead:cat(B3_HOOK, off(32,B3_HOOK), off(64,B3_HOOK), off(96,B3_CLOSE)), counter:true, bassStyle:'gallop', arpRate:1, groove:'midGallop', sub:true, crash:true }),
-    A2:     makeSection({ bars:8, scale:'Eharm', chords:['Em','C','G','B7','Em','Am','B7','Em'], lead:cat(B3_HOOK, off(32,B3_HOOK), off(64,B3_HOOK), off(96,B3_CLOSE)), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'midGallop', sub:true, crash:true }),
-    B:      makeSection({ bars:8, scale:'Eharm', chords:['C','G','Am','Em','C','G','B7','Em'], lead:B3_B, harm:true, counter:true, bassStyle:'pump8', arpRate:1, groove:'midGallop', sub:true, crash:true }),
-    bridge: makeSection({ bars:8, scale:'Eharm', chords:['Am','Am','Em','B7','C','C','B7','B7'], lead:B3_BRIDGE, bassStyle:'half', arpRate:2, groove:'bossBridge', sub:true }),
-    climax: makeSection({ bars:8, scale:'Gharm', chords:['Gm','Eb','Bb','D7','Gm','Eb','Cm','D7'], lead:cat(transpose(B3_HOOK,3), off(32,transpose(B3_HOOK,3)), off(64,transpose(B3_HOOK,3)), off(96,transpose(B3_CLOSE,3))), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
-    A3:     makeSection({ bars:8, scale:'Eharm', chords:['Em','C','G','B7','Em','Am','B7','Em'], lead:cat(B3_HOOK, off(32,B3_HOOK), off(64,B3_HOOK), off(96,B3_CLOSE)), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
-    outro:  makeSection({ bars:4, scale:'Eharm', chords:['Am','B7','Em','Em'], lead:B3_OUTRO, bassStyle:'half', arpRate:2, groove:'midGallop', sub:true, crash:true }),
+    intro: makeSection({ bars:4, scale:'Ein', chords:['Em','Em','Am','B7'], lead:B3_CALL, bassStyle:'sparseRoot', arpRate:2, groove:'introTick', sub:true, crash:true }),
+    call:  makeSection({ bars:8, scale:'Ein', chords:['Em','Em','Am','Am','C','C','B7','B7'], lead:cat(B3_CALL, off(64,B3_CALL2)), counter:cat(off(32,B3_ANS), off(96,B3_ANS2)), bassStyle:'sparseRoot', arpRate:2, groove:'taikoBoomBap', sub:true, crash:true }),
+    callH: makeSection({ bars:8, scale:'Ein', chords:['Em','Am','C','B7','Em','Am','B7','Em'], lead:cat(B3_CALL, off(64,B3_CALL2)), harm:true, counter:cat(off(32,B3_ANS), off(96,B3_ANS2)), bassStyle:'walk8', arpRate:2, groove:'taikoCall', sub:true, crash:true }),
+    B:     makeSection({ bars:8, scale:'Ein', chords:['Am','C','Em','B7','Am','C','B7','Em'], lead:cat(B3_UNI, off(64,B3_UNI)), harm:true, counter:true, bassStyle:'walk8', arpRate:1, groove:'taikoCall', sub:true, crash:true }),
+    bridge:makeSection({ bars:4, scale:'Ein', chords:['Am','B7','Em','B7'], lead:B3_BRIDGE, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
+    callF: makeSection({ bars:8, scale:'Ein', chords:['Em','Am','C','B7','Em','Am','B7','Em'], lead:cat(B3_CALL, off(64,B3_CALL2)), harm:true, counter:cat(off(32,B3_ANS), off(96,B3_ANS2)), bassStyle:'walk8', arpRate:1, groove:'taikoCall', sub:true, crash:true }),
+    outro: makeSection({ bars:4, scale:'Ein', chords:['Am','C','Em','Em'], lead:B3_OUTRO, bassStyle:'sparseRoot', arpRate:2, groove:'taikoBoomBap', sub:true, crash:true }),
   },
-  arrangement: ['intro','A1','A2','B','bridge','climax','A3','outro'],
+  arrangement: ['intro','call','callH','B','bridge','callF','outro'],
 };
 
 const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER, stage2: STAGE2, boss2: BOSS2, stage3: STAGE3, boss3: BOSS3 };

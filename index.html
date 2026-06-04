@@ -613,6 +613,7 @@ const SCALES = {
   Fharm: [0,1,4,5,7,8,10],   // F harmonic minor: F G Ab Bb C Db E   (Stage 2 boss climax lift)
   Eharm: [0,3,4,6,7,9,11],   // E harmonic minor: E F# G A B C D#   (Stage 3)
   Gharm: [0,2,3,6,7,9,10],   // G harmonic minor: G A Bb C D Eb F#   (Stage 3 boss climax lift)
+  Ein:   [0,4,5,9,11],       // E In / 都節 (Miyako-bushi): E F A B C   (Stage 3 boss "Mirror of Two Moons")
 };
 function parseChord(sym) {
   let bass = null, s = sym;
@@ -670,6 +671,7 @@ function bassBar(sym, nextSym, style) {
     case 'walk8': a[0]=r; a[2]=r; a[4]=fifth; a[6]=r; a[8]=oct; a[10]=fifth; a[12]=r; a[14]=appr; break;
     case 'gallop': [0,4,8,12].forEach(b => { a[b]=r; a[b+2]=r; a[b+3]=(b===12?appr:r); }); break;
     case 'drive8': for (let i = 0; i < 16; i += 2) a[i] = r; a[8] = oct; a[14] = appr; break;
+    case 'sparseRoot': a[0]=r; a[6]=r; a[10]=fifth; break;   // breathing 和-feel (Stage 3 boss "Mirror of Two Moons")
     default: a[0] = r; a[8] = r;
   }
   return a;
@@ -687,6 +689,10 @@ function drumBar(g) {
     case 'bossDrive': [0,6,8,14].forEach(i => k[i]=1); [4,12].forEach(i => s[i]=1); for (let i=0;i<16;i++) h[i] = (i===14?2:1); break;
     case 'bossClimax': for (let i=0;i<16;i+=2) k[i]=1; [4,12].forEach(i => s[i]=1); s[15]=1; for (let i=0;i<16;i++) h[i]=1; break;
     case 'bossBridge': [0,8].forEach(i => k[i]=1); [4,12].forEach(i => s[i]=1); break;
+    // ---- Stage 3 boss "Mirror of Two Moons": sparse 和太鼓 boom-bap (half-time ritual pulse) ----
+    case 'taikoBoomBap': k[0]=1; k[10]=1; s[8]=1; h[4]=1; h[12]=2; break;
+    // ---- its fuller antiphonal "call" section (still 和-spacious, not a rock beat) ----
+    case 'taikoCall':    k[0]=1; k[6]=1; k[10]=1; s[4]=1; s[12]=1; h[2]=1; h[8]=2; h[14]=1; break;
     default: break;
   }
   return { k, s, h };
@@ -721,7 +727,8 @@ function makeSection(spec) {
   const harm = new Array(L).fill(0);
   if (spec.harm && spec.scale) for (let i = 0; i < L; i++) if (lead[i]) harm[i] = dShift(lead[i], SCALES[spec.scale], -2);
   const counter = new Array(L).fill(0);
-  if (spec.counter) for (let i = 0; i < L; i++) { if (lead[i]) { const t = i + 2; if (t < L && !lead[t]) counter[t] = lead[i] - 12; } }
+  if (Array.isArray(spec.counter)) { for (const [st, n] of spec.counter) if (st >= 0 && st < L) counter[st] = n; }   // independent answer phrase (key-checked like lead) — the antiphonal Stage-3 boss "duet"
+  else if (spec.counter) for (let i = 0; i < L; i++) { if (lead[i]) { const t = i + 2; if (t < L && !lead[t]) counter[t] = lead[i] - 12; } }
   const kick = new Array(L).fill(0), snare = new Array(L).fill(0), hat = new Array(L).fill(0), crash = new Array(L).fill(0);
   for (let b = 0; b < bars; b++) {
     const d = drumBar(spec.groove || 'none');
@@ -1050,52 +1057,42 @@ const STAGE3 = {
 };
 
 // ================================================================ STAGE 3 BOSS
-// "Twin Moons Rising" — E harmonic minor, key-lift to G harmonic minor, 158 BPM. The 2体ボス theme: a
-// driving angular hook carried as a TWO-VOICE texture (harm = a parallel third, counter = a tight octave-down
-// echo two sixteenths later) so the line is constantly ANSWERED — a musical duet for the twin sisters. An
-// independent theme: distinct key, the C↔D# augmented-2nd colour, and a minor-third climax lift (E→G), not
-// the Stage-2 boss reshaped.
-const B3_HOOK = [
-  [0,76],[2,83],[4,84],[8,87],[10,84],[12,81],[14,79],   // E↑B C (leap) → D#6 C A G  — wide leaps, then fall
-  [16,78],[18,76],[20,83],[24,84],[26,79],[28,78],[30,76], // F# E B(leap) C G F# E  — angular
-];
-const B3_CLOSE = [ [0,84],[4,83],[8,81],[12,79],[16,78],[20,76],[24,75],[28,76] ]; // descending lament: C B A G F# E D# E
-const B3_B = [ // dramatic lift, E harmonic minor
-  [0,88],[6,84],[10,87],[16,83],[24,79],
-  [32,81],[40,84],[48,87],[56,88],
-  [64,87],[72,84],[80,81],[88,79],
-  [96,83],[104,87],[112,84],[120,88],
-];
-const B3_BRIDGE = [ // sinking, then a leading-tone climb back
-  [0,83],[8,79],[16,76],[24,72],
-  [32,71],[40,75],[48,76],[56,79],
-  [64,81],[72,84],[80,87],[88,84],
-  [96,83],[104,79],[112,76],[120,75],
-];
-const B3_OUTRO = [ [0,76],[2,83],[6,87],[12,84],[16,81],[24,79],[32,76],[48,76] ];
+// "Mirror of Two Moons" — E In / 都節 (Miyako-bushi), 140 BPM. A slow, ritual ANTIPHONAL DUET for the twin
+// sisters: 宵 (Yoi) states a sparse oscillating koto call in the lead; 暁 (Akatsuki) ANSWERS with her OWN
+// independent phrase in the counter lane (a real second melody in 宵's rests, not a -12 shadow), so the two
+// trade across the grove. The 都節 mode's b2 (F) + b6 (C) half-steps give a koto-and-incense night-shrine
+// air. Deliberately NOT the boss-family mold: no functional harmonic minor, no gallop, NO minor-3rd climax
+// key-lift — the peak is the unison B-section ("two moons rise"). Sparse 和太鼓 boom-bap, no modulation.
+const B3_CALL  = [[0,76],[4,77],[6,76],[8,81],[12,83],[16,81],[20,84],[24,83],[28,81]];   // 宵 calls:  E F E A B | A C B A
+const B3_ANS   = [[0,69],[4,71],[8,72],[12,71],[16,72],[18,76],[24,71],[28,69]];          // 暁 answers (independent, lower): A B C B | C E B A
+const B3_CALL2 = [[0,76],[4,81],[8,83],[12,84],[16,83],[20,81],[24,77],[28,76]];          // 宵 call var
+const B3_ANS2  = [[0,72],[4,69],[8,71],[12,72],[16,76],[20,72],[24,71],[28,69]];          // 暁 answer var
+const B3_UNI   = [[0,84],[2,88],[6,84],[8,83],[12,81],[16,77],[20,76],[24,72],[28,76]];   // B: the sisters in unison — "two moons rise"
+const B3_BRIDGE= [[0,72],[8,69],[16,76],[24,72],[32,71],[40,69],[48,72],[56,76]];
+const B3_OUTRO = [[0,76],[6,77],[12,81],[20,83],[28,81],[40,76],[56,76]];
 const BOSS3 = {
-  title: 'Twin Moons Rising', keyName: 'E harmonic minor → G', bpm: 158, gain: 0.62,
-  // DISTINCT timbre: a bright saw+square lead doubled an octave up (a "two-bell" sheen for the twins), a
-  // triangle harm a third below, a hollow square echo (counter), a chiptune square arp, gritty saw bass.
+  title: 'Mirror of Two Moons', keyName: 'E In (都節) — antiphonal', bpm: 140, gain: 0.6,
+  // 都節/In-mode duet timbre: a triangle+square-bell koto lead; the COUNTER lane is a full co-equal voice
+  // (doubled triangle+sine = 暁, with its own gain bump); a glassy bell arp; a round sine bass on the
+  // breathing sparseRoot line.
   voices: {
-    lead: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:0.9, filter:'lowpass', filterFreq:2700 }, { type:'triangle', octave:1, detune:0, gain:0.28 }, { type:'square', octave:0, detune:9, gain:0.4, filter:'lowpass', filterFreq:2300 } ], atk:0.004, dec:0.05, sus:0.46, rel:0.12, maxGate:6 },
-    harm: { layers:[ { type:'triangle', octave:0, detune:-5, gain:1.0 } ], atk:0.006, dec:0.05, sus:0.44, rel:0.13, filter:'lowpass', filterFreq:2600, maxGate:6 },
-    counter: { layers:[ { type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:1900 } ], atk:0.005, dec:0.05, sus:0.4, rel:0.11, maxGate:5 },
-    arp: { layers:[ { type:'square', octave:0, detune:7, gain:1.0 } ], atk:0.002, dec:0.022, sus:0.14, rel:0.05, filter:'lowpass', filterFreq:3500, maxGate:1 },
-    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.05, sus:0.6, rel:0.08, filter:'lowpass', filterFreq:1000, maxGate:3 },
-    pad: { octave:0, voices:3, detune:11, type:'sawtooth', atk:0.07, dec:0.12, sus:0.68, rel:0.4, filter:'lowpass', filterFreq:1380 } },
-  gains: { lead:0.142, harm:0.08, counter:0.085, arp:0.062, bass:0.17, sub:0.14, pad:0.056, kick:1.1, snare:1.05, crash:1.05 },
+    lead: { layers:[ { type:'triangle', octave:0, detune:0, gain:1.0 }, { type:'square', octave:1, detune:0, gain:0.18, filter:'lowpass', filterFreq:3200 }, { type:'sine', octave:0, detune:-4, gain:0.45 } ], atk:0.004, dec:0.09, sus:0.34, rel:0.16, maxGate:5 },
+    harm: { layers:[ { type:'triangle', octave:0, detune:-5, gain:1.0 } ], atk:0.006, dec:0.07, sus:0.4, rel:0.15, filter:'lowpass', filterFreq:2500, maxGate:5 },
+    counter: { layers:[ { type:'triangle', octave:0, detune:0, gain:1.0 }, { type:'sine', octave:0, detune:6, gain:0.5 } ], atk:0.006, dec:0.08, sus:0.42, rel:0.18, filter:'lowpass', filterFreq:2400, maxGate:6 },
+    arp: { layers:[ { type:'triangle', octave:1, detune:0, gain:1.0 } ], atk:0.002, dec:0.04, sus:0.12, rel:0.07, filter:'lowpass', filterFreq:3200, maxGate:1 },
+    bass: { layers:[ { type:'sine', octave:0, detune:0, gain:1.0 }, { type:'triangle', octave:0, detune:0, gain:0.4 } ], atk:0.006, dec:0.07, sus:0.6, rel:0.12, filter:'lowpass', filterFreq:680, maxGate:5 },
+    pad: { octave:0, voices:3, detune:11, type:'sawtooth', atk:0.16, dec:0.2, sus:0.74, rel:0.6, filter:'lowpass', filterFreq:1150 } },
+  gains: { lead:0.14, harm:0.078, counter:0.10, arp:0.058, bass:0.16, sub:0.14, pad:0.066, kick:1.15, snare:1.0, crash:1.0 },
   sections: {
-    intro:  makeSection({ bars:8, scale:'Eharm', chords:['Em','Em','B7','B7','Am','Am','B7','B7'], lead:cat(B3_HOOK, off(64,B3_HOOK)), harm:true, bassStyle:'half', arpRate:2, groove:'fourLite', sub:true, crash:true }),
-    A1:     makeSection({ bars:8, scale:'Eharm', chords:['Em','C','G','B7','Em','C','Am','B7'], lead:cat(B3_HOOK, off(32,B3_HOOK), off(64,B3_HOOK), off(96,B3_CLOSE)), counter:true, bassStyle:'gallop', arpRate:1, groove:'midGallop', sub:true, crash:true }),
-    A2:     makeSection({ bars:8, scale:'Eharm', chords:['Em','C','G','B7','Em','Am','B7','Em'], lead:cat(B3_HOOK, off(32,B3_HOOK), off(64,B3_HOOK), off(96,B3_CLOSE)), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'midGallop', sub:true, crash:true }),
-    B:      makeSection({ bars:8, scale:'Eharm', chords:['C','G','Am','Em','C','G','B7','Em'], lead:B3_B, harm:true, counter:true, bassStyle:'pump8', arpRate:1, groove:'midGallop', sub:true, crash:true }),
-    bridge: makeSection({ bars:8, scale:'Eharm', chords:['Am','Am','Em','B7','C','C','B7','B7'], lead:B3_BRIDGE, bassStyle:'half', arpRate:2, groove:'bossBridge', sub:true }),
-    climax: makeSection({ bars:8, scale:'Gharm', chords:['Gm','Eb','Bb','D7','Gm','Eb','Cm','D7'], lead:cat(transpose(B3_HOOK,3), off(32,transpose(B3_HOOK,3)), off(64,transpose(B3_HOOK,3)), off(96,transpose(B3_CLOSE,3))), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
-    A3:     makeSection({ bars:8, scale:'Eharm', chords:['Em','C','G','B7','Em','Am','B7','Em'], lead:cat(B3_HOOK, off(32,B3_HOOK), off(64,B3_HOOK), off(96,B3_CLOSE)), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
-    outro:  makeSection({ bars:4, scale:'Eharm', chords:['Am','B7','Em','Em'], lead:B3_OUTRO, bassStyle:'half', arpRate:2, groove:'midGallop', sub:true, crash:true }),
+    intro: makeSection({ bars:4, scale:'Ein', chords:['Em','Em','Am','B7'], lead:B3_CALL, bassStyle:'sparseRoot', arpRate:2, groove:'introTick', sub:true, crash:true }),
+    call:  makeSection({ bars:8, scale:'Ein', chords:['Em','Em','Am','Am','C','C','B7','B7'], lead:cat(B3_CALL, off(64,B3_CALL2)), counter:cat(off(32,B3_ANS), off(96,B3_ANS2)), bassStyle:'sparseRoot', arpRate:2, groove:'taikoBoomBap', sub:true, crash:true }),
+    callH: makeSection({ bars:8, scale:'Ein', chords:['Em','Am','C','B7','Em','Am','B7','Em'], lead:cat(B3_CALL, off(64,B3_CALL2)), harm:true, counter:cat(off(32,B3_ANS), off(96,B3_ANS2)), bassStyle:'walk8', arpRate:2, groove:'taikoCall', sub:true, crash:true }),
+    B:     makeSection({ bars:8, scale:'Ein', chords:['Am','C','Em','B7','Am','C','B7','Em'], lead:cat(B3_UNI, off(64,B3_UNI)), harm:true, counter:true, bassStyle:'walk8', arpRate:1, groove:'taikoCall', sub:true, crash:true }),
+    bridge:makeSection({ bars:4, scale:'Ein', chords:['Am','B7','Em','B7'], lead:B3_BRIDGE, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
+    callF: makeSection({ bars:8, scale:'Ein', chords:['Em','Am','C','B7','Em','Am','B7','Em'], lead:cat(B3_CALL, off(64,B3_CALL2)), harm:true, counter:cat(off(32,B3_ANS), off(96,B3_ANS2)), bassStyle:'walk8', arpRate:1, groove:'taikoCall', sub:true, crash:true }),
+    outro: makeSection({ bars:4, scale:'Ein', chords:['Am','C','Em','Em'], lead:B3_OUTRO, bassStyle:'sparseRoot', arpRate:2, groove:'taikoBoomBap', sub:true, crash:true }),
   },
-  arrangement: ['intro','A1','A2','B','bridge','climax','A3','outro'],
+  arrangement: ['intro','call','callH','B','bridge','callF','outro'],
 };
 
 const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER, stage2: STAGE2, boss2: BOSS2, stage3: STAGE3, boss3: BOSS3 };
@@ -2151,7 +2148,117 @@ function waveWraith(opts){ return (function*(){ const xs=opts.xs||[PF_W*0.5], y=
     yield* moveTo(e,xs[i],y,1.1,EASE.out);
     yield* holdFire(e,function*(en){ let k=0; while(true){ if(k%2===0) pat.delayedTurn(en,{count:10,spread:TAU,baseAngle:T*0.6,speed:80,delay:0.95,turnAim:true,speed2:150,hue:hue,style:'orb'}); aimedShot(en,{n:3,spread:0.35,speed:128,hue:hueShift(hue,40),style:'mid'}); k++; yield* waitT(1.0); } },hold);
     yield* exitOff(e,(i%2)?Math.PI*0.85:Math.PI*0.15,150); } }); yield* waitT(opts.spacing!=null?opts.spacing:0.4); } })(); }
-const WAVES = { sideSweep:waveSideSweep, vFormation:waveVFormation, stream:waveStream, turrets:waveTurrets, drifters:waveDrifters, wraith:waveWraith };
+// ---- Stage 3 (grove) wave generators ----
+// Grove vocabulary, distinct from Stage 2's ghost road: NO homing soul-orb rings (pat.delayedTurn).
+// Instead: wall-bouncing ricochets (pat.bouncingBullets), straight stalk-files (pat.lineOfBullets),
+// crossing leaf-rosettes (pat.roseCurve/flower) and low-count cluster bursts (pat.ringOfRings).
+
+// waveStalkColumn — light sprites fall in VERTICAL FILES (descending bamboo stalks). Each of opts.cols
+// columns is a tight train of opts.per sprites down its own lane; sprites drop a short straight
+// lineOfBullets dart-file as they pass. opts.cross (bool) slants alternating columns into an X.
+// Manual integrate loop sets _steered each tick (the #1 trap). Fire fork is owner-tied (auto-kill on death).
+function waveStalkColumn(opts){ return (function*(){
+  const cols=opts.cols||3, per=opts.per||5, hue=opts.hue!=null?opts.hue:140,
+        spd=opts.speed||90, gap=opts.gap||0.42, colGap=opts.colGap||0.0,
+        cross=!!opts.cross, halveP=!!opts.halvePower, sparse=!!opts.sparse,
+        x0=opts.x0!=null?opts.x0:PF_W*0.18, x1=opts.x1!=null?opts.x1:PF_W*0.82;
+  for(let c=0;c<cols;c++){
+    const cx=cols>1?(x0+(x1-x0)*(c/(cols-1))):PF_W*0.5;
+    const drift=cross?((c%2===0)?34:-34):0;   // alternate columns slant → crossing X over time
+    for(let i=0;i<per;i++){
+      const idx=c*per+i;
+      spawnEnemy({ x:cx, y:-SPAWN_MARGIN-i*8, hp:HP_POP_LIGHT, r:R_POP_LIGHT, hue:hue, score:400,
+        drops:(sparse&&idx%2!==0)?[]:((idx%3===0&&(!halveP||idx%6===0))?['power']:['point']),
+        coro:function*(e){
+          const baseX=e.x, t0=T;
+          const fc=Director.fork(function*(){ while(true){
+            pat.lineOfBullets(e,{count:4,gap:13,angle:HALFPI,speed:150,startGap:10,hue:hue,style:'arrow'});
+            yield* waitT(1.1);
+          } },e);
+          while(e.y<PF_H+SPAWN_MARGIN){ e.y+=spd*STEP; e.x=baseX+drift*(T-t0); e._steered=true; yield; }
+          Director.kill(fc); despawnEnemy(e);
+        } });
+      yield* waitT(gap);
+    }
+    if(colGap) yield* waitT(colGap);
+  }
+})(); }
+
+// waveLantern — bobbing 提灯. Descends to a hover band, BOBS vertically in place, and lobs
+// wall-BOUNCING bullets (pat.bouncingBullets — ricochet off the side walls) interleaved with a
+// straight stalk-file (pat.lineOfBullets). opts.mirror (default true) spawns a left+right symmetric
+// PAIR per index → foreshadows the twins. opts.n = number of lanterns PER SIDE.
+// The body coro owns the bob (manual loop, sets _steered every tick); firing is a separate owner-tied fork.
+function waveLantern(opts){ return (function*(){
+  const n=opts.n||3, hue=opts.hue!=null?opts.hue:45, y=opts.y||118, hold=opts.hold||6.0,
+        mirror=opts.mirror!==false, halveP=!!opts.halvePower,
+        bob=opts.bob||26, span=opts.span!=null?opts.span:PF_W*0.30, cx=PF_W*0.5;
+  function makeOne(targetX, side){
+    spawnEnemy({ x:targetX, y:-SPAWN_MARGIN, hp:HP_POP_HEAVY, r:R_POP_HEAVY, hue:hue, score:1300,
+      drops:halveP?['power','point','point']:['power','power','point'], cancelOnDeath:0.4,
+      coro:function*(e){
+        yield* moveTo(e,targetX,y,1.0,EASE.out);
+        // BOB in place + fire, both as forks so the body coro can time the hold window cleanly.
+        const bobFork=Director.fork(function*(){ const y0=e.y, t0=T; while(true){ e.y=y0+Math.sin((T-t0)*1.8)*bob; e.x=targetX; e._steered=true; yield; } },e);
+        const fireFork=Director.fork(function*(){ let k=0; while(true){
+          // wall-bouncing ricochet fan (the maze feel) — kite bullets that bounce off the side walls
+          pat.bouncingBullets(e,{count:5,spread:1.0,baseAngle:HALFPI+(side*0.22),speed:120,hue:hue,style:'kite',bounces:2});
+          yield* waitT(0.9);
+          if(k%2===1){ // a straight downward stalk-file between ricochet volleys
+            pat.lineOfBullets(e,{count:5,gap:14,angle:HALFPI,speed:140,startGap:12,hue:hueShift(hue,18),style:'arrow'});
+          }
+          k++; yield* waitT(0.7);
+        } },e);
+        yield* waitT(hold);
+        Director.kill(bobFork); Director.kill(fireFork);
+        yield* exitOff(e,(side<0)?Math.PI*0.85:Math.PI*0.15,150);
+      } });
+  }
+  for(let i=0;i<n;i++){
+    const off=(i+1)/(n+1)*span;     // symmetric offset from centre
+    if(mirror){ makeOne(cx-off,-1); makeOne(cx+off,+1); }
+    else { makeOne(cx + ((i%2===0)?-off:off), (i%2===0)?-1:+1); }
+    yield* waitT(opts.spacing!=null?opts.spacing:0.6);
+  }
+})(); }
+
+// waveKodama — the grove's 山場 enemy (REPLACES the wraith as the road climax). A wood-spirit that
+// WEAVES between two hover anchors (manual integrate, sets _steered) and fires the grove signature:
+// crossing leaf-ROSETTES (pat.roseCurve, opposing k) + a periodic wall-BOUNCING scatter + an occasional
+// low-count cluster-burst ring (pat.ringOfRings). NO homing orbs. Spawn 4–6 to overlap (the 山場).
+function waveKodama(opts){ return (function*(){
+  const xs=opts.xs||[PF_W*0.5], y=opts.y||120, hold=opts.hold||7.0,
+        hue=opts.hue!=null?opts.hue:148, halveP=!!opts.halvePower, weave=opts.weave||34;
+  for(let i=0;i<xs.length;i++){
+    spawnEnemy({ x:xs[i], y:-SPAWN_MARGIN, hp:HP_POP_HEAVY*1.35, r:R_POP_HEAVY+1, hue:hue, score:1500,
+      drops:halveP?['power','point','point']:['power','power','point'], cancelOnDeath:0.5,
+      coro:function*(e){
+        yield* moveTo(e,xs[i],y,1.1,EASE.out);
+        // gentle horizontal weave around the anchor (sets _steered every tick) as a fork
+        const weaveFork=Director.fork(function*(){ const x0=xs[i], t0=T; while(true){ e.x=x0+Math.sin((T-t0)*1.1+i)*weave; e.y=y; e._steered=true; yield; } },e);
+        yield* holdFire(e,function*(en){ let k=0; while(true){
+          // crossing leaf-rosettes — two opposing-k rosettes that interleave into a lattice. speedMin is RAISED
+          // (default 0.35*speed≈42 px/s) so the slow inner petals clear instead of walling/accumulating; counts +
+          // cadence tuned so a Kodama octet sits ~1.3x the Stage-2 wraith octet (a road 山場, not a boss phase).
+          pat.roseCurve(en,{count:13,k:5,speed:122,speedMin:70,phase:T*0.5,hue:hue,style:'star'});
+          pat.roseCurve(en,{count:13,k:4,speed:106,speedMin:62,phase:-T*0.5,hue:hueShift(hue,30),style:'star'});
+          yield* waitT(1.35);
+          // wall-bouncing scatter (the maze ricochet)
+          pat.bouncingBullets(en,{count:6,spread:1.4,baseAngle:HALFPI,speed:118,hue:hueShift(hue,-20),style:'kite',bounces:2});
+          yield* waitT(0.95);
+          if(k%3===2){ // occasional cluster-burst ring — LOW count (5*(3+1)=20 bullets), every 3rd cycle, to avoid flooding
+            pat.ringOfRings(en,{clusters:5,perCluster:3,baseAngle:T*0.4,burstSpeed:96,burstSpread:0.7,clusterSpeed:64,hue:hueShift(hue,12),style:'pellet'});
+            yield* waitT(1.0);
+          }
+          k++;
+        } },hold);
+        Director.kill(weaveFork);
+        yield* exitOff(e,(i%2)?Math.PI*0.85:Math.PI*0.15,150);
+      } });
+    yield* waitT(opts.spacing!=null?opts.spacing:0.45);
+  }
+})(); }
+const WAVES = { sideSweep:waveSideSweep, vFormation:waveVFormation, stream:waveStream, turrets:waveTurrets, drifters:waveDrifters, wraith:waveWraith, stalkColumn:waveStalkColumn, lantern:waveLantern, kodama:waveKodama };
 
 // ---- boss: descriptor-driven phase machine ----
 function makeBoss(spec){ const _bd=BOSS_DESIGNS[spec.design]; const b=spawnEnemy({ x:spec.enterFrom?spec.enterFrom.x:PF_W/2, y:spec.enterFrom?spec.enterFrom.y:-60, hp:1, r:_bd?_bd.hitR:18, hue:spec.hue!=null?spec.hue:320, boss:true, score:spec.score||50000, drops:[], coro:null }); b.invuln=true; b.phaseTotal=spec.phases.length; b.phaseIndex=0; b.phasesLeft=spec.phases.length; b.spellName=''; b.inSpell=false; b.timer=null; b.hpMax=1; b.design=spec.design; b.survivalActive=false; b.survivalTotal=0; return b; }
@@ -2299,18 +2406,29 @@ const TWINS_SPEC = { name:'宵 & 暁', design:'twinYoi', hue:265, enterFrom:{x:P
 // STAGE 3 MIDBOSS — only ONE of the sisters, 宵 (Yoi, indigo), appears solo to test the player: a single
 // body (NO twin → the ordinary single-boss runBoss path), 2 phases (1 nonspell + 1 spell), then RETREATS
 // (spec.retreat → bossRetreat, same seam as Stage 2's Tasokare intro) to return WITH 暁 for the full fight.
-// Plays over the 道中 (stage3) BGM — there is NO dedicated midboss track. Her solo spell is its OWN pattern
-// (a night soul-orb pursuit), NOT a reused full-fight phase.
+// Plays over the 道中 (stage3) BGM — there is NO dedicated midboss track.
+// 宵's solo card is a PRELUDE OF THE TWINS, not a Tasokare reskin: she weaves the final boss's
+// "Moonlit Lattice" ALONE — firing BOTH the clockwise (+a) AND counter-rotating (−a) spiral arms from her
+// single body (the two arms that LATER split across the two sisters), plus a crescent-ARC of drift→home
+// soul-orbs (the "Crossing Hitodama" thread, re-cast solo). 宵-INDIGO (hue ~263) throughout, with a SINGLE
+// amber accent (hue ~38) on the −a arm hinting at the absent 暁. NO ghost-blue 205, no full-ring pursuit.
 const YOI_INTRO_SPEC = { name:'宵', design:'twinYoi', hue:265, enterFrom:{x:PF_W/2,y:-70}, enterTo:{x:PF_W/2,y:144}, score:95000, retreat:true, retreatDrops:['bomb'],
     phases:[
+      // 1 — nonspell: the lattice in miniature — a slow COUNTER-ROTATING double ring (one ring spinning each
+      // way, the +/− idea telegraphed plainly) punctuated by an aimed indigo fan. One amber accent ring.
       { kind:'nonspell', hp:1180, body:'raw', raw:function*(b){
-          Director.fork(function*(){ while(true){ fan(b,{n:5,spread:0.6,speed:142,aim:true,hue:285,style:'mid'}); yield* waitT(1.0); } },b);
-          let rot=0; while(true){ ring(b,{count:18,speed:96,hue:262,style:'orb',rot:rot}); rot+=0.18; yield* waitT(1.4); } },
+          Director.fork(function*(){ while(true){ fan(b,{n:5,spread:0.6,speed:142,aim:true,hue:263,style:'mid'}); yield* waitT(1.05); } },b);
+          let rot=0; while(true){ ring(b,{count:16,speed:96,hue:263,style:'orb',rot:rot}); ring(b,{count:16,speed:96,hue:38,style:'pellet',rot:-rot+0.2}); rot+=0.18; yield* waitT(1.4); } },
         onEnter:_sway(PF_W*0.35,PF_W*0.65,144,2.0) },
-      { kind:'spell', name:'宵 Sign "Nightfall Pursuit"', hp:1480, drops:['point','point','point','power'], cutinHue:265, body:'raw', raw:function*(b){ let off=0, base=0;
-          Director.fork(function*(){ while(true){ ring(b,{count:12,speed:74,hue:282,style:'pellet',rot:base}); base-=0.2; yield* waitT(1.0); } },b);
-          while(true){ pat.delayedTurn(b,{count:15,spread:TAU,baseAngle:off,speed:88,delay:0.9,turnAim:true,speed2:165,hue:205,style:'orb'}); off+=0.45; yield* waitT(1.5);
-            pat.aimedSpread(b,{count:5,spread:0.5,speed:150,hue:285,style:'pellet'}); yield* waitT(0.9); } } }
+      // 2 — spell: SOLO Moonlit Lattice. She fires BOTH spiral arms herself (+a indigo, −a amber = 暁's
+      // future side), weaving the counter-rotating lattice from one body. A forked crescent-ARC of
+      // drift→home soul-orbs (spread≈0.9π, NOT a full ring) sweeps under it — the soul-orb family thread,
+      // re-hued indigo and re-shaped to an arc so it never reads as Tasokare's ghost-blue ring.
+      { kind:'spell', name:'宵 Sign "Moonlit Prelude"', hp:1480, drops:['point','point','point','power'], cutinHue:265, body:'raw', raw:function*(b){ let a=0;
+          Director.fork(function*(){ while(true){
+            pat.delayedTurn(b,{count:9,spread:Math.PI*0.9,baseAngle:HALFPI,speed:92,delay:0.85,turnAim:true,speed2:150,hue:263,style:'orb'});
+            yield* waitT(1.6); } },b);
+          while(true){ spiral(b,{angle:a,arms:3,speed:120,hue:263,style:'small'}); spiral(b,{angle:-a,arms:3,speed:120,hue:38,style:'small'}); a+=0.16; yield* waitT(0.05); } } }
     ] };
 
 // ---- THE STAGE TIMELINE (declarative data + interpreter) ----
@@ -2383,40 +2501,46 @@ const STAGES = [
       {boss:'tasokare'},
       {stageEnd:true},                 // hand off to Stage 3 (was {stageClear:true}; Stage 2 is no longer the terminal stage)
     ] },
-  // STAGE 3 — "Grove of the Lost" (迷いの竹林). Structure mirrors Stage 2: road → 山場 → MIDBOSS (宵 alone,
+  // STAGE 3 — "Grove of the Lost" (迷いの竹林). Spine mirrors Stage 2: road → 山場 → MIDBOSS (宵 alone,
   // 2 phases → retreat, on the 道中 BGM) → more road → 山場 → the 2体同時出現 twin boss (宵 & 暁, shared HP).
-  // Road counts sized for the power=max real-play entry (~Stage 2). The only music switch is the FINAL boss.
+  // The ROAD has its OWN identity (vs Stage 2's ghost lane): vertical stalk-files, bobbing lanterns that
+  // RICOCHET bullets off the walls, and a Kodama 山場 firing crossing leaf-rosettes — no homing soul-orbs.
+  // Mirror-paired / symmetric heavy beats foreshadow the twins. Counts sized for the power=max real entry.
   { id:3, title:'Stage 3', theme:'bamboo',
     music:{ stage:'stage3', boss:'boss3' },     // NO midboss track — 宵's solo appearance underscores on the 道中 (stage3)
     timeline:[
       {banner:'Stage 3'}, {wait:INTRO_FADE},
-      // opening: a layered descent through the grove — two sheared cascades hold their lanes while an echelon
-      // sweep slashes across and a slow centre trail fills behind (jade + lantern-gold + indigo hues).
-      {parallel:[ {wave:'drifters',  opts:{n:12,x:PF_W*0.27,band:PF_W*0.34,amp:24,spacing:0.32,speed:48,speedJit:0.8,hue:140,halvePower:true,sparse:true}},
-                  {wave:'drifters',  opts:{n:12,x:PF_W*0.73,band:PF_W*0.34,amp:24,spacing:0.32,speed:54,speedJit:0.8,hue:45, halvePower:true,sparse:true}, delay:1.0},
-                  {wave:'sideSweep', opts:{n:9,side:'left',y:66,yStep:15,spacing:0.16,hue:150,halvePower:true,sparse:true}, delay:2.6},
-                  {wave:'drifters',  opts:{n:7,x:PF_W*0.50,band:PF_W*0.22,amp:28,spacing:0.5,speed:50,speedJit:0.9,hue:265,halvePower:true,sparse:true}, delay:4.4} ]}, {waitClear:true}, {wait:WAVE_GAP},
-      // a turret pair (lantern-gold) + a twin stream behind them
-      {wave:'turrets', opts:{xs:[PF_W*0.28,PF_W*0.72],y:124,hold:5.0,hue:45}}, {waitClear:true}, {wait:WAVE_GAP},
-      {parallel:[ {wave:'stream', opts:{n:9,x:PF_W*0.33,amp:54,spacing:0.42,hue:140,halvePower:true}},
-                  {wave:'stream', opts:{n:9,x:PF_W*0.67,amp:54,spacing:0.42,hue:265,halvePower:true}, delay:0.3} ]}, {waitClear:true}, {wait:WAVE_GAP},
-      // ── 山場 (pre-midboss) ── a wraith SEXTET (centre + flanks); the overlapping homing-ring danmaku
-      {wave:'wraith', opts:{xs:[PF_W*0.40,PF_W*0.60,PF_W*0.25,PF_W*0.75,PF_W*0.12,PF_W*0.88],y:114,hold:6.0,spacing:0.45,hue:152,halvePower:true}}, {waitClear:true}, {wait:1.4},
+      // opening: a DESCENT THROUGH THE GROVE — vertical bamboo-stalk files fall down their own lanes
+      // (not a horizontal cascade). An X-cross of jade files crosses while two flanking indigo files
+      // press the edges (a soft pincer). Total ~30 light sprites; halvePower+sparse keep the drop count down.
+      {parallel:[ {wave:'stalkColumn', opts:{cols:3,per:6,x0:PF_W*0.24,x1:PF_W*0.76,cross:true,speed:92,gap:0.40,hue:140,halvePower:true,sparse:true}},
+                  {wave:'stalkColumn', opts:{cols:2,per:5,x0:PF_W*0.10,x1:PF_W*0.90,cross:false,speed:84,gap:0.46,hue:265,halvePower:true,sparse:true}, delay:1.4} ]}, {waitClear:true}, {wait:WAVE_GAP},
+      // a MIRROR PAIR of lantern-gold 提灯 hovers and lobs wall-bouncing ricochets + stalk-files
+      // (left+right symmetric — first foreshadow of the twins), a jade trail filling behind them.
+      {parallel:[ {wave:'lantern',  opts:{n:2,y:120,hold:5.5,hue:45,span:PF_W*0.34,halvePower:true}},
+                  {wave:'drifters', opts:{n:7,x:PF_W*0.5,band:PF_W*0.22,amp:26,spacing:0.5,speed:52,speedJit:0.9,hue:152,halvePower:true,sparse:true}, delay:1.4} ]}, {waitClear:true}, {wait:WAVE_GAP},
+      // a turret pair (lantern-gold) braced by a tight jade stalk-file column — vertical pressure, not a sweep
+      {parallel:[ {wave:'turrets',     opts:{xs:[PF_W*0.28,PF_W*0.72],y:124,hold:5.0,hue:45}},
+                  {wave:'stalkColumn', opts:{cols:1,per:6,cross:false,speed:96,gap:0.5,hue:140,halvePower:true,sparse:true}, delay:0.8} ]}, {waitClear:true}, {wait:WAVE_GAP},
+      // ── 山場 (pre-midboss) ── a Kodama SEXTET weaves centre + flanks: crossing leaf-rosettes + wall ricochets.
+      // This is the grove's signature climax (REPLACES the Stage 2 wraith sextet).
+      {wave:'kodama', opts:{xs:[PF_W*0.40,PF_W*0.60,PF_W*0.25,PF_W*0.75,PF_W*0.12,PF_W*0.88],y:116,hold:6.0,spacing:0.42,hue:148,halvePower:true}}, {waitClear:true}, {wait:1.4},
       // ── MIDBOSS ── only 宵 (Yoi) appears, 2 phases, then retreats. NO music switch (stays on the 道中 track).
       {banner:'WARNING'}, {sfx:'warn'},
       {boss:'yoiIntro'},
       {wait:CALM_BEFORE_BOSS},
-      // ── post-midboss road ── a fresh layered descent: two sheared cascades hold lanes while two echelon
-      // sweeps slash in from opposite edges with opposing slants (a crossing X over time), indigo/gold/jade.
-      {parallel:[ {wave:'drifters',  opts:{n:13,x:PF_W*0.28,band:PF_W*0.34,amp:24,spacing:0.30,speed:50,speedJit:0.8,hue:265,halvePower:true,sparse:true}},
-                  {wave:'sideSweep', opts:{n:10,side:'right',y:56, yStep:14,spacing:0.16,hue:45, halvePower:true,sparse:true}, delay:1.2},
-                  {wave:'drifters',  opts:{n:13,x:PF_W*0.72,band:PF_W*0.34,amp:24,spacing:0.30,speed:56,speedJit:0.8,hue:140,halvePower:true,sparse:true}, delay:2.6},
-                  {wave:'sideSweep', opts:{n:10,side:'left', y:150,yStep:-13,spacing:0.16,hue:265,halvePower:true,sparse:true}, delay:4.0} ]}, {waitClear:true}, {wait:WAVE_GAP},
-      // a lantern-gold V-formation presses down the centre while a jade trail fills behind it
+      // ── post-midboss road ── a heavier PINCER: lanterns press from both flanks (mirror) while an
+      // X-cross of stalk-files crosses the centre — the maze tightens. Indigo + gold + jade.
+      {parallel:[ {wave:'lantern',     opts:{n:2,y:112,hold:6.0,hue:45,span:PF_W*0.42,bob:30,halvePower:true}},
+                  {wave:'stalkColumn', opts:{cols:4,per:6,x0:PF_W*0.20,x1:PF_W*0.80,cross:true,speed:96,gap:0.34,hue:140,halvePower:true,sparse:true}, delay:1.2},
+                  {wave:'drifters',    opts:{n:10,x:PF_W*0.5,band:PF_W*0.5,amp:28,spacing:0.36,speed:54,speedJit:0.8,hue:265,halvePower:true,sparse:true}, delay:3.2} ]}, {waitClear:true}, {wait:WAVE_GAP},
+      // a lantern-gold V-formation presses down the centre while a jade trail fills behind it (a contrasting
+      // CENTRE-push beat between the two flank-pincer beats)
       {parallel:[ {wave:'vFormation', opts:{half:5,apexX:PF_W/2,apexY:74,hue:45,halvePower:true}},
                   {wave:'drifters',   opts:{n:8,x:PF_W*0.5,band:PF_W*0.5,amp:30,spacing:0.42,speed:52,speedJit:0.9,hue:152,halvePower:true,sparse:true}, delay:1.6} ]}, {waitClear:true}, {wait:WAVE_GAP},
-      // ── 山場 (pre-final) ── a wraith OCTET holds centre + flanks: the road's true peak
-      {wave:'wraith', opts:{xs:[PF_W*0.44,PF_W*0.56,PF_W*0.31,PF_W*0.69,PF_W*0.18,PF_W*0.82,PF_W*0.08,PF_W*0.92],y:112,hold:7.0,spacing:0.42,hue:148,halvePower:true}}, {waitClear:true}, {wait:1.6},
+      // ── 山場 (pre-final) ── a Kodama OCTET holds centre + flanks: the road's true peak (mirror-symmetric
+      // anchors — the strongest foreshadow of the two-sister fight that follows).
+      {wave:'kodama', opts:{xs:[PF_W*0.44,PF_W*0.56,PF_W*0.31,PF_W*0.69,PF_W*0.18,PF_W*0.82,PF_W*0.08,PF_W*0.92],y:114,hold:7.0,spacing:0.40,hue:148,halvePower:true}}, {waitClear:true}, {wait:1.6},
       // ── FINAL BOSS ── the full twin-sister fight (2体同時出現, shared HP). The one music switch to boss3.
       {banner:'WARNING'}, {sfx:'warn'}, {flash:{color:'#7ad7a0',i:0.4}}, {shake:{mag:4,dur:0.6}}, {music:'boss'}, {wait:2.0},
       {boss:'twins'},
