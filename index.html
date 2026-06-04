@@ -230,9 +230,14 @@ function integrateParticles(dt){
 function collidePlayerBullets(){
   if(!player||player.dead||player.invuln>0) return;
   const px=player.x, py=player.y, it=enemyBullets.items, n=enemyBullets.count;
-  for(let i=0;i<n;i++){ const b=it[i]; const dx=b.x-px,dy=b.y-py,d2=dx*dx+dy*dy;
-    const hr=b.r+PLAYER_R; if(d2<=hr*hr){ onPlayerHit(b,null); return; }
-    if(!b.grazed){ const gr=b.r+GRAZE_R; if(d2<=gr*gr){ b.grazed=true; onGraze(b); } } }
+  // Two passes — resolve EVERY graze before the lethal check. A graze that crosses the power-up
+  // threshold fires activateGrazePower → clearBulletsToSparkles(GRAZE_ACTIVATE_CLEAR_R), which dissolves
+  // a would-be killer near the player. Doing grazes first means that save can't be lost on the same tick
+  // to a lethal bullet that merely sits at a lower pool index (or to a fast bullet crossing graze→kill in
+  // one step): the old single-pass `return`-on-first-hit skipped any later graze, so you could die with
+  // graze already past the threshold ("発動が間に合わず被弾"). Cleared bullets drop out via the !b.alive guard.
+  for(let i=0;i<n;i++){ const b=it[i]; if(!b.alive||b.grazed) continue; const dx=b.x-px,dy=b.y-py,d2=dx*dx+dy*dy; const gr=b.r+GRAZE_R; if(d2<=gr*gr){ b.grazed=true; onGraze(b); } }
+  for(let i=0;i<n;i++){ const b=it[i]; if(!b.alive) continue; const dx=b.x-px,dy=b.y-py,d2=dx*dx+dy*dy; const hr=b.r+PLAYER_R; if(d2<=hr*hr){ onPlayerHit(b,null); return; } }
 }
 function collideShotsEnemies(){
   const sh=playerShots.items, sn=playerShots.count;
