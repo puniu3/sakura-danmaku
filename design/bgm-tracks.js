@@ -19,6 +19,9 @@ const SCALES = {
   Fharm: [0,1,4,5,7,8,10],   // F harmonic minor: F G Ab Bb C Db E   (Stage 2 boss climax lift)
   Ehira: [0,4,6,7,11],       // E hirajoshi: E F# G B C   (Stage 3 road "Take-no-Komichi" — 和 pentatonic)
   Ein:   [0,4,5,9,11],       // E In / 都節 (Miyako-bushi): E F A B C   (Stage 3 boss "Mirror of Two Moons")
+  Amaj:  [1,2,4,6,8,9,11],   // A major / D Lydian collection (3 sharps): A B C# D E F# G#   (Stage 4 road + boss — bright dawn)
+  Fsharm:[1,2,5,6,8,9,11],   // F# harmonic minor: F# G# A B C# D E#   (Stage 4 midboss 山姥 — cold gate-keeper, aug-2nd D↔E#)
+  Cmaj:  [0,2,4,5,7,9,11],   // C major   (Stage 4 boss daybreak key-lift, +3 from A major)
 };
 function parseChord(sym) {
   let bass = null, s = sym;
@@ -491,7 +494,152 @@ const BOSS3 = {
   arrangement: ['intro','call','callH','B','bridge','callF','outro'],
 };
 
-const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER, stage2: STAGE2, boss2: BOSS2, stage3: STAGE3, boss3: BOSS3 };
+// ================================================================ STAGE 4
+// "First Light Road" (曙の道) — A major / D-Lydian collection, 118 BPM. An INDEPENDENT bright-dawn cruise.
+// Motif = the "alt B" rework (adopted 2026-06-05): SYNCOPATED & SPACIOUS, built on a recurring RISING-SIXTH
+// leap (D→B, E→C#) answered by a slow fall, with off-beat (step 2/10/6) sustained entries — deliberately NOT
+// the busy-downbeat stepwise march of Stage 1 (which the first draft echoed). Reads as its own tune; the
+// bright dawn TONE (timbre/key/tempo/groove) is unchanged.
+const S4_HOOK = [
+  [2,69],[4,74],[10,83],                 // anacrusis A, then the signature rising 6th D→B (held)
+  [18,81],[22,78],[26,76],[28,74],       // answer falls: A F# E D
+  [34,76],[40,85],                       // second leap E→C#6 (a 6th up), brighter
+  [48,83],[52,81],[58,78],[60,74],       // long sigh back to the D tonic: B A F# D
+];
+const S4_HOOK2 = [ // variation — the leap inverts (falls a 6th), hangs open on E (half-cadence)
+  [2,73],[4,78],[10,69],                 // C# F# … drop to A
+  [18,76],[22,74],[26,73],[28,71],       // E D C# B
+  [34,74],[40,66],                       // D … drop to low F#
+  [48,76],[54,78],[60,76],               // E F# E — unresolved on E
+];
+const S4_B = [ // 8-bar lift — still spacious, the rising 6th climbs in sequence
+  [0,76],[8,85],[14,83],                 // E … C#6 B
+  [16,81],[24,86],[30,83],               // A … D6 B
+  [34,81],[40,78],[48,76],[56,74],       // A F# E D — long descent breath
+  [64,78],[72,88],[78,85],               // F# … E6 (top) C#
+  [80,83],[88,81],[96,78],[104,76],      // B A F# E
+  [112,74],[120,81],                     // D … leap back up to A to relaunch
+];
+const S4_BRIDGE = [ [0,76],[8,74],[16,73],[24,69],[32,78],[40,76],[48,74],[56,73] ];
+const S4_OUTRO  = [ [0,81],[4,78],[8,76],[12,74],[16,73],[24,74],[32,76],[48,74] ];
+const STAGE4 = {
+  title: 'First Light Road', keyName: 'A major / D Lydian', bpm: 118, gain: 0.55,
+  // bright airy timbre — a flute-ish triangle lead + soft sine octave shimmer + a faint saw body, a glassy
+  // bell arp and a wide forward pad. Reads as a clear morning climb, distinct from the three earlier roads.
+  voices: {
+    lead: { layers:[ { type:'triangle', octave:0, detune:0, gain:1.0 }, { type:'sine', octave:1, detune:5, gain:0.34 }, { type:'sawtooth', octave:0, detune:-7, gain:0.22, filter:'lowpass', filterFreq:2100 } ], atk:0.005, dec:0.06, sus:0.55, rel:0.16, maxGate:6 },
+    arp:  { layers:[ { type:'triangle', octave:1, detune:0, gain:1.0 } ], atk:0.002, dec:0.03, sus:0.13, rel:0.06, filter:'lowpass', filterFreq:3400, maxGate:1 },
+    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.06, sus:0.55, rel:0.1, filter:'lowpass', filterFreq:900, maxGate:3 },
+    pad:  { octave:1, voices:3, detune:10, type:'sawtooth', atk:0.1, dec:0.14, sus:0.74, rel:0.42, filter:'lowpass', filterFreq:1850 } },
+  gains: { lead:0.135, harm:0.07, counter:0.075, arp:0.055, bass:0.15, sub:0.12, pad:0.052 },
+  sections: {
+    intro: makeSection({ bars:4, scale:'Amaj', chords:['D','D','A','E'], bassStyle:'half', arpRate:2, groove:'introTick', sub:true, crash:true }),
+    A:     makeSection({ bars:8, scale:'Amaj', chords:['D','A','Bm','E','D','A','E','D'], lead:cat(S4_HOOK, off(64,S4_HOOK2)), bassStyle:'pump8', arpRate:2, groove:'four', sub:true }),
+    A2:    makeSection({ bars:8, scale:'Amaj', chords:['D','A','Bm','E','D','F#m','E','D'], lead:cat(S4_HOOK, off(64,S4_HOOK2)), harm:true, bassStyle:'pump8', arpRate:2, groove:'four', sub:true }),
+    B:     makeSection({ bars:8, scale:'Amaj', chords:['Bm','F#m','A','E','D','A','E','E'], lead:S4_B, counter:true, bassStyle:'pump8', arpRate:1, groove:'four', sub:true, crash:true }),
+    bridge:makeSection({ bars:4, scale:'Amaj', chords:['F#m','E','D','A'], lead:S4_BRIDGE, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
+    A2b:   makeSection({ bars:8, scale:'Amaj', chords:['D','A','Bm','E','D','F#m','E','D'], lead:cat(S4_HOOK, off(64,S4_HOOK2)), harm:true, counter:true, bassStyle:'pump8', arpRate:1, groove:'four', sub:true, crash:true }),
+    outro: makeSection({ bars:4, scale:'Amaj', chords:['D','A','E','D'], lead:S4_OUTRO, bassStyle:'pump8', arpRate:1, groove:'four', sub:true, crash:true }),
+  },
+  arrangement: ['intro','A','A2','B','bridge','A2b','outro'],
+};
+
+// ================================================================ STAGE 4 MIDBOSS
+// "The Gatekeeper" (関の主) — F# harmonic minor, 128 BPM. The crone 山姥 who bars the pass. The ONLY dark
+// track of the dawn stage: F# harmonic minor's augmented-2nd shimmer (b6 D ↔ #7 E#) gives a cold, exotic,
+// circling menace — the relative minor of the road's A major, so it coheres tonally yet reads opposite in
+// mood. An independent angular hook (no road march, no boss fanfare), a relentless gallop under it.
+const M4_HOOK = [
+  [0,66],[4,69],[6,68],[8,66],          // F# A G# F#       — a cold circling motif
+  [16,73],[20,74],[24,77],[26,74],      // C# D E#(F) D     — the augmented-2nd shimmer D↔E#
+  [32,71],[36,69],[40,68],[44,66],      // B A G# F#        — slow descent
+  [48,73],[52,68],[56,66],              // C# G# F#         — cold cadence
+];
+const M4_HOOK2 = [
+  [0,78],[4,81],[6,80],[8,78],
+  [16,74],[20,77],[24,73],[28,74],
+  [32,71],[36,73],[40,69],[44,68],
+  [48,66],[52,69],[56,73],[60,66],
+];
+const M4_B = [
+  [0,85],[8,86],[12,83],
+  [16,81],[24,78],[28,80],
+  [32,77],[40,78],[48,81],[56,85],
+  [64,86],[72,83],[80,81],[88,78],
+  [96,80],[104,81],[112,83],[120,85],
+];
+const M4_BRIDGE = [ [0,69],[8,74],[16,77],[24,74],[32,73],[40,69],[48,68],[56,66] ];
+const M4_OUTRO  = [ [0,78],[8,74],[16,77],[24,73],[32,71],[40,69],[48,66] ];
+const MIDBOSS4 = {
+  title: 'The Gatekeeper', keyName: 'F# harmonic minor', bpm: 128, gain: 0.58,
+  // cold timbre: a saw+hollow-square lead, a chiptune square counter, a gritty saw bass, a dark forward pad.
+  voices: {
+    lead: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:0.9, filter:'lowpass', filterFreq:2500 }, { type:'square', octave:0, detune:7, gain:0.5, filter:'lowpass', filterFreq:2000 } ], atk:0.004, dec:0.05, sus:0.42, rel:0.12, maxGate:5 },
+    counter: { layers:[ { type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:1900 } ], atk:0.005, dec:0.04, sus:0.36, rel:0.1, maxGate:4 },
+    arp: { layers:[ { type:'square', octave:0, detune:7, gain:1.0 } ], atk:0.002, dec:0.025, sus:0.14, rel:0.05, filter:'lowpass', filterFreq:3000, maxGate:1 },
+    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.05, sus:0.55, rel:0.08, filter:'lowpass', filterFreq:880, maxGate:3 },
+    pad: { octave:0, voices:3, detune:11, type:'sawtooth', atk:0.08, dec:0.13, sus:0.66, rel:0.38, filter:'lowpass', filterFreq:1400 } },
+  gains: { lead:0.14, harm:0.075, counter:0.085, arp:0.06, bass:0.165, sub:0.12, pad:0.05, hat:1.05 },
+  sections: {
+    intro:  makeSection({ bars:4, scale:'Fsharm', chords:['F#m','F#m','D','C#'], bassStyle:'half', arpRate:1, groove:'introTick', sub:true, crash:true }),
+    A:      makeSection({ bars:8, scale:'Fsharm', chords:['F#m','F#m','Bm','C#','F#m','D','C#','F#m'], lead:cat(M4_HOOK, off(32,M4_HOOK), off(64,M4_HOOK), off(96,M4_HOOK2)), counter:true, bassStyle:'walk8', arpRate:2, groove:'midGroove', sub:true }),
+    A2:     makeSection({ bars:8, scale:'Fsharm', chords:['F#m','F#m','Bm','C#','F#m','D','C#7','F#m'], lead:cat(M4_HOOK, off(32,M4_HOOK), off(64,M4_HOOK), off(96,M4_HOOK2)), harm:true, counter:true, bassStyle:'gallop', arpRate:2, groove:'midGallop', sub:true, crash:true }),
+    B:      makeSection({ bars:8, scale:'Fsharm', chords:['Bm','D','C#','F#m','Bm','D','C#','C#'], lead:M4_B, bassStyle:'pump8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
+    bridge: makeSection({ bars:4, scale:'Fsharm', chords:['Bm','C#','F#m','C#'], lead:M4_BRIDGE, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
+    outro:  makeSection({ bars:4, scale:'Fsharm', chords:['Bm','C#','F#m','F#m'], lead:M4_OUTRO, bassStyle:'walk8', arpRate:1, groove:'introTick', sub:true }),
+  },
+  arrangement: ['intro','A','A2','B','bridge','A2','B','outro'],
+};
+
+// ================================================================ STAGE 4 BOSS
+// "Daybreak" (曙光 / Yatagarasu) — A major, key-lift to C major (+3) at the climax, 150 BPM. The triumphant
+// sunrise: a heroic fanfare hook of bright leaps in the 3-sharp major collection, driving hard, then the
+// 御来光 modulation up to C major as the sun crests. The brightest, biggest track — an independent anthem,
+// not the Stage-1 boss reshaped (that one is A harmonic minor and lifts to C *minor*; this lifts to C *major*).
+const B4_HOOK = [
+  [0,69],[2,73],[4,76],[8,81],[10,78],[12,76],[14,73],   // A C# E A  F# E C#   — a heroic fanfare rise
+  [16,74],[18,78],[20,83],[24,81],[26,78],[28,76],        // D F# B  A F# E
+];
+const B4_CLOSE = [ [0,81],[4,78],[8,76],[12,74],[16,73],[20,74],[24,76],[28,73] ];   // A F# E D C# D E C#  — bright descent
+const B4_B = [ // beauty lift, upper register
+  [0,88],[4,86],[8,85],[12,83],[16,81],[24,78],
+  [32,81],[40,83],[48,85],[56,88],
+  [64,86],[72,83],[80,81],[88,78],
+  [96,76],[104,81],[112,85],[120,88],
+];
+const B4_BRIDGE = [ // hush then a leading climb into the daybreak modulation
+  [0,69],[8,73],[16,76],[24,73],
+  [32,71],[40,69],[48,68],[56,69],
+  [64,69],[72,71],[80,73],[88,74],
+  [96,76],[104,78],[112,81],[120,83],
+];
+const B4_OUTRO = [ [0,69],[2,73],[6,78],[12,81],[16,78],[24,76],[32,74],[48,74] ];
+const BOSS4 = {
+  title: 'Daybreak', keyName: 'A major → C', bpm: 150, gain: 0.62,
+  // bright powerful timbre: triangle+saw+octave lead, a triangle harm, a square counter, a square arp, driving
+  // saw bass, a wide pad. The warm major answer to the three darker boss themes that came before.
+  voices: {
+    lead: { layers:[ { type:'triangle', octave:0, detune:0, gain:1.0 }, { type:'sawtooth', octave:0, detune:9, gain:0.5, filter:'lowpass', filterFreq:2600 }, { type:'triangle', octave:1, detune:0, gain:0.24 } ], atk:0.005, dec:0.05, sus:0.5, rel:0.13, maxGate:6 },
+    harm: { layers:[ { type:'triangle', octave:0, detune:-4, gain:1.0 } ], atk:0.007, dec:0.05, sus:0.45, rel:0.14, filter:'lowpass', filterFreq:2700, maxGate:6 },
+    counter: { layers:[ { type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:2000 } ], atk:0.006, dec:0.05, sus:0.4, rel:0.12, maxGate:5 },
+    arp: { layers:[ { type:'square', octave:0, detune:7, gain:1.0 } ], atk:0.002, dec:0.025, sus:0.15, rel:0.05, filter:'lowpass', filterFreq:3400, maxGate:1 },
+    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.05, sus:0.6, rel:0.08, filter:'lowpass', filterFreq:1000, maxGate:3 },
+    pad: { octave:0, voices:3, detune:11, type:'sawtooth', atk:0.08, dec:0.13, sus:0.7, rel:0.4, filter:'lowpass', filterFreq:1600 } },
+  gains: { lead:0.145, harm:0.08, counter:0.085, arp:0.06, bass:0.17, sub:0.14, pad:0.058, kick:1.1, snare:1.05, crash:1.05 },
+  sections: {
+    intro:  makeSection({ bars:8, scale:'Amaj', chords:['A','A','E','E','D','D','E','E'], lead:cat(B4_HOOK, off(64,B4_HOOK)), harm:true, bassStyle:'half', arpRate:2, groove:'fourLite', sub:true, crash:true }),
+    A1:     makeSection({ bars:8, scale:'Amaj', chords:['A','D','E','F#m','A','D','E','A'], lead:cat(B4_HOOK, off(32,B4_HOOK), off(64,B4_HOOK), off(96,B4_CLOSE)), bassStyle:'drive8', arpRate:1, groove:'bossDrive', sub:true, crash:true }),
+    A2:     makeSection({ bars:8, scale:'Amaj', chords:['A','D','E','F#m','A','Bm','E','A'], lead:cat(B4_HOOK, off(32,B4_HOOK), off(64,B4_HOOK), off(96,B4_CLOSE)), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossDrive', sub:true, crash:true }),
+    B:      makeSection({ bars:8, scale:'Amaj', chords:['D','A','E','C#m','D','A','E','A'], lead:B4_B, harm:true, counter:true, bassStyle:'pump8', arpRate:1, groove:'bossDrive', sub:true, crash:true }),
+    bridge: makeSection({ bars:8, scale:null, chords:['F#m','F#m','D','A','Bm','Bm','E7','E7'], lead:B4_BRIDGE, bassStyle:'half', arpRate:2, groove:'bossBridge', sub:true }),
+    climax: makeSection({ bars:8, scale:'Cmaj', chords:['C','F','G','Am','C','F','G7','C'], lead:cat(transpose(B4_HOOK,3), off(32,transpose(B4_HOOK,3)), off(64,transpose(B4_HOOK,3)), off(96,transpose(B4_CLOSE,3))), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
+    A3:     makeSection({ bars:8, scale:'Amaj', chords:['A','D','E','F#m','A','D','E','A'], lead:cat(B4_HOOK, off(32,B4_HOOK), off(64,B4_HOOK), off(96,B4_CLOSE)), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
+    outro:  makeSection({ bars:4, scale:null, chords:['D','E','A','A'], lead:B4_OUTRO, bassStyle:'half', arpRate:2, groove:'bossDrive', sub:true, crash:true }),
+  },
+  arrangement: ['intro','A1','A2','B','bridge','climax','A3','outro'],
+};
+
+const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER, stage2: STAGE2, boss2: BOSS2, stage3: STAGE3, boss3: BOSS3, stage4: STAGE4, midboss4: MIDBOSS4, boss4: BOSS4 };
 
 // ---------------------------------------------------------------- validation (Node only)
 function validateTracks() {
