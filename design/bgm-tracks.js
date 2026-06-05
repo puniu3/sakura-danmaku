@@ -26,6 +26,7 @@ const SCALES = {
   Bharm: [1,2,4,6,7,10,11],  // B harmonic minor: B C# D E F# G A#   (Stage 5 midboss 風神 — tense gatekeeper, aug-2nd G↔A#)
   Bphrygdom: [0,3,4,6,7,9,11], // B Phrygian dominant: B C D# E F# G A   (Stage 5 boss 須佐之男 — fierce exotic storm, b2=C menace)
   Ephrygdom: [0,2,4,5,8,9,11], // E Phrygian dominant: E F G# A B C D   (Stage 5 boss climax lift, +5 from B phryg-dom)
+  Coct:  [0,1,3,4,6,7,9,10],    // C octatonic (half-whole): C Db Eb E F# G A Bb   (Stage 5 boss "Yamata Coils" — queasy 8-note serpent, shifting tonality, unlike anything else in-game)
 };
 function parseChord(sym) {
   let bass = null, s = sym;
@@ -105,6 +106,9 @@ function drumBar(g) {
     case 'taikoBoomBap': k[0]=1; k[10]=1; s[8]=1; h[4]=1; h[12]=2; break;
     // ---- its fuller antiphonal "call" section (still 和-spacious, not a rock beat) ----
     case 'taikoCall':    k[0]=1; k[6]=1; k[10]=1; s[4]=1; s[12]=1; h[2]=1; h[8]=2; h[14]=1; break;
+    // ---- Stage 5 boss "Yamata Coils": a lurching, off-kilter 7-against-8 serpent pulse — kicks land unevenly, no straight backbeat ----
+    case 'serpentLurch': [0,3,7,10,13].forEach(i=>k[i]=1); [5,11].forEach(i=>s[i]=1); h[2]=1; h[6]=2; h[9]=1; h[14]=2; break;
+    case 'serpentCoil':  [0,2,5,8,10,13].forEach(i=>k[i]=1); [4,11].forEach(i=>s[i]=1); s[15]=1; for (let i=0;i<16;i++) h[i]=(i%3===0?2:1); break;
     default: break;
   }
   return { k, s, h };
@@ -644,142 +648,157 @@ const BOSS4 = {
 };
 
 // ================================================================ STAGE 5
-// "Tempest Road" (高天原の道) — G Dorian, 130 BPM. The cloud sea before the storm's eye. A modal, restless
-// road: the bright Dorian IV (C major) over a minor home gives wind-blown motion that's neither sweet nor
-// grim. The hook is a CIRCLING ostinato (rises, curls, falls back) — the spinning vortex put to a tune;
-// a fresh root (G) and modal colour set it apart from the four roads before. DRAFT — awaiting user audition.
-const S5_HOOK = [
-  [0,67],[4,70],[6,72],[8,74],[12,72],[14,70],   // G Bb C D  C Bb — rise and curl back (the orbiting motif)
-  [16,69],[20,72],[24,74],[28,76],                // A C D E
-  [32,77],[36,76],[38,74],[40,72],[44,70],        // F E D C Bb — fall
-  [48,74],[52,72],[56,70],[60,69],                // D C Bb A — settle
+// "Tempest Road" (高天原の道) — G Dorian, 132 BPM, gallop-driven. ADOPTED (was candidate A; chosen over the
+// "Skyward Spiral" half-time draft on 2026-06-06). A windswept ascent across the cloud-sea: a tight 6-step
+// CIRCLING-VORTEX ostinato (spins up, curls over the top, spirals back) in the lower octave, ANSWERED by a
+// soaring high counter-melody that rides the gusts. Asymmetric midGallop groove + drive8 bass = a propulsive
+// penultimate-stage climb, not the four/pump8 road mold. Modal Dorian (bright IV=C) for wind-blown motion.
+const S5_VORTEX = [ // the spinning ostinato — repeats each bar, curling G→Bb→C→D→C→Bb
+  [0,79],[2,82],[4,84],[6,86],[8,84],[10,82],[12,84],[14,86],   // G Bb C D | C Bb C D — orbit
 ];
-const S5_HOOK2 = [ // variation — hangs open on D (the modal 5th)
-  [0,67],[4,70],[6,72],[8,74],[12,76],
-  [16,77],[20,76],[24,74],[28,72],
-  [32,70],[36,72],[40,74],[44,76],
-  [48,72],[52,74],[56,76],[60,74],
+const S5_VORTEX2 = [ // higher curl, hangs on the modal D
+  [0,84],[2,86],[4,88],[6,89],[8,88],[10,86],[12,84],[14,86],   // C D E F | E D C D
 ];
-const S5_B = [ // 8-bar lift, upper register
-  [0,79],[4,82],[8,84],[12,81],[16,79],[24,76],
-  [32,77],[40,79],[48,81],[56,84],
-  [64,82],[72,79],[80,77],[88,76],
-  [96,74],[104,77],[112,79],[120,82],
+const S5_SOAR = [ // soaring counter that answers across two bars (upper register)
+  [4,91],[10,89],[14,88],            // (bar1) … D6 C6 Bb5-up wind gust
+  [20,93],[26,91],[30,89],           // (bar2) E6 D6 C6
 ];
-const S5_BRIDGE = [ [0,74],[8,72],[16,70],[24,69],[32,76],[40,74],[48,72],[56,70] ];
-const S5_OUTRO  = [ [0,81],[4,79],[8,77],[12,76],[16,74],[20,72],[24,70],[28,69],[32,72],[40,69],[48,76],[56,74] ];
+const S5_SOAR2 = [
+  [4,89],[10,88],[14,86],
+  [20,84],[26,86],[30,89],
+];
+const S5_B = [ // 8-bar lift, the vortex unwinds into a long soaring line
+  [0,86],[4,89],[8,91],[12,93],[16,91],[24,88],
+  [32,89],[40,91],[48,93],[56,96],
+  [64,93],[72,91],[80,89],[88,88],
+  [96,86],[104,89],[112,91],[120,93],
+];
+const S5_BRIDGE = [ [0,86],[8,84],[16,82],[24,81],[32,88],[40,86],[48,84],[56,82] ];
+const S5_OUTRO  = [ [0,91],[4,89],[8,88],[12,86],[16,84],[20,82],[24,81],[28,79],[32,82],[40,79],[48,86],[56,84] ];
 const STAGE5 = {
-  title: 'Tempest Road', keyName: 'G Dorian', bpm: 130, gain: 0.55,
-  // cool, windy timbre: a saw-led triangle lead with a sine octave shimmer, a glassy arp, a saw bass, a wide pad.
+  title: 'Tempest Road', keyName: 'G Dorian — gallop', bpm: 132, gain: 0.55,
   voices: {
-    lead: { layers:[ { type:'triangle', octave:0, detune:0, gain:1.0 }, { type:'sawtooth', octave:0, detune:8, gain:0.34, filter:'lowpass', filterFreq:2200 }, { type:'sine', octave:1, detune:0, gain:0.22 } ], atk:0.005, dec:0.06, sus:0.52, rel:0.15, maxGate:6 },
-    arp:  { layers:[ { type:'triangle', octave:1, detune:0, gain:1.0 } ], atk:0.002, dec:0.03, sus:0.13, rel:0.06, filter:'lowpass', filterFreq:3200, maxGate:1 },
-    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.06, sus:0.55, rel:0.1, filter:'lowpass', filterFreq:920, maxGate:3 },
-    pad:  { octave:1, voices:3, detune:10, type:'sawtooth', atk:0.1, dec:0.14, sus:0.72, rel:0.42, filter:'lowpass', filterFreq:1750 } },
-  gains: { lead:0.135, harm:0.07, counter:0.075, arp:0.055, bass:0.15, sub:0.12, pad:0.052 },
+    lead: { layers:[ { type:'triangle', octave:0, detune:0, gain:1.0 }, { type:'sawtooth', octave:0, detune:8, gain:0.36, filter:'lowpass', filterFreq:2300 }, { type:'sine', octave:1, detune:0, gain:0.2 } ], atk:0.004, dec:0.05, sus:0.5, rel:0.14, maxGate:6 },
+    counter: { layers:[ { type:'triangle', octave:0, detune:0, gain:1.0 }, { type:'sine', octave:0, detune:6, gain:0.4 } ], atk:0.006, dec:0.06, sus:0.5, rel:0.18, filter:'lowpass', filterFreq:2800, maxGate:6 },
+    arp:  { layers:[ { type:'triangle', octave:1, detune:0, gain:1.0 } ], atk:0.002, dec:0.03, sus:0.13, rel:0.06, filter:'lowpass', filterFreq:3300, maxGate:1 },
+    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.06, sus:0.55, rel:0.1, filter:'lowpass', filterFreq:960, maxGate:3 },
+    pad:  { octave:1, voices:3, detune:10, type:'sawtooth', atk:0.1, dec:0.14, sus:0.72, rel:0.42, filter:'lowpass', filterFreq:1800 } },
+  gains: { lead:0.135, harm:0.07, counter:0.085, arp:0.055, bass:0.155, sub:0.12, pad:0.052, hat:1.0 },
   sections: {
-    intro: makeSection({ bars:4, scale:'Gdor', chords:['Gm','Gm','Bb','C'], bassStyle:'half', arpRate:2, groove:'introTick', sub:true, crash:true }),
-    A:     makeSection({ bars:8, scale:'Gdor', chords:['Gm','Bb','C','Dm','Gm','Bb','F','C'], lead:cat(S5_HOOK, off(64,S5_HOOK2)), bassStyle:'pump8', arpRate:2, groove:'four', sub:true }),
-    A2:    makeSection({ bars:8, scale:'Gdor', chords:['Gm','Bb','C','Dm','Gm','Am','F','C'], lead:cat(S5_HOOK, off(64,S5_HOOK2)), harm:true, bassStyle:'pump8', arpRate:2, groove:'four', sub:true }),
-    B:     makeSection({ bars:8, scale:'Gdor', chords:['C','Dm','Bb','Gm','C','Am','F','C'], lead:S5_B, counter:true, bassStyle:'pump8', arpRate:1, groove:'four', sub:true, crash:true }),
-    bridge:makeSection({ bars:4, scale:'Gdor', chords:['Am','Bb','Gm','C'], lead:S5_BRIDGE, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
-    A2b:   makeSection({ bars:8, scale:'Gdor', chords:['Gm','Bb','C','Dm','Gm','Am','F','C'], lead:cat(S5_HOOK, off(64,S5_HOOK2)), harm:true, counter:true, bassStyle:'pump8', arpRate:1, groove:'four', sub:true, crash:true }),
-    outro: makeSection({ bars:4, scale:'Gdor', chords:['Gm','Bb','F','C'], lead:S5_OUTRO, bassStyle:'pump8', arpRate:1, groove:'four', sub:true, crash:true }),
+    intro: makeSection({ bars:4, scale:'Gdor', chords:['Gm','Gm','Bb','C'], lead:cat(S5_VORTEX, off(32,S5_VORTEX)), bassStyle:'drive8', arpRate:2, groove:'introTick', sub:true, crash:true }),
+    A:     makeSection({ bars:8, scale:'Gdor', chords:['Gm','Bb','C','Dm','Gm','F','Bb','C'], lead:cat(S5_VORTEX, off(32,S5_VORTEX2), off(64,S5_VORTEX), off(96,S5_VORTEX2)), counter:cat(S5_SOAR, off(64,S5_SOAR2)), bassStyle:'drive8', arpRate:2, groove:'midGallop', sub:true }),
+    A2:    makeSection({ bars:8, scale:'Gdor', chords:['Gm','Bb','C','Dm','Gm','F','C','Dm'], lead:cat(S5_VORTEX, off(32,S5_VORTEX2), off(64,S5_VORTEX), off(96,S5_VORTEX2)), harm:true, counter:cat(S5_SOAR, off(64,S5_SOAR2)), bassStyle:'drive8', arpRate:2, groove:'midGallop', sub:true, crash:true }),
+    B:     makeSection({ bars:8, scale:'Gdor', chords:['C','Dm','Bb','Gm','C','Dm','F','C'], lead:S5_B, counter:true, bassStyle:'drive8', arpRate:1, groove:'midGallop', sub:true, crash:true }),
+    bridge:makeSection({ bars:4, scale:'Gdor', chords:['Dm','Bb','Gm','C'], lead:S5_BRIDGE, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
+    A2b:   makeSection({ bars:8, scale:'Gdor', chords:['Gm','Bb','C','Dm','Gm','F','C','Dm'], lead:cat(S5_VORTEX, off(32,S5_VORTEX2), off(64,S5_VORTEX), off(96,S5_VORTEX2)), harm:true, counter:cat(S5_SOAR, off(64,S5_SOAR2)), bassStyle:'drive8', arpRate:1, groove:'midGallop', sub:true, crash:true }),
+    outro: makeSection({ bars:4, scale:'Gdor', chords:['Gm','Bb','F','C'], lead:S5_OUTRO, bassStyle:'drive8', arpRate:1, groove:'midGallop', sub:true, crash:true }),
   },
   arrangement: ['intro','A','A2','B','bridge','A2b','outro'],
 };
 
 // ================================================================ STAGE 5 MIDBOSS
-// "Wind Gate" (風の門) — B harmonic minor, 138 BPM. The wind-bag gatekeeper 風神 who bars the way to the eye.
-// B harmonic minor's augmented-2nd shimmer (b6 G ↔ #7 A#) gives a tense, circling menace, a fresh root, an
-// angular gust hook over a relentless gallop. Distinct from S4's F#-minor gatekeeper. DRAFT — awaiting audition.
-const M5_HOOK = [
-  [0,71],[4,74],[6,73],[8,71],          // B D C# B        — a circling gust motif
-  [16,78],[20,79],[24,82],[26,79],      // F# G A# G        — the aug-2nd shimmer G↔A#
-  [32,76],[36,74],[40,73],[44,71],      // E D C# B         — descent
-  [48,78],[52,73],[56,71],              // F# C# B          — cadence
+// "Wind Gate" (風の門) — B harmonic minor, 142 BPM, gusty stutter. ADOPTED (was candidate A; chosen over the
+// "Whirlwind Jig" E-harm draft on 2026-06-06). The wind-bag gatekeeper 風神 who bars the way to the eye: a
+// capricious wind-god whose STACCATO darting motif bursts in short flurries then leaves SUDDEN GUSTS OF SILENCE
+// (long rests), only to dart back. Lighter & more playful than the S4 crone-gatekeeper — fast tripping 16ths,
+// a teasing square counter that mimics it a beat late, a skipping gallop. The aug-2nd shimmer (b6 G ↔ #7 A#)
+// gives it just enough edge to bite. A fresh root, distinct from S4's F#-minor gatekeeper.
+const M5_GUST = [ // a short darting burst, then a long gust of rest
+  [0,71],[1,73],[2,74],[3,73],[4,71],   // BB-flurry: B C# D C# B (fast stutter)
+  [10,78],[11,79],[12,78],               // gust: F# G F# (sudden)
+  // … long rest (steps 13-15 + into next entry) — the wind drops out
 ];
-const M5_HOOK2 = [
-  [0,83],[4,86],[6,85],[8,83],
-  [16,79],[20,82],[24,78],[28,79],
-  [32,76],[36,78],[40,74],[44,73],
-  [48,71],[52,74],[56,78],[60,71],
+const M5_GUST2 = [
+  [0,82],[1,79],[2,78],                   // A# G F# — high snap down
+  [6,76],[7,74],[8,73],[9,71],            // E D C# B — tumbling
+  [14,73],                                // C# — a teasing poke
 ];
-const M5_B = [
-  [0,90],[8,91],[12,88],
-  [16,86],[24,83],[28,85],
-  [32,82],[40,83],[48,86],[56,90],
-  [64,91],[72,88],[80,86],[88,83],
-  [96,85],[104,86],[112,88],[120,90],
+const M5_GUST3 = [ // a longer dart that climbs the aug-2nd
+  [0,71],[2,74],[4,76],[6,78],[8,79],[10,82],   // B D E F# G A# — climbing gust
+  [12,79],[14,78],
+];
+const M5_B = [ // the gale rises — a continuous high whirl
+  [0,86],[4,90],[8,91],[12,88],[16,86],[24,83],
+  [32,85],[40,86],[48,90],[56,91],
+  [64,90],[72,88],[80,86],[88,85],
+  [96,83],[104,86],[112,88],[120,90],
 ];
 const M5_BRIDGE = [ [0,74],[8,79],[16,82],[24,79],[32,78],[40,74],[48,73],[56,71] ];
-const M5_OUTRO  = [ [0,83],[8,79],[16,82],[24,78],[32,76],[40,74],[48,71] ];
+const M5_OUTRO  = [ [0,83],[4,82],[8,79],[12,78],[16,76],[20,74],[24,73],[28,71],[40,74],[56,71] ];
 const MIDBOSS5 = {
-  title: 'Wind Gate', keyName: 'B harmonic minor', bpm: 138, gain: 0.58,
-  // cold tense timbre: saw+square lead, a square counter, a square arp, a gritty saw bass, a dark forward pad.
+  title: 'Wind Gate', keyName: 'B harmonic minor — gusty', bpm: 142, gain: 0.58,
   voices: {
-    lead: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:0.9, filter:'lowpass', filterFreq:2500 }, { type:'square', octave:0, detune:7, gain:0.5, filter:'lowpass', filterFreq:2000 } ], atk:0.004, dec:0.05, sus:0.42, rel:0.12, maxGate:5 },
-    counter: { layers:[ { type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:1900 } ], atk:0.005, dec:0.04, sus:0.36, rel:0.1, maxGate:4 },
-    arp: { layers:[ { type:'square', octave:0, detune:7, gain:1.0 } ], atk:0.002, dec:0.025, sus:0.14, rel:0.05, filter:'lowpass', filterFreq:3000, maxGate:1 },
-    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.05, sus:0.55, rel:0.08, filter:'lowpass', filterFreq:880, maxGate:3 },
-    pad: { octave:0, voices:3, detune:11, type:'sawtooth', atk:0.08, dec:0.13, sus:0.66, rel:0.38, filter:'lowpass', filterFreq:1400 } },
-  gains: { lead:0.14, harm:0.075, counter:0.085, arp:0.06, bass:0.165, sub:0.12, pad:0.05, hat:1.05 },
+    lead: { layers:[ { type:'square', octave:0, detune:0, gain:0.9, filter:'lowpass', filterFreq:2700 }, { type:'triangle', octave:0, detune:6, gain:0.5 } ], atk:0.002, dec:0.04, sus:0.32, rel:0.08, maxGate:4 },
+    counter: { layers:[ { type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:2100 } ], atk:0.003, dec:0.035, sus:0.3, rel:0.08, maxGate:3 },
+    arp: { layers:[ { type:'square', octave:0, detune:7, gain:1.0 } ], atk:0.002, dec:0.022, sus:0.12, rel:0.04, filter:'lowpass', filterFreq:3200, maxGate:1 },
+    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.05, sus:0.5, rel:0.07, filter:'lowpass', filterFreq:900, maxGate:3 },
+    pad: { octave:0, voices:3, detune:10, type:'sawtooth', atk:0.07, dec:0.12, sus:0.6, rel:0.34, filter:'lowpass', filterFreq:1450 } },
+  gains: { lead:0.14, harm:0.075, counter:0.085, arp:0.062, bass:0.16, sub:0.12, pad:0.048, hat:1.1 },
   sections: {
     intro:  makeSection({ bars:4, scale:'Bharm', chords:['Bm','Bm','G','F#'], bassStyle:'half', arpRate:1, groove:'introTick', sub:true, crash:true }),
-    A:      makeSection({ bars:8, scale:'Bharm', chords:['Bm','Bm','Em','F#','Bm','G','F#','Bm'], lead:cat(M5_HOOK, off(32,M5_HOOK), off(64,M5_HOOK), off(96,M5_HOOK2)), counter:true, bassStyle:'walk8', arpRate:2, groove:'midGroove', sub:true }),
-    A2:     makeSection({ bars:8, scale:'Bharm', chords:['Bm','Bm','Em','F#','Bm','G','F#7','Bm'], lead:cat(M5_HOOK, off(32,M5_HOOK), off(64,M5_HOOK), off(96,M5_HOOK2)), harm:true, counter:true, bassStyle:'gallop', arpRate:2, groove:'midGallop', sub:true, crash:true }),
+    A:      makeSection({ bars:8, scale:'Bharm', chords:['Bm','Em','G','F#','Bm','Em','F#','Bm'], lead:cat(M5_GUST, off(16,M5_GUST2), off(32,M5_GUST), off(48,M5_GUST3), off(64,M5_GUST), off(80,M5_GUST2), off(96,M5_GUST), off(112,M5_GUST3)), counter:true, bassStyle:'gallop', arpRate:2, groove:'midGallop', sub:true }),
+    A2:     makeSection({ bars:8, scale:'Bharm', chords:['Bm','Em','G','F#','Bm','Em','F#7','Bm'], lead:cat(M5_GUST, off(16,M5_GUST2), off(32,M5_GUST), off(48,M5_GUST3), off(64,M5_GUST), off(80,M5_GUST2), off(96,M5_GUST), off(112,M5_GUST3)), harm:true, counter:true, bassStyle:'gallop', arpRate:2, groove:'midGallop', sub:true, crash:true }),
     B:      makeSection({ bars:8, scale:'Bharm', chords:['Em','G','F#','Bm','Em','G','F#','F#'], lead:M5_B, bassStyle:'pump8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
     bridge: makeSection({ bars:4, scale:'Bharm', chords:['Em','F#','Bm','F#'], lead:M5_BRIDGE, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
-    outro:  makeSection({ bars:4, scale:'Bharm', chords:['Em','F#','Bm','Bm'], lead:M5_OUTRO, bassStyle:'walk8', arpRate:1, groove:'introTick', sub:true }),
+    outro:  makeSection({ bars:4, scale:'Bharm', chords:['Em','F#','Bm','Bm'], lead:M5_OUTRO, bassStyle:'gallop', arpRate:1, groove:'introTick', sub:true }),
   },
   arrangement: ['intro','A','A2','B','bridge','A2','B','outro'],
 };
 
 // ================================================================ STAGE 5 BOSS
-// "God of Storms" (須佐之男) — B Phrygian dominant, key-lift to E Phrygian dominant (+5) at the climax, 152 BPM.
-// The raging storm god: the b2 (C) over a B-major-ish home is the fierce, exotic Phrygian-dominant menace; a
-// driving fanfare hook of stormy leaps, then the modulation up +5 as the tempest breaks. An independent anthem —
-// not the bright S4 daybreak reshaped (this is dark-exotic, lifts via Phrygian dominant, not major). DRAFT — audition.
-const B5_HOOK = [
-  [0,71],[2,72],[4,75],[8,76],[10,79],[12,78],[14,75],   // B C D# E  G F# D#  — fierce rise (the b2 C bites)
-  [16,72],[18,76],[20,81],[24,79],[26,78],[28,76],        // C E A  G F# E
+// "Yamata Coils" (八岐大蛇 / 須佐之男) — C octatonic (half-whole), 144 BPM. ADOPTED (was re-audition candidate C;
+// chosen 2026-06-06 over the "Black Sky Dirge" C-Aeolian and "Whirlwind Rage" D-Phrygian-motorik drafts, and
+// over the original "God of Storms" B-Phrygian-dominant anthem).
+//   OCTATONIC UNEASE — a queasy, shifting 8-note diminished scale unlike ANY mode used elsewhere in the game
+//   (it has no stable tonic, so the harmony slides restlessly). Structure = an ANTIPHONAL CALL-RESPONSE like
+//   BOSS3 ("Mirror of Two Moons"), but COILED and menacing: the eight heads of Orochi answer each other in a
+//   lurching, off-kilter serpent pulse (serpentLurch / serpentCoil) — no straight backbeat, no key-lift, no
+//   taiko anthem. The diminished symmetry IS the unease.
+const B5_CALL = [ // a coiling call that climbs the octatonic (C Db Eb E F# G A Bb), unsettling
+  [0,60],[4,61],[8,63],[12,64],[16,66],[20,67],[24,69],[28,70],   // C Db Eb E | F# G A Bb — the serpent uncoils
 ];
-const B5_CLOSE = [ [0,83],[4,79],[8,78],[12,76],[16,75],[20,76],[24,78],[28,75] ];   // B6 G F# E D# E F# D#
-const B5_B = [ // upper-register lift
-  [0,88],[4,87],[8,84],[12,83],[16,81],[24,78],
-  [32,83],[40,84],[48,87],[56,88],
-  [64,87],[72,84],[80,81],[88,79],
-  [96,76],[104,81],[112,84],[120,88],
+const B5_ANS = [ // the answering head — an independent lower line in the rests (a real second voice)
+  [2,55],[6,57],[10,58],[14,55],            // G(low) A Bb G — pc 7,9,10,7 (octatonic)
+  [18,52],[22,54],[26,55],[30,52],          // E(low) F# G E
 ];
-const B5_BRIDGE = [ // hush then a leading climb into the +5 modulation
-  [0,71],[8,75],[16,76],[24,75],
-  [32,72],[40,71],[48,72],[56,75],
-  [64,76],[72,78],[80,79],[88,81],
-  [96,83],[104,84],[112,87],[120,88],
+const B5_CALL2 = [
+  [0,72],[4,70],[8,69],[12,67],[16,66],[20,64],[24,63],[28,61],   // C6 Bb A G | F# E Eb Db — the coil descends
 ];
-const B5_OUTRO = [ [0,71],[2,72],[6,76],[12,79],[16,78],[24,76],[32,75],[48,76] ];
+const B5_ANS2 = [
+  [2,67],[6,66],[10,64],[14,63],
+  [18,61],[22,60],[26,58],[30,57],
+];
+const B5_UNI = [ // the heads strike together — a venomous unison stab figure
+  [0,72],[2,76],[6,73],[8,70],[12,67],[16,66],[20,64],[24,60],[28,64],   // octatonic stabs
+];
+const B5_BRIDGE = [ // the coils gather — a slow rising diminished spiral, dread-building
+  [0,60],[8,63],[16,66],[24,69],
+  [32,70],[40,67],[48,64],[56,61],
+  [64,67],[72,70],[80,73],[88,76],
+  [96,73],[104,70],[112,67],[120,64],
+];
+const B5_OUTRO = [ [0,60],[4,63],[8,66],[16,67],[24,64],[32,61],[48,60] ];
 const BOSS5 = {
-  title: 'God of Storms', keyName: 'B Phryg-dom → E', bpm: 152, gain: 0.62,
-  // fierce powerful timbre: triangle+saw+octave lead, a triangle harm, a square counter, a square arp, a driving saw bass, a wide pad.
+  title: 'Yamata Coils', keyName: 'C octatonic — antiphonal serpent unease', bpm: 144, gain: 0.6,
+  // venomous shifting timbre: a saw+square coiling lead, a triangle harm, a co-equal sine+triangle answer-counter (the second head), a glassy square arp, a saw bass, a cold dark pad.
   voices: {
-    lead: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:2700 }, { type:'triangle', octave:0, detune:-9, gain:0.5 }, { type:'square', octave:1, detune:0, gain:0.2, filter:'lowpass', filterFreq:3200 } ], atk:0.005, dec:0.05, sus:0.5, rel:0.13, maxGate:6 },
-    harm: { layers:[ { type:'triangle', octave:0, detune:-4, gain:1.0 } ], atk:0.007, dec:0.05, sus:0.45, rel:0.14, filter:'lowpass', filterFreq:2600, maxGate:6 },
-    counter: { layers:[ { type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:2000 } ], atk:0.006, dec:0.05, sus:0.4, rel:0.12, maxGate:5 },
-    arp: { layers:[ { type:'square', octave:0, detune:7, gain:1.0 } ], atk:0.002, dec:0.025, sus:0.15, rel:0.05, filter:'lowpass', filterFreq:3300, maxGate:1 },
-    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.05, sus:0.6, rel:0.08, filter:'lowpass', filterFreq:980, maxGate:3 },
-    pad: { octave:0, voices:3, detune:11, type:'sawtooth', atk:0.08, dec:0.13, sus:0.7, rel:0.4, filter:'lowpass', filterFreq:1500 } },
-  gains: { lead:0.145, harm:0.08, counter:0.085, arp:0.06, bass:0.17, sub:0.14, pad:0.056, kick:1.1, snare:1.05, crash:1.05 },
+    lead: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:0.95, filter:'lowpass', filterFreq:2500 }, { type:'square', octave:0, detune:7, gain:0.4, filter:'lowpass', filterFreq:2200 } ], atk:0.004, dec:0.05, sus:0.42, rel:0.12, maxGate:5 },
+    harm: { layers:[ { type:'triangle', octave:0, detune:-4, gain:1.0 } ], atk:0.006, dec:0.05, sus:0.42, rel:0.13, filter:'lowpass', filterFreq:2400, maxGate:5 },
+    counter: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:0.9, filter:'lowpass', filterFreq:2100 }, { type:'sine', octave:0, detune:6, gain:0.45 } ], atk:0.006, dec:0.06, sus:0.44, rel:0.15, maxGate:6 },
+    arp: { layers:[ { type:'square', octave:0, detune:8, gain:1.0 } ], atk:0.002, dec:0.022, sus:0.13, rel:0.05, filter:'lowpass', filterFreq:3200, maxGate:1 },
+    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.05, sus:0.58, rel:0.08, filter:'lowpass', filterFreq:920, maxGate:3 },
+    pad: { octave:0, voices:3, detune:12, type:'sawtooth', atk:0.1, dec:0.15, sus:0.7, rel:0.45, filter:'lowpass', filterFreq:1300 } },
+  gains: { lead:0.14, harm:0.078, counter:0.098, arp:0.058, bass:0.17, sub:0.14, pad:0.058, kick:1.16, snare:1.02, crash:1.02 },
   sections: {
-    intro:  makeSection({ bars:8, scale:'Bphrygdom', chords:['B','B','F#','F#','Em','Em','F#','F#'], lead:cat(B5_HOOK, off(64,B5_HOOK)), harm:true, bassStyle:'half', arpRate:2, groove:'fourLite', sub:true, crash:true }),
-    A1:     makeSection({ bars:8, scale:'Bphrygdom', chords:['B','Em','F#','G','B','Em','C','B'], lead:cat(B5_HOOK, off(32,B5_HOOK), off(64,B5_HOOK), off(96,B5_CLOSE)), bassStyle:'drive8', arpRate:1, groove:'bossDrive', sub:true, crash:true }),
-    A2:     makeSection({ bars:8, scale:'Bphrygdom', chords:['B','Em','F#','G','B','Am','C','B'], lead:cat(B5_HOOK, off(32,B5_HOOK), off(64,B5_HOOK), off(96,B5_CLOSE)), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossDrive', sub:true, crash:true }),
-    B:      makeSection({ bars:8, scale:'Bphrygdom', chords:['Em','B','F#','G','Em','B','C','B'], lead:B5_B, harm:true, counter:true, bassStyle:'pump8', arpRate:1, groove:'bossDrive', sub:true, crash:true }),
-    bridge: makeSection({ bars:8, scale:null, chords:['Em','Em','C','B','Am','Am','F#7','F#7'], lead:B5_BRIDGE, bassStyle:'half', arpRate:2, groove:'bossBridge', sub:true }),
-    climax: makeSection({ bars:8, scale:'Ephrygdom', chords:['E','Am','B','C','E','Dm','F','E'], lead:cat(transpose(B5_HOOK,5), off(32,transpose(B5_HOOK,5)), off(64,transpose(B5_HOOK,5)), off(96,transpose(B5_CLOSE,5))), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
-    A3:     makeSection({ bars:8, scale:'Bphrygdom', chords:['B','Em','F#','G','B','Em','C','B'], lead:cat(B5_HOOK, off(32,B5_HOOK), off(64,B5_HOOK), off(96,B5_CLOSE)), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
-    outro:  makeSection({ bars:4, scale:null, chords:['C','F#','B','B'], lead:B5_OUTRO, bassStyle:'half', arpRate:2, groove:'bossDrive', sub:true, crash:true }),
+    intro:  makeSection({ bars:8, scale:'Coct', chords:['Cm','Cm','Eb','Eb','F#','F#','A','A'], lead:cat(B5_CALL, off(64,B5_CALL)), harm:true, bassStyle:'sparseRoot', arpRate:2, groove:'serpentLurch', sub:true, crash:true }),
+    call:   makeSection({ bars:8, scale:'Coct', chords:['Cm','Cm','Eb','Eb','F#m','F#m','A','A'], lead:cat(B5_CALL, off(64,B5_CALL2)), counter:cat(B5_ANS, off(64,B5_ANS2)), bassStyle:'walk8', arpRate:2, groove:'serpentLurch', sub:true, crash:true }),
+    callH:  makeSection({ bars:8, scale:'Coct', chords:['Cm','Eb','F#m','A','Cm','Eb','A','Cm'], lead:cat(B5_CALL, off(64,B5_CALL2)), harm:true, counter:cat(B5_ANS, off(64,B5_ANS2)), bassStyle:'walk8', arpRate:1, groove:'serpentCoil', sub:true, crash:true }),
+    B:      makeSection({ bars:8, scale:'Coct', chords:['Eb','Cm','F#m','A','Eb','Cm','A','Cm'], lead:cat(B5_UNI, off(64,B5_UNI)), harm:true, counter:true, bassStyle:'pump8', arpRate:1, groove:'serpentCoil', sub:true, crash:true }),
+    bridge: makeSection({ bars:8, scale:'Coct', chords:['Cm','Cm','Eb','Eb','F#m','F#m','A','A'], lead:B5_BRIDGE, bassStyle:'sparseRoot', arpRate:1, groove:'bossBridge', sub:true }),
+    callF:  makeSection({ bars:8, scale:'Coct', chords:['Cm','Eb','F#m','A','Cm','Eb','A','Cm'], lead:cat(B5_CALL, off(64,B5_CALL2)), harm:true, counter:cat(B5_ANS, off(64,B5_ANS2)), bassStyle:'walk8', arpRate:1, groove:'serpentCoil', sub:true, crash:true }),
+    outro:  makeSection({ bars:4, scale:'Coct', chords:['Eb','A','Cm','Cm'], lead:B5_OUTRO, bassStyle:'sparseRoot', arpRate:2, groove:'serpentLurch', sub:true, crash:true }),
   },
-  arrangement: ['intro','A1','A2','B','bridge','climax','A3','outro'],
+  arrangement: ['intro','call','callH','B','bridge','callF','outro'],
 };
 
 const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER, stage2: STAGE2, boss2: BOSS2, stage3: STAGE3, boss3: BOSS3, stage4: STAGE4, midboss4: MIDBOSS4, boss4: BOSS4, stage5: STAGE5, midboss5: MIDBOSS5, boss5: BOSS5 };

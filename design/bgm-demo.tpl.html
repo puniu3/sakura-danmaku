@@ -9,6 +9,9 @@
     --bg:#140a20; --panel:#20122f; --edge:#3d2459; --text:#ffe9fb; --dim:#9d83c0;
     --stage:#7fe0a8; --midboss:#ffce5e; --boss:#ff6aa0; --accent:#b98cff;
     --stage2:#9ad0ff; --boss2:#c98fff;
+    --stage3:#8ce0c8; --boss3:#a0b8ff;
+    --stage4:#ffd98a; --midboss4:#c0a0ff; --boss4:#ffb060;
+    --stage5:#a8e0ff; --midboss5:#90ffd0; --boss5:#5ad0a0;
   }
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body{ margin:0; height:100%; }
@@ -49,7 +52,7 @@
 </head>
 <body>
   <h1>🌸 BGM Audition Harness</h1>
-  <div class="sub">1面（道中 / 中ボス / 大ボス）＋ 2面（道中 / ボス）のトラックを試聴。<br>カードの再生ボタンで切替（クロスフェード）。最終的にゲーム本体へ移植します。</div>
+  <div class="sub">1〜5面の各トラックを試聴。5面ボス＝採用版「須佐之男（八岐の問答 / C八音音階144）」。<br>カードの再生ボタンで切替（クロスフェード）。</div>
 
   <div class="cards" id="cards"></div>
 
@@ -134,11 +137,21 @@ function playMusic(name){
 //  UI
 // ============================================================================
 const CARD_DEFS=[
-  { key:'stage',   tag:'道中  STAGE',   color:'var(--stage)' },
-  { key:'midboss', tag:'中ボス  MIDBOSS', color:'var(--midboss)' },
-  { key:'boss',    tag:'大ボス  BOSS',    color:'var(--boss)' },
+  { key:'stage',   tag:'1面道中  STAGE',   color:'var(--stage)' },
+  { key:'midboss', tag:'1面中ボス  MIDBOSS', color:'var(--midboss)' },
+  { key:'boss',    tag:'1面大ボス  BOSS',    color:'var(--boss)' },
   { key:'stage2',  tag:'2面道中  STAGE 2', color:'var(--stage2)' },
   { key:'boss2',   tag:'2面ボス  BOSS 2',  color:'var(--boss2)' },
+  { key:'stage3',  tag:'3面道中  STAGE 3', color:'var(--stage3)' },
+  { key:'boss3',   tag:'3面ボス  BOSS 3',  color:'var(--boss3)' },
+  { key:'stage4',  tag:'4面道中  STAGE 4', color:'var(--stage4)' },
+  { key:'midboss4',tag:'4面中ボス  MIDBOSS 4', color:'var(--midboss4)' },
+  { key:'boss4',   tag:'4面ボス  BOSS 4',  color:'var(--boss4)' },
+  // ---- Stage 5 road / midboss: ADOPTED winners (confirm) ----
+  { key:'stage5',  tag:'★ 5面道中 (採用)', color:'var(--stage5)' },
+  { key:'midboss5',tag:'★ 5面中ボス (採用)', color:'var(--midboss5)' },
+  // ---- Stage 5 boss: ADOPTED winner (was candidate C, chosen 2026-06-06) ----
+  { key:'boss5',   tag:'★ 5面ボス (採用) 須佐之男 — 八岐の問答 (C八音音階144)', color:'var(--boss5)' },
 ];
 const cardsEl=document.getElementById('cards'), nowEl=document.getElementById('now');
 function renderCards(){
@@ -174,7 +187,13 @@ function draw(){
   if(!analyser){ return; }
   const n=analyser.frequencyBinCount, data=new Uint8Array(n); analyser.getByteFrequencyData(data);
   const bars=96, step=Math.floor(n/bars), W=cvs.width, H=cvs.height, bw=W/bars;
-  const accent = curTrack==='boss'?[255,106,160]: curTrack==='midboss'?[255,206,94]: curTrack==='stage'?[127,224,168]: curTrack==='stage2'?[154,208,255]: curTrack==='boss2'?[201,143,255]:[150,120,200];
+  const ACCENT_MAP={
+    stage:[127,224,168], midboss:[255,206,94], boss:[255,106,160],
+    stage2:[154,208,255], boss2:[201,143,255],
+    stage3:[140,224,200], boss3:[160,184,255],
+    stage4:[255,217,138], midboss4:[192,160,255], boss4:[255,176,96],
+    stage5:[168,224,255], midboss5:[144,255,208], boss5:[90,208,160] };
+  const accent = ACCENT_MAP[curTrack]||[150,120,200];
   for(let i=0;i<bars;i++){
     let v=0; for(let j=0;j<step;j++) v=Math.max(v,data[i*step+j]); v/=255;
     const h=Math.pow(v,0.85)*H*0.95;

@@ -74,7 +74,7 @@ const LASER_HIT_CD = 0.5;                      // min seconds between death-zone
 // loops run over 0 items, and no rng is touched. ----
 const WELL_CAP = 6;                             // soft cap (makePool grows); the spell design keeps simultaneous ACTIVE wells ≤4 (perf: applyGravity is O(wells×bullets))
 const WELL_WARN = 1.0, WELL_ACTIVE = 6.0, WELL_FADE = 0.4;   // default WARN→ACTIVE→FADE seconds (per-well overridable in placeWell)
-const WELL_SOFTEN = 28;                         // non-singular softening k in a = strength/(d+k): kills the 1/d² singularity so a bullet at the centre isn't yanked infinitely — it curves smoothly instead of being sucked to a point
+const WELL_SOFTEN = 22;                         // non-singular softening k in a = strength/(d+k): kills the 1/d² singularity so a bullet at the centre isn't yanked infinitely — it curves smoothly. Lowered (was 28) for a crisper near-core hook now that wells are SMALL + close to the player (the gimmick must read as a sharp bend, not a lazy arc)
 const WELL_AMAX = 760;                          // clamp on the per-tick steering-accel magnitude (px/s²) so even a fast bullet near the core bends fairly, never teleports
 const WELL_GRAZE_CD = 0.12;                     // (coreR>0 wells) min seconds between graze awards while skimming ONE lethal core
 const WELL_HIT_CD = 0.5;                        // (coreR>0 wells) min seconds between death-zone interactions from one lethal core
@@ -144,6 +144,7 @@ const DEFAULT_R = 4.5;
 // ============================ ENGINE CORE ============================
 // ---- math helpers ----
 function clamp(v,lo,hi){ return v<lo?lo:(v>hi?hi:v); }
+function lerp(a,b,t){ return a+(b-a)*t; }
 function approach(cur,tgt,maxDelta){ const d=tgt-cur; if(d>maxDelta) return cur+maxDelta; if(d<-maxDelta) return cur-maxDelta; return tgt; }
 function hypot(dx,dy){ return Math.sqrt(dx*dx+dy*dy); }
 function dist2(ax,ay,bx,by){ const dx=ax-bx,dy=ay-by; return dx*dx+dy*dy; }
@@ -733,6 +734,7 @@ const SCALES = {
   Bharm: [1,2,4,6,7,10,11],  // B harmonic minor: B C# D E F# G A#   (Stage 5 midboss 風神 — tense gatekeeper, aug-2nd G↔A#)
   Bphrygdom: [0,3,4,6,7,9,11], // B Phrygian dominant: B C D# E F# G A   (Stage 5 boss 須佐之男 — fierce exotic storm, b2=C menace)
   Ephrygdom: [0,2,4,5,8,9,11], // E Phrygian dominant: E F G# A B C D   (Stage 5 boss climax lift, +5 from B phryg-dom)
+  Coct:  [0,1,3,4,6,7,9,10],    // C octatonic (half-whole): C Db Eb E F# G A Bb   (Stage 5 boss "Yamata Coils" — queasy 8-note serpent, shifting tonality, unlike anything else in-game)
 };
 function parseChord(sym) {
   let bass = null, s = sym;
@@ -812,6 +814,9 @@ function drumBar(g) {
     case 'taikoBoomBap': k[0]=1; k[10]=1; s[8]=1; h[4]=1; h[12]=2; break;
     // ---- its fuller antiphonal "call" section (still 和-spacious, not a rock beat) ----
     case 'taikoCall':    k[0]=1; k[6]=1; k[10]=1; s[4]=1; s[12]=1; h[2]=1; h[8]=2; h[14]=1; break;
+    // ---- Stage 5 boss "Yamata Coils": a lurching, off-kilter 7-against-8 serpent pulse — kicks land unevenly, no straight backbeat ----
+    case 'serpentLurch': [0,3,7,10,13].forEach(i=>k[i]=1); [5,11].forEach(i=>s[i]=1); h[2]=1; h[6]=2; h[9]=1; h[14]=2; break;
+    case 'serpentCoil':  [0,2,5,8,10,13].forEach(i=>k[i]=1); [4,11].forEach(i=>s[i]=1); s[15]=1; for (let i=0;i<16;i++) h[i]=(i%3===0?2:1); break;
     default: break;
   }
   return { k, s, h };
@@ -1351,142 +1356,157 @@ const BOSS4 = {
 };
 
 // ================================================================ STAGE 5
-// "Tempest Road" (高天原の道) — G Dorian, 130 BPM. The cloud sea before the storm's eye. A modal, restless
-// road: the bright Dorian IV (C major) over a minor home gives wind-blown motion that's neither sweet nor
-// grim. The hook is a CIRCLING ostinato (rises, curls, falls back) — the spinning vortex put to a tune;
-// a fresh root (G) and modal colour set it apart from the four roads before. DRAFT — awaiting user audition.
-const S5_HOOK = [
-  [0,67],[4,70],[6,72],[8,74],[12,72],[14,70],   // G Bb C D  C Bb — rise and curl back (the orbiting motif)
-  [16,69],[20,72],[24,74],[28,76],                // A C D E
-  [32,77],[36,76],[38,74],[40,72],[44,70],        // F E D C Bb — fall
-  [48,74],[52,72],[56,70],[60,69],                // D C Bb A — settle
+// "Tempest Road" (高天原の道) — G Dorian, 132 BPM, gallop-driven. ADOPTED (was candidate A; chosen over the
+// "Skyward Spiral" half-time draft on 2026-06-06). A windswept ascent across the cloud-sea: a tight 6-step
+// CIRCLING-VORTEX ostinato (spins up, curls over the top, spirals back) in the lower octave, ANSWERED by a
+// soaring high counter-melody that rides the gusts. Asymmetric midGallop groove + drive8 bass = a propulsive
+// penultimate-stage climb, not the four/pump8 road mold. Modal Dorian (bright IV=C) for wind-blown motion.
+const S5_VORTEX = [ // the spinning ostinato — repeats each bar, curling G→Bb→C→D→C→Bb
+  [0,79],[2,82],[4,84],[6,86],[8,84],[10,82],[12,84],[14,86],   // G Bb C D | C Bb C D — orbit
 ];
-const S5_HOOK2 = [ // variation — hangs open on D (the modal 5th)
-  [0,67],[4,70],[6,72],[8,74],[12,76],
-  [16,77],[20,76],[24,74],[28,72],
-  [32,70],[36,72],[40,74],[44,76],
-  [48,72],[52,74],[56,76],[60,74],
+const S5_VORTEX2 = [ // higher curl, hangs on the modal D
+  [0,84],[2,86],[4,88],[6,89],[8,88],[10,86],[12,84],[14,86],   // C D E F | E D C D
 ];
-const S5_B = [ // 8-bar lift, upper register
-  [0,79],[4,82],[8,84],[12,81],[16,79],[24,76],
-  [32,77],[40,79],[48,81],[56,84],
-  [64,82],[72,79],[80,77],[88,76],
-  [96,74],[104,77],[112,79],[120,82],
+const S5_SOAR = [ // soaring counter that answers across two bars (upper register)
+  [4,91],[10,89],[14,88],            // (bar1) … D6 C6 Bb5-up wind gust
+  [20,93],[26,91],[30,89],           // (bar2) E6 D6 C6
 ];
-const S5_BRIDGE = [ [0,74],[8,72],[16,70],[24,69],[32,76],[40,74],[48,72],[56,70] ];
-const S5_OUTRO  = [ [0,81],[4,79],[8,77],[12,76],[16,74],[20,72],[24,70],[28,69],[32,72],[40,69],[48,76],[56,74] ];
+const S5_SOAR2 = [
+  [4,89],[10,88],[14,86],
+  [20,84],[26,86],[30,89],
+];
+const S5_B = [ // 8-bar lift, the vortex unwinds into a long soaring line
+  [0,86],[4,89],[8,91],[12,93],[16,91],[24,88],
+  [32,89],[40,91],[48,93],[56,96],
+  [64,93],[72,91],[80,89],[88,88],
+  [96,86],[104,89],[112,91],[120,93],
+];
+const S5_BRIDGE = [ [0,86],[8,84],[16,82],[24,81],[32,88],[40,86],[48,84],[56,82] ];
+const S5_OUTRO  = [ [0,91],[4,89],[8,88],[12,86],[16,84],[20,82],[24,81],[28,79],[32,82],[40,79],[48,86],[56,84] ];
 const STAGE5 = {
-  title: 'Tempest Road', keyName: 'G Dorian', bpm: 130, gain: 0.55,
-  // cool, windy timbre: a saw-led triangle lead with a sine octave shimmer, a glassy arp, a saw bass, a wide pad.
+  title: 'Tempest Road', keyName: 'G Dorian — gallop', bpm: 132, gain: 0.55,
   voices: {
-    lead: { layers:[ { type:'triangle', octave:0, detune:0, gain:1.0 }, { type:'sawtooth', octave:0, detune:8, gain:0.34, filter:'lowpass', filterFreq:2200 }, { type:'sine', octave:1, detune:0, gain:0.22 } ], atk:0.005, dec:0.06, sus:0.52, rel:0.15, maxGate:6 },
-    arp:  { layers:[ { type:'triangle', octave:1, detune:0, gain:1.0 } ], atk:0.002, dec:0.03, sus:0.13, rel:0.06, filter:'lowpass', filterFreq:3200, maxGate:1 },
-    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.06, sus:0.55, rel:0.1, filter:'lowpass', filterFreq:920, maxGate:3 },
-    pad:  { octave:1, voices:3, detune:10, type:'sawtooth', atk:0.1, dec:0.14, sus:0.72, rel:0.42, filter:'lowpass', filterFreq:1750 } },
-  gains: { lead:0.135, harm:0.07, counter:0.075, arp:0.055, bass:0.15, sub:0.12, pad:0.052 },
+    lead: { layers:[ { type:'triangle', octave:0, detune:0, gain:1.0 }, { type:'sawtooth', octave:0, detune:8, gain:0.36, filter:'lowpass', filterFreq:2300 }, { type:'sine', octave:1, detune:0, gain:0.2 } ], atk:0.004, dec:0.05, sus:0.5, rel:0.14, maxGate:6 },
+    counter: { layers:[ { type:'triangle', octave:0, detune:0, gain:1.0 }, { type:'sine', octave:0, detune:6, gain:0.4 } ], atk:0.006, dec:0.06, sus:0.5, rel:0.18, filter:'lowpass', filterFreq:2800, maxGate:6 },
+    arp:  { layers:[ { type:'triangle', octave:1, detune:0, gain:1.0 } ], atk:0.002, dec:0.03, sus:0.13, rel:0.06, filter:'lowpass', filterFreq:3300, maxGate:1 },
+    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.06, sus:0.55, rel:0.1, filter:'lowpass', filterFreq:960, maxGate:3 },
+    pad:  { octave:1, voices:3, detune:10, type:'sawtooth', atk:0.1, dec:0.14, sus:0.72, rel:0.42, filter:'lowpass', filterFreq:1800 } },
+  gains: { lead:0.135, harm:0.07, counter:0.085, arp:0.055, bass:0.155, sub:0.12, pad:0.052, hat:1.0 },
   sections: {
-    intro: makeSection({ bars:4, scale:'Gdor', chords:['Gm','Gm','Bb','C'], bassStyle:'half', arpRate:2, groove:'introTick', sub:true, crash:true }),
-    A:     makeSection({ bars:8, scale:'Gdor', chords:['Gm','Bb','C','Dm','Gm','Bb','F','C'], lead:cat(S5_HOOK, off(64,S5_HOOK2)), bassStyle:'pump8', arpRate:2, groove:'four', sub:true }),
-    A2:    makeSection({ bars:8, scale:'Gdor', chords:['Gm','Bb','C','Dm','Gm','Am','F','C'], lead:cat(S5_HOOK, off(64,S5_HOOK2)), harm:true, bassStyle:'pump8', arpRate:2, groove:'four', sub:true }),
-    B:     makeSection({ bars:8, scale:'Gdor', chords:['C','Dm','Bb','Gm','C','Am','F','C'], lead:S5_B, counter:true, bassStyle:'pump8', arpRate:1, groove:'four', sub:true, crash:true }),
-    bridge:makeSection({ bars:4, scale:'Gdor', chords:['Am','Bb','Gm','C'], lead:S5_BRIDGE, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
-    A2b:   makeSection({ bars:8, scale:'Gdor', chords:['Gm','Bb','C','Dm','Gm','Am','F','C'], lead:cat(S5_HOOK, off(64,S5_HOOK2)), harm:true, counter:true, bassStyle:'pump8', arpRate:1, groove:'four', sub:true, crash:true }),
-    outro: makeSection({ bars:4, scale:'Gdor', chords:['Gm','Bb','F','C'], lead:S5_OUTRO, bassStyle:'pump8', arpRate:1, groove:'four', sub:true, crash:true }),
+    intro: makeSection({ bars:4, scale:'Gdor', chords:['Gm','Gm','Bb','C'], lead:cat(S5_VORTEX, off(32,S5_VORTEX)), bassStyle:'drive8', arpRate:2, groove:'introTick', sub:true, crash:true }),
+    A:     makeSection({ bars:8, scale:'Gdor', chords:['Gm','Bb','C','Dm','Gm','F','Bb','C'], lead:cat(S5_VORTEX, off(32,S5_VORTEX2), off(64,S5_VORTEX), off(96,S5_VORTEX2)), counter:cat(S5_SOAR, off(64,S5_SOAR2)), bassStyle:'drive8', arpRate:2, groove:'midGallop', sub:true }),
+    A2:    makeSection({ bars:8, scale:'Gdor', chords:['Gm','Bb','C','Dm','Gm','F','C','Dm'], lead:cat(S5_VORTEX, off(32,S5_VORTEX2), off(64,S5_VORTEX), off(96,S5_VORTEX2)), harm:true, counter:cat(S5_SOAR, off(64,S5_SOAR2)), bassStyle:'drive8', arpRate:2, groove:'midGallop', sub:true, crash:true }),
+    B:     makeSection({ bars:8, scale:'Gdor', chords:['C','Dm','Bb','Gm','C','Dm','F','C'], lead:S5_B, counter:true, bassStyle:'drive8', arpRate:1, groove:'midGallop', sub:true, crash:true }),
+    bridge:makeSection({ bars:4, scale:'Gdor', chords:['Dm','Bb','Gm','C'], lead:S5_BRIDGE, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
+    A2b:   makeSection({ bars:8, scale:'Gdor', chords:['Gm','Bb','C','Dm','Gm','F','C','Dm'], lead:cat(S5_VORTEX, off(32,S5_VORTEX2), off(64,S5_VORTEX), off(96,S5_VORTEX2)), harm:true, counter:cat(S5_SOAR, off(64,S5_SOAR2)), bassStyle:'drive8', arpRate:1, groove:'midGallop', sub:true, crash:true }),
+    outro: makeSection({ bars:4, scale:'Gdor', chords:['Gm','Bb','F','C'], lead:S5_OUTRO, bassStyle:'drive8', arpRate:1, groove:'midGallop', sub:true, crash:true }),
   },
   arrangement: ['intro','A','A2','B','bridge','A2b','outro'],
 };
 
 // ================================================================ STAGE 5 MIDBOSS
-// "Wind Gate" (風の門) — B harmonic minor, 138 BPM. The wind-bag gatekeeper 風神 who bars the way to the eye.
-// B harmonic minor's augmented-2nd shimmer (b6 G ↔ #7 A#) gives a tense, circling menace, a fresh root, an
-// angular gust hook over a relentless gallop. Distinct from S4's F#-minor gatekeeper. DRAFT — awaiting audition.
-const M5_HOOK = [
-  [0,71],[4,74],[6,73],[8,71],          // B D C# B        — a circling gust motif
-  [16,78],[20,79],[24,82],[26,79],      // F# G A# G        — the aug-2nd shimmer G↔A#
-  [32,76],[36,74],[40,73],[44,71],      // E D C# B         — descent
-  [48,78],[52,73],[56,71],              // F# C# B          — cadence
+// "Wind Gate" (風の門) — B harmonic minor, 142 BPM, gusty stutter. ADOPTED (was candidate A; chosen over the
+// "Whirlwind Jig" E-harm draft on 2026-06-06). The wind-bag gatekeeper 風神 who bars the way to the eye: a
+// capricious wind-god whose STACCATO darting motif bursts in short flurries then leaves SUDDEN GUSTS OF SILENCE
+// (long rests), only to dart back. Lighter & more playful than the S4 crone-gatekeeper — fast tripping 16ths,
+// a teasing square counter that mimics it a beat late, a skipping gallop. The aug-2nd shimmer (b6 G ↔ #7 A#)
+// gives it just enough edge to bite. A fresh root, distinct from S4's F#-minor gatekeeper.
+const M5_GUST = [ // a short darting burst, then a long gust of rest
+  [0,71],[1,73],[2,74],[3,73],[4,71],   // BB-flurry: B C# D C# B (fast stutter)
+  [10,78],[11,79],[12,78],               // gust: F# G F# (sudden)
+  // … long rest (steps 13-15 + into next entry) — the wind drops out
 ];
-const M5_HOOK2 = [
-  [0,83],[4,86],[6,85],[8,83],
-  [16,79],[20,82],[24,78],[28,79],
-  [32,76],[36,78],[40,74],[44,73],
-  [48,71],[52,74],[56,78],[60,71],
+const M5_GUST2 = [
+  [0,82],[1,79],[2,78],                   // A# G F# — high snap down
+  [6,76],[7,74],[8,73],[9,71],            // E D C# B — tumbling
+  [14,73],                                // C# — a teasing poke
 ];
-const M5_B = [
-  [0,90],[8,91],[12,88],
-  [16,86],[24,83],[28,85],
-  [32,82],[40,83],[48,86],[56,90],
-  [64,91],[72,88],[80,86],[88,83],
-  [96,85],[104,86],[112,88],[120,90],
+const M5_GUST3 = [ // a longer dart that climbs the aug-2nd
+  [0,71],[2,74],[4,76],[6,78],[8,79],[10,82],   // B D E F# G A# — climbing gust
+  [12,79],[14,78],
+];
+const M5_B = [ // the gale rises — a continuous high whirl
+  [0,86],[4,90],[8,91],[12,88],[16,86],[24,83],
+  [32,85],[40,86],[48,90],[56,91],
+  [64,90],[72,88],[80,86],[88,85],
+  [96,83],[104,86],[112,88],[120,90],
 ];
 const M5_BRIDGE = [ [0,74],[8,79],[16,82],[24,79],[32,78],[40,74],[48,73],[56,71] ];
-const M5_OUTRO  = [ [0,83],[8,79],[16,82],[24,78],[32,76],[40,74],[48,71] ];
+const M5_OUTRO  = [ [0,83],[4,82],[8,79],[12,78],[16,76],[20,74],[24,73],[28,71],[40,74],[56,71] ];
 const MIDBOSS5 = {
-  title: 'Wind Gate', keyName: 'B harmonic minor', bpm: 138, gain: 0.58,
-  // cold tense timbre: saw+square lead, a square counter, a square arp, a gritty saw bass, a dark forward pad.
+  title: 'Wind Gate', keyName: 'B harmonic minor — gusty', bpm: 142, gain: 0.58,
   voices: {
-    lead: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:0.9, filter:'lowpass', filterFreq:2500 }, { type:'square', octave:0, detune:7, gain:0.5, filter:'lowpass', filterFreq:2000 } ], atk:0.004, dec:0.05, sus:0.42, rel:0.12, maxGate:5 },
-    counter: { layers:[ { type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:1900 } ], atk:0.005, dec:0.04, sus:0.36, rel:0.1, maxGate:4 },
-    arp: { layers:[ { type:'square', octave:0, detune:7, gain:1.0 } ], atk:0.002, dec:0.025, sus:0.14, rel:0.05, filter:'lowpass', filterFreq:3000, maxGate:1 },
-    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.05, sus:0.55, rel:0.08, filter:'lowpass', filterFreq:880, maxGate:3 },
-    pad: { octave:0, voices:3, detune:11, type:'sawtooth', atk:0.08, dec:0.13, sus:0.66, rel:0.38, filter:'lowpass', filterFreq:1400 } },
-  gains: { lead:0.14, harm:0.075, counter:0.085, arp:0.06, bass:0.165, sub:0.12, pad:0.05, hat:1.05 },
+    lead: { layers:[ { type:'square', octave:0, detune:0, gain:0.9, filter:'lowpass', filterFreq:2700 }, { type:'triangle', octave:0, detune:6, gain:0.5 } ], atk:0.002, dec:0.04, sus:0.32, rel:0.08, maxGate:4 },
+    counter: { layers:[ { type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:2100 } ], atk:0.003, dec:0.035, sus:0.3, rel:0.08, maxGate:3 },
+    arp: { layers:[ { type:'square', octave:0, detune:7, gain:1.0 } ], atk:0.002, dec:0.022, sus:0.12, rel:0.04, filter:'lowpass', filterFreq:3200, maxGate:1 },
+    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.05, sus:0.5, rel:0.07, filter:'lowpass', filterFreq:900, maxGate:3 },
+    pad: { octave:0, voices:3, detune:10, type:'sawtooth', atk:0.07, dec:0.12, sus:0.6, rel:0.34, filter:'lowpass', filterFreq:1450 } },
+  gains: { lead:0.14, harm:0.075, counter:0.085, arp:0.062, bass:0.16, sub:0.12, pad:0.048, hat:1.1 },
   sections: {
     intro:  makeSection({ bars:4, scale:'Bharm', chords:['Bm','Bm','G','F#'], bassStyle:'half', arpRate:1, groove:'introTick', sub:true, crash:true }),
-    A:      makeSection({ bars:8, scale:'Bharm', chords:['Bm','Bm','Em','F#','Bm','G','F#','Bm'], lead:cat(M5_HOOK, off(32,M5_HOOK), off(64,M5_HOOK), off(96,M5_HOOK2)), counter:true, bassStyle:'walk8', arpRate:2, groove:'midGroove', sub:true }),
-    A2:     makeSection({ bars:8, scale:'Bharm', chords:['Bm','Bm','Em','F#','Bm','G','F#7','Bm'], lead:cat(M5_HOOK, off(32,M5_HOOK), off(64,M5_HOOK), off(96,M5_HOOK2)), harm:true, counter:true, bassStyle:'gallop', arpRate:2, groove:'midGallop', sub:true, crash:true }),
+    A:      makeSection({ bars:8, scale:'Bharm', chords:['Bm','Em','G','F#','Bm','Em','F#','Bm'], lead:cat(M5_GUST, off(16,M5_GUST2), off(32,M5_GUST), off(48,M5_GUST3), off(64,M5_GUST), off(80,M5_GUST2), off(96,M5_GUST), off(112,M5_GUST3)), counter:true, bassStyle:'gallop', arpRate:2, groove:'midGallop', sub:true }),
+    A2:     makeSection({ bars:8, scale:'Bharm', chords:['Bm','Em','G','F#','Bm','Em','F#7','Bm'], lead:cat(M5_GUST, off(16,M5_GUST2), off(32,M5_GUST), off(48,M5_GUST3), off(64,M5_GUST), off(80,M5_GUST2), off(96,M5_GUST), off(112,M5_GUST3)), harm:true, counter:true, bassStyle:'gallop', arpRate:2, groove:'midGallop', sub:true, crash:true }),
     B:      makeSection({ bars:8, scale:'Bharm', chords:['Em','G','F#','Bm','Em','G','F#','F#'], lead:M5_B, bassStyle:'pump8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
     bridge: makeSection({ bars:4, scale:'Bharm', chords:['Em','F#','Bm','F#'], lead:M5_BRIDGE, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
-    outro:  makeSection({ bars:4, scale:'Bharm', chords:['Em','F#','Bm','Bm'], lead:M5_OUTRO, bassStyle:'walk8', arpRate:1, groove:'introTick', sub:true }),
+    outro:  makeSection({ bars:4, scale:'Bharm', chords:['Em','F#','Bm','Bm'], lead:M5_OUTRO, bassStyle:'gallop', arpRate:1, groove:'introTick', sub:true }),
   },
   arrangement: ['intro','A','A2','B','bridge','A2','B','outro'],
 };
 
 // ================================================================ STAGE 5 BOSS
-// "God of Storms" (須佐之男) — B Phrygian dominant, key-lift to E Phrygian dominant (+5) at the climax, 152 BPM.
-// The raging storm god: the b2 (C) over a B-major-ish home is the fierce, exotic Phrygian-dominant menace; a
-// driving fanfare hook of stormy leaps, then the modulation up +5 as the tempest breaks. An independent anthem —
-// not the bright S4 daybreak reshaped (this is dark-exotic, lifts via Phrygian dominant, not major). DRAFT — audition.
-const B5_HOOK = [
-  [0,71],[2,72],[4,75],[8,76],[10,79],[12,78],[14,75],   // B C D# E  G F# D#  — fierce rise (the b2 C bites)
-  [16,72],[18,76],[20,81],[24,79],[26,78],[28,76],        // C E A  G F# E
+// "Yamata Coils" (八岐大蛇 / 須佐之男) — C octatonic (half-whole), 144 BPM. ADOPTED (was re-audition candidate C;
+// chosen 2026-06-06 over the "Black Sky Dirge" C-Aeolian and "Whirlwind Rage" D-Phrygian-motorik drafts, and
+// over the original "God of Storms" B-Phrygian-dominant anthem).
+//   OCTATONIC UNEASE — a queasy, shifting 8-note diminished scale unlike ANY mode used elsewhere in the game
+//   (it has no stable tonic, so the harmony slides restlessly). Structure = an ANTIPHONAL CALL-RESPONSE like
+//   BOSS3 ("Mirror of Two Moons"), but COILED and menacing: the eight heads of Orochi answer each other in a
+//   lurching, off-kilter serpent pulse (serpentLurch / serpentCoil) — no straight backbeat, no key-lift, no
+//   taiko anthem. The diminished symmetry IS the unease.
+const B5_CALL = [ // a coiling call that climbs the octatonic (C Db Eb E F# G A Bb), unsettling
+  [0,60],[4,61],[8,63],[12,64],[16,66],[20,67],[24,69],[28,70],   // C Db Eb E | F# G A Bb — the serpent uncoils
 ];
-const B5_CLOSE = [ [0,83],[4,79],[8,78],[12,76],[16,75],[20,76],[24,78],[28,75] ];   // B6 G F# E D# E F# D#
-const B5_B = [ // upper-register lift
-  [0,88],[4,87],[8,84],[12,83],[16,81],[24,78],
-  [32,83],[40,84],[48,87],[56,88],
-  [64,87],[72,84],[80,81],[88,79],
-  [96,76],[104,81],[112,84],[120,88],
+const B5_ANS = [ // the answering head — an independent lower line in the rests (a real second voice)
+  [2,55],[6,57],[10,58],[14,55],            // G(low) A Bb G — pc 7,9,10,7 (octatonic)
+  [18,52],[22,54],[26,55],[30,52],          // E(low) F# G E
 ];
-const B5_BRIDGE = [ // hush then a leading climb into the +5 modulation
-  [0,71],[8,75],[16,76],[24,75],
-  [32,72],[40,71],[48,72],[56,75],
-  [64,76],[72,78],[80,79],[88,81],
-  [96,83],[104,84],[112,87],[120,88],
+const B5_CALL2 = [
+  [0,72],[4,70],[8,69],[12,67],[16,66],[20,64],[24,63],[28,61],   // C6 Bb A G | F# E Eb Db — the coil descends
 ];
-const B5_OUTRO = [ [0,71],[2,72],[6,76],[12,79],[16,78],[24,76],[32,75],[48,76] ];
+const B5_ANS2 = [
+  [2,67],[6,66],[10,64],[14,63],
+  [18,61],[22,60],[26,58],[30,57],
+];
+const B5_UNI = [ // the heads strike together — a venomous unison stab figure
+  [0,72],[2,76],[6,73],[8,70],[12,67],[16,66],[20,64],[24,60],[28,64],   // octatonic stabs
+];
+const B5_BRIDGE = [ // the coils gather — a slow rising diminished spiral, dread-building
+  [0,60],[8,63],[16,66],[24,69],
+  [32,70],[40,67],[48,64],[56,61],
+  [64,67],[72,70],[80,73],[88,76],
+  [96,73],[104,70],[112,67],[120,64],
+];
+const B5_OUTRO = [ [0,60],[4,63],[8,66],[16,67],[24,64],[32,61],[48,60] ];
 const BOSS5 = {
-  title: 'God of Storms', keyName: 'B Phryg-dom → E', bpm: 152, gain: 0.62,
-  // fierce powerful timbre: triangle+saw+octave lead, a triangle harm, a square counter, a square arp, a driving saw bass, a wide pad.
+  title: 'Yamata Coils', keyName: 'C octatonic — antiphonal serpent unease', bpm: 144, gain: 0.6,
+  // venomous shifting timbre: a saw+square coiling lead, a triangle harm, a co-equal sine+triangle answer-counter (the second head), a glassy square arp, a saw bass, a cold dark pad.
   voices: {
-    lead: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:2700 }, { type:'triangle', octave:0, detune:-9, gain:0.5 }, { type:'square', octave:1, detune:0, gain:0.2, filter:'lowpass', filterFreq:3200 } ], atk:0.005, dec:0.05, sus:0.5, rel:0.13, maxGate:6 },
-    harm: { layers:[ { type:'triangle', octave:0, detune:-4, gain:1.0 } ], atk:0.007, dec:0.05, sus:0.45, rel:0.14, filter:'lowpass', filterFreq:2600, maxGate:6 },
-    counter: { layers:[ { type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:2000 } ], atk:0.006, dec:0.05, sus:0.4, rel:0.12, maxGate:5 },
-    arp: { layers:[ { type:'square', octave:0, detune:7, gain:1.0 } ], atk:0.002, dec:0.025, sus:0.15, rel:0.05, filter:'lowpass', filterFreq:3300, maxGate:1 },
-    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.05, sus:0.6, rel:0.08, filter:'lowpass', filterFreq:980, maxGate:3 },
-    pad: { octave:0, voices:3, detune:11, type:'sawtooth', atk:0.08, dec:0.13, sus:0.7, rel:0.4, filter:'lowpass', filterFreq:1500 } },
-  gains: { lead:0.145, harm:0.08, counter:0.085, arp:0.06, bass:0.17, sub:0.14, pad:0.056, kick:1.1, snare:1.05, crash:1.05 },
+    lead: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:0.95, filter:'lowpass', filterFreq:2500 }, { type:'square', octave:0, detune:7, gain:0.4, filter:'lowpass', filterFreq:2200 } ], atk:0.004, dec:0.05, sus:0.42, rel:0.12, maxGate:5 },
+    harm: { layers:[ { type:'triangle', octave:0, detune:-4, gain:1.0 } ], atk:0.006, dec:0.05, sus:0.42, rel:0.13, filter:'lowpass', filterFreq:2400, maxGate:5 },
+    counter: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:0.9, filter:'lowpass', filterFreq:2100 }, { type:'sine', octave:0, detune:6, gain:0.45 } ], atk:0.006, dec:0.06, sus:0.44, rel:0.15, maxGate:6 },
+    arp: { layers:[ { type:'square', octave:0, detune:8, gain:1.0 } ], atk:0.002, dec:0.022, sus:0.13, rel:0.05, filter:'lowpass', filterFreq:3200, maxGate:1 },
+    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.05, sus:0.58, rel:0.08, filter:'lowpass', filterFreq:920, maxGate:3 },
+    pad: { octave:0, voices:3, detune:12, type:'sawtooth', atk:0.1, dec:0.15, sus:0.7, rel:0.45, filter:'lowpass', filterFreq:1300 } },
+  gains: { lead:0.14, harm:0.078, counter:0.098, arp:0.058, bass:0.17, sub:0.14, pad:0.058, kick:1.16, snare:1.02, crash:1.02 },
   sections: {
-    intro:  makeSection({ bars:8, scale:'Bphrygdom', chords:['B','B','F#','F#','Em','Em','F#','F#'], lead:cat(B5_HOOK, off(64,B5_HOOK)), harm:true, bassStyle:'half', arpRate:2, groove:'fourLite', sub:true, crash:true }),
-    A1:     makeSection({ bars:8, scale:'Bphrygdom', chords:['B','Em','F#','G','B','Em','C','B'], lead:cat(B5_HOOK, off(32,B5_HOOK), off(64,B5_HOOK), off(96,B5_CLOSE)), bassStyle:'drive8', arpRate:1, groove:'bossDrive', sub:true, crash:true }),
-    A2:     makeSection({ bars:8, scale:'Bphrygdom', chords:['B','Em','F#','G','B','Am','C','B'], lead:cat(B5_HOOK, off(32,B5_HOOK), off(64,B5_HOOK), off(96,B5_CLOSE)), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossDrive', sub:true, crash:true }),
-    B:      makeSection({ bars:8, scale:'Bphrygdom', chords:['Em','B','F#','G','Em','B','C','B'], lead:B5_B, harm:true, counter:true, bassStyle:'pump8', arpRate:1, groove:'bossDrive', sub:true, crash:true }),
-    bridge: makeSection({ bars:8, scale:null, chords:['Em','Em','C','B','Am','Am','F#7','F#7'], lead:B5_BRIDGE, bassStyle:'half', arpRate:2, groove:'bossBridge', sub:true }),
-    climax: makeSection({ bars:8, scale:'Ephrygdom', chords:['E','Am','B','C','E','Dm','F','E'], lead:cat(transpose(B5_HOOK,5), off(32,transpose(B5_HOOK,5)), off(64,transpose(B5_HOOK,5)), off(96,transpose(B5_CLOSE,5))), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
-    A3:     makeSection({ bars:8, scale:'Bphrygdom', chords:['B','Em','F#','G','B','Em','C','B'], lead:cat(B5_HOOK, off(32,B5_HOOK), off(64,B5_HOOK), off(96,B5_CLOSE)), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
-    outro:  makeSection({ bars:4, scale:null, chords:['C','F#','B','B'], lead:B5_OUTRO, bassStyle:'half', arpRate:2, groove:'bossDrive', sub:true, crash:true }),
+    intro:  makeSection({ bars:8, scale:'Coct', chords:['Cm','Cm','Eb','Eb','F#','F#','A','A'], lead:cat(B5_CALL, off(64,B5_CALL)), harm:true, bassStyle:'sparseRoot', arpRate:2, groove:'serpentLurch', sub:true, crash:true }),
+    call:   makeSection({ bars:8, scale:'Coct', chords:['Cm','Cm','Eb','Eb','F#m','F#m','A','A'], lead:cat(B5_CALL, off(64,B5_CALL2)), counter:cat(B5_ANS, off(64,B5_ANS2)), bassStyle:'walk8', arpRate:2, groove:'serpentLurch', sub:true, crash:true }),
+    callH:  makeSection({ bars:8, scale:'Coct', chords:['Cm','Eb','F#m','A','Cm','Eb','A','Cm'], lead:cat(B5_CALL, off(64,B5_CALL2)), harm:true, counter:cat(B5_ANS, off(64,B5_ANS2)), bassStyle:'walk8', arpRate:1, groove:'serpentCoil', sub:true, crash:true }),
+    B:      makeSection({ bars:8, scale:'Coct', chords:['Eb','Cm','F#m','A','Eb','Cm','A','Cm'], lead:cat(B5_UNI, off(64,B5_UNI)), harm:true, counter:true, bassStyle:'pump8', arpRate:1, groove:'serpentCoil', sub:true, crash:true }),
+    bridge: makeSection({ bars:8, scale:'Coct', chords:['Cm','Cm','Eb','Eb','F#m','F#m','A','A'], lead:B5_BRIDGE, bassStyle:'sparseRoot', arpRate:1, groove:'bossBridge', sub:true }),
+    callF:  makeSection({ bars:8, scale:'Coct', chords:['Cm','Eb','F#m','A','Cm','Eb','A','Cm'], lead:cat(B5_CALL, off(64,B5_CALL2)), harm:true, counter:cat(B5_ANS, off(64,B5_ANS2)), bassStyle:'walk8', arpRate:1, groove:'serpentCoil', sub:true, crash:true }),
+    outro:  makeSection({ bars:4, scale:'Coct', chords:['Eb','A','Cm','Cm'], lead:B5_OUTRO, bassStyle:'sparseRoot', arpRate:2, groove:'serpentLurch', sub:true, crash:true }),
   },
-  arrangement: ['intro','A1','A2','B','bridge','climax','A3','outro'],
+  arrangement: ['intro','call','callH','B','bridge','callF','outro'],
 };
 
 const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER, stage2: STAGE2, boss2: BOSS2, stage3: STAGE3, boss3: BOSS3, stage4: STAGE4, midboss4: MIDBOSS4, boss4: BOSS4, stage5: STAGE5, midboss5: MIDBOSS5, boss5: BOSS5 };
@@ -2075,24 +2095,28 @@ function drawBossYatagarasu(c,t){ const flap=Math.sin(t*2.2), breath=0.92+0.06*M
 // from the snake/maidens/crow/crone AND from the storm-blue boss to come. Centred on origin = the gameplay hit
 // point (the robed torso); hitR covers the body core. He places NO wells (those are the boss's signature).
 function drawBossFujin(c,t){ const gust=Math.sin(t*1.6), H=158;
-  c.save(); c.globalCompositeOperation='lighter'; bossGlow(c,50,H,42,68,0.26); c.restore();   // cold wind-halo
+  c.save(); const bp=c.createRadialGradient(0,4,5,0,4,54); bp.addColorStop(0,'rgba(8,20,18,0.55)'); bp.addColorStop(1,'rgba(8,20,18,0)'); c.fillStyle=bp; c.beginPath(); c.arc(0,4,54,0,TAU); c.fill(); c.restore();   // dark backing vignette → the wind-spirit separates from the same-hue storm sky (bosses had been sinking into the background)
+  c.save(); c.globalCompositeOperation='lighter'; bossGlow(c,50,H,42,68,0.30); c.restore();   // cold wind-halo
   // 1) streaming wind swirls behind (additive comma-curls blowing outward)
   c.save(); c.globalCompositeOperation='lighter'; c.strokeStyle='hsla('+H+',72%,82%,0.38)'; c.lineWidth=2; c.lineCap='round';
   for(let i=0;i<5;i++){ const a=t*0.8+i/5*TAU; c.beginPath(); for(let s=0;s<=10;s++){ const u=s/10, r=10+u*42, aa=a+u*1.7; const x=Math.cos(aa)*r, y=Math.sin(aa)*r*0.7; if(s===0) c.moveTo(x,y); else c.lineTo(x,y); } c.stroke(); }
   c.restore();
   // 2) the 風袋 — a great horseshoe wind-bag arcing OVER the shoulders, tied at both mouths (the defining Fūjin trait)
-  c.save(); const bag=c.createLinearGradient(0,-56,0,-2); bag.addColorStop(0,'hsl('+H+',46%,62%)'); bag.addColorStop(1,'hsl('+(H+10)+',40%,40%)');
-  c.fillStyle=bag; c.strokeStyle='hsla('+H+',62%,84%,0.7)'; c.lineWidth=1.6;
-  c.beginPath(); c.moveTo(-30,-2); c.bezierCurveTo(-42,-46+gust*2,-18,-60,0,-58+gust*3); c.bezierCurveTo(18,-60,42,-46+gust*2,30,-2); c.bezierCurveTo(20,-22,15,-32,0,-32); c.bezierCurveTo(-15,-32,-20,-22,-30,-2); c.closePath(); c.fill(); c.stroke();
-  for(const s of [-1,1]){ c.save(); c.translate(s*30,-2); c.fillStyle='hsl('+(H+10)+',40%,46%)'; c.beginPath(); c.ellipse(0,0,5,7,s*0.3,0,TAU); c.fill(); c.restore(); }   // bag-mouth ties
+  c.save(); const bag=c.createLinearGradient(0,-74,0,-2); bag.addColorStop(0,'hsl('+H+',54%,68%)'); bag.addColorStop(1,'hsl('+(H+10)+',46%,42%)');
+  c.fillStyle=bag; c.strokeStyle='hsla('+H+',70%,86%,0.78)'; c.lineWidth=1.8;
+  c.beginPath(); c.moveTo(-40,-2); c.bezierCurveTo(-56,-58+gust*2,-22,-78,0,-76+gust*3); c.bezierCurveTo(22,-78,56,-58+gust*2,40,-2); c.bezierCurveTo(27,-26,20,-40,0,-40); c.bezierCurveTo(-20,-40,-27,-26,-40,-2); c.closePath(); c.fill(); c.stroke();
+  for(const s of [-1,1]){ c.save(); c.translate(s*40,-2); c.fillStyle='hsl('+(H+10)+',44%,48%)'; c.beginPath(); c.ellipse(0,0,6,8,s*0.3,0,TAU); c.fill(); c.restore(); }   // bag-mouth ties (the enlarged 風袋 is now the dominant Fūjin read)
   c.restore();
-  // 3) robed body (solid silhouette; hitR covers it) — a hunched gatekeeper, cold wind rim-light
-  c.fillStyle='hsla('+(H-2)+',24%,28%,0.97)'; c.beginPath(); c.moveTo(-15,-6); c.quadraticCurveTo(-22,12,-17,30);
-  for(let k=0;k<=5;k++){ const x=-17+(34*k/5), y=30+((k&1)?7:0)+gust*1.5; c.lineTo(x,y); }
-  c.quadraticCurveTo(22,12,15,-6); c.quadraticCurveTo(0,-14,-15,-6); c.closePath(); c.fill();
-  c.strokeStyle='hsla('+H+',62%,80%,0.5)'; c.lineWidth=1.4; c.stroke();
+  // 3) robed body (solid silhouette; hitR covers it) — a SQUAT, wide hunched gatekeeper, brightened off the sky + bright wind rim
+  c.fillStyle='hsla('+(H-2)+',34%,42%,0.97)'; c.beginPath(); c.moveTo(-19,-4); c.quadraticCurveTo(-28,12,-22,30);
+  for(let k=0;k<=5;k++){ const x=-22+(44*k/5), y=30+((k&1)?7:0)+gust*1.5; c.lineTo(x,y); }
+  c.quadraticCurveTo(28,12,19,-4); c.quadraticCurveTo(0,-13,-19,-4); c.closePath(); c.fill();
+  c.strokeStyle='hsla('+H+',76%,86%,0.82)'; c.lineWidth=1.6; c.stroke();
+  // 3b) ONI HORNS — two curved horns sweeping up & out (a silhouette the armored storm-god boss lacks → the two read apart)
+  c.fillStyle='hsla('+(H+6)+',34%,82%,0.95)'; c.strokeStyle='hsla('+H+',60%,42%,0.9)'; c.lineWidth=1.2;
+  for(const s of [-1,1]){ c.beginPath(); c.moveTo(s*6,-14); c.quadraticCurveTo(s*17,-23,s*14,-37); c.quadraticCurveTo(s*11,-27,s*2,-16); c.closePath(); c.fill(); c.stroke(); }
   // 4) wind-oni face + glowing eyes
-  c.fillStyle='hsla('+H+',28%,72%,0.95)'; c.beginPath(); c.ellipse(0,-9,9,10,0,0,TAU); c.fill();
+  c.fillStyle='hsla('+H+',28%,74%,0.95)'; c.beginPath(); c.ellipse(0,-9,10,10,0,0,TAU); c.fill();
   c.fillStyle='hsla('+H+',30%,30%,0.45)'; c.beginPath(); c.ellipse(0,-12,10,6,0,0,TAU); c.fill();   // brow shadow
   c.save(); c.globalCompositeOperation='lighter'; const eg=0.55+0.45*Math.sin(t*3); for(const sx of [-3.5,3.5]){ c.save(); c.translate(sx,-10); bossGlow(c,5,H,90,80,0.7*eg); c.fillStyle='hsla('+H+',95%,'+(72+eg*16)+'%,0.95)'; c.beginPath(); c.arc(0,0,1.7,0,TAU); c.fill(); c.restore(); } c.restore();
   c.save(); c.globalCompositeOperation='lighter'; bossGlow(c,12,H,60,86,0.38); c.restore();   // faint core at the gameplay centre
@@ -2102,7 +2126,8 @@ function drawBossFujin(c,t){ const gust=Math.sin(t*1.6), H=158;
 // a broad armored torso ringed by a LIGHTNING rim, and the swirling storm vortex aura behind (the 渦 motif made
 // flesh). STEEL-BLUE (H=212) to match the tempest and the wells. The largest, fiercest design — distinct from
 // every prior boss. Centred on origin = the gameplay hit point (the torso); hitR covers the body core.
-function drawBossSusanoo(c,t){ const breath=0.92+0.06*Math.sin(t*2.2), H=212;
+function drawBossSusanoo(c,t){ const breath=0.92+0.06*Math.sin(t*2.2), H=212, HB=228, HG=46;   // HB = indigo body register (distinct from Fūjin's teal + lifts off the steel-blue sky); HG = warm GOLD lightning accent
+  c.save(); const bp=c.createRadialGradient(0,2,6,0,2,62); bp.addColorStop(0,'rgba(6,8,22,0.62)'); bp.addColorStop(1,'rgba(6,8,22,0)'); c.fillStyle=bp; c.beginPath(); c.arc(0,2,62,0,TAU); c.fill(); c.restore();   // dark backing vignette → the storm god separates from the same-hue sky (bosses had been sinking into the background)
   // 0) 荒魂の渦 — the storm vortex aura behind (additive counter-rotating log-spiral arcs = the well/渦 motif)
   c.save(); c.globalCompositeOperation='lighter';
   for(let k=2;k>=1;k--){ c.save(); c.rotate(t*0.5*(k%2?1:-1)); c.strokeStyle='hsla('+H+',82%,'+(58+k*5)+'%,'+(0.12*k).toFixed(2)+')'; c.lineWidth=3+k;
@@ -2121,14 +2146,14 @@ function drawBossSusanoo(c,t){ const breath=0.92+0.06*Math.sin(t*2.2), H=212;
   c.beginPath(); c.moveTo(-3,10); c.lineTo(-2.4,-58); c.lineTo(0,-66); c.lineTo(2.4,-58); c.lineTo(3,10); c.closePath(); c.fill(); c.stroke();
   c.fillStyle='hsl('+(H+8)+',30%,38%)'; c.fillRect(-6,8,12,4);   // guard
   c.strokeStyle='hsl('+(H+8)+',24%,28%)'; c.lineWidth=4; c.lineCap='round'; c.beginPath(); c.moveTo(0,12); c.lineTo(0,22); c.stroke();   // grip
-  c.save(); c.globalCompositeOperation='lighter'; c.strokeStyle='hsla('+H+',100%,90%,'+(0.5+0.3*Math.sin(t*6)).toFixed(2)+')'; c.lineWidth=0.8; c.beginPath(); c.moveTo(0,8); c.lineTo(0,-64); c.stroke(); c.restore();   // crackling edge
+  c.save(); c.globalCompositeOperation='lighter'; c.strokeStyle='hsla('+HG+',100%,82%,'+(0.5+0.35*Math.sin(t*6)).toFixed(2)+')'; c.lineWidth=1.0; c.beginPath(); c.moveTo(0,8); c.lineTo(0,-64); c.stroke(); c.restore();   // crackling GOLD lightning edge (Susanoo's signature warm accent)
   c.restore();
   // 3) broad armored torso (solid silhouette; hitR covers it) + shoulder mantle + lightning rim
-  c.fillStyle='hsla('+(H-4)+',30%,26%,0.98)'; c.beginPath(); c.moveTo(-20,-12); c.quadraticCurveTo(-28,6,-23,30);
+  c.fillStyle='hsla('+HB+',42%,40%,0.98)'; c.beginPath(); c.moveTo(-20,-12); c.quadraticCurveTo(-28,6,-23,30);
   for(let k=0;k<=6;k++){ const x=-23+(46*k/6), y=30+((k&1)?9:2); c.lineTo(x,y); }
   c.quadraticCurveTo(28,6,20,-12); c.quadraticCurveTo(0,-22,-20,-12); c.closePath(); c.fill();
-  c.fillStyle='hsla('+H+',48%,46%,0.9)'; c.beginPath(); c.moveTo(-22,-8); c.quadraticCurveTo(0,-20,22,-8); c.quadraticCurveTo(0,-2,-22,-8); c.fill();   // shoulder mantle
-  c.strokeStyle='hsla('+H+',92%,86%,0.55)'; c.lineWidth=1.6; c.beginPath(); c.moveTo(-20,-12); c.quadraticCurveTo(-28,6,-23,30); c.moveTo(20,-12); c.quadraticCurveTo(28,6,23,30); c.stroke();   // lightning rim-light
+  c.fillStyle='hsla('+HB+',56%,58%,0.92)'; c.beginPath(); c.moveTo(-22,-8); c.quadraticCurveTo(0,-20,22,-8); c.quadraticCurveTo(0,-2,-22,-8); c.fill();   // shoulder mantle (bright indigo)
+  c.strokeStyle='hsla('+HG+',96%,80%,0.9)'; c.lineWidth=1.9; c.beginPath(); c.moveTo(-20,-12); c.quadraticCurveTo(-28,6,-23,30); c.moveTo(20,-12); c.quadraticCurveTo(28,6,23,30); c.stroke();   // GOLD lightning rim-light — the warm contrast that lifts the indigo torso off the blue sky
   // 4) fierce head + glowing storm-eyes
   c.fillStyle='hsla('+H+',26%,72%,0.97)'; c.beginPath(); c.ellipse(0,-16,10,11,0,0,TAU); c.fill();
   c.fillStyle='hsla('+H+',30%,30%,0.5)'; c.beginPath(); c.ellipse(0,-19,11,7,0,0,TAU); c.fill();   // brow shadow under the mane
@@ -2252,19 +2277,22 @@ function drawWells(t){ const it=wells.items, n=wells.count; if(n===0) return;
     else if(w.state==='active') env=1; else env=Math.max(0,1-w.t/Math.max(0.01,w.fadeDur));
     const breathe=0.84+0.16*Math.sin(t*11+i*1.7), rNow=(w.state==='warn')?w.R*(0.30+0.70*env):w.R;
     ctx.globalCompositeOperation='source-over';
-    // 1) influence ring — the readable "how far it winds" edge
-    ctx.globalAlpha=1; ctx.strokeStyle='hsla('+hue+',72%,72%,'+((0.10+0.12*env)*breathe).toFixed(3)+')'; ctx.lineWidth=1.5;
+    // 1) outer influence ring — brighter than before so the "how far it winds" edge actually reads as a thing
+    ctx.globalAlpha=1; ctx.strokeStyle='hsla('+hue+',88%,74%,'+((0.18+0.22*env)*breathe).toFixed(3)+')'; ctx.lineWidth=2.2;
     ctx.beginPath(); ctx.arc(w.x,w.y,rNow,0,TAU); ctx.stroke();
-    // 2) rotating rainband arms — a few log-spiral strokes turning with spin (sign = swirl direction)
-    const arms=3, dirS=(w.swirl<0?-1:1);
-    for(let a=0;a<arms;a++){ const a0=w.spin*1.05+a*(TAU/arms);
-      ctx.strokeStyle='hsla('+hue+',78%,'+(58+danger*8)+'%,'+(0.16*env*breathe).toFixed(3)+')'; ctx.lineWidth=2.2; ctx.beginPath();
-      for(let s=0;s<=14;s++){ const u=s/14, rr=rNow*u, aa=a0+u*2.6*dirS, x=w.x+Math.cos(aa)*rr, y=w.y+Math.sin(aa)*rr; if(s===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
+    // 1b) a crisp inner ring at ~0.5R — reads as the suction throat, gives the vortex depth
+    ctx.strokeStyle='hsla('+hue+',92%,82%,'+((0.14+0.18*env)*breathe).toFixed(3)+')'; ctx.lineWidth=1.4;
+    ctx.beginPath(); ctx.arc(w.x,w.y,rNow*0.52,0,TAU); ctx.stroke();
+    // 2) rotating rainband arms — 4 brighter log-spiral strokes turning with spin (sign = swirl direction)
+    const arms=4, dirS=(w.swirl<0?-1:1);
+    for(let a=0;a<arms;a++){ const a0=w.spin*1.15+a*(TAU/arms);
+      ctx.strokeStyle='hsla('+hue+',90%,'+(68+danger*8)+'%,'+(0.30*env*breathe).toFixed(3)+')'; ctx.lineWidth=2.6; ctx.beginPath();
+      for(let s=0;s<=16;s++){ const u=s/16, rr=rNow*u, aa=a0+u*2.8*dirS, x=w.x+Math.cos(aa)*rr, y=w.y+Math.sin(aa)*rr; if(s===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
       ctx.stroke(); }
-    // 3) core glow — bounded, source-over (no white-out)
-    const cr=Math.max(9,w.coreR>0?w.coreR*1.6:11), cg=ctx.createRadialGradient(w.x,w.y,0,w.x,w.y,cr*2.0);
-    cg.addColorStop(0,'hsla('+hue+','+(68+danger*22)+'%,'+(66+danger*6)+'%,'+(0.42*env).toFixed(3)+')'); cg.addColorStop(1,'hsla('+hue+',70%,46%,0)');
-    ctx.fillStyle=cg; ctx.beginPath(); ctx.arc(w.x,w.y,cr*2.0,0,TAU); ctx.fill();
+    // 3) bright compact EYE — a small source-over core so the gravity source reads as a discrete OBJECT (bounded, no 'lighter' white-out per the S4 sun lesson)
+    const cr=Math.max(7,w.coreR>0?w.coreR*1.6:9), cg=ctx.createRadialGradient(w.x,w.y,0,w.x,w.y,cr*2.6);
+    cg.addColorStop(0,'hsla('+hue+',96%,'+(84+danger*4)+'%,'+(0.85*env).toFixed(3)+')'); cg.addColorStop(0.45,'hsla('+hue+',90%,66%,'+(0.42*env).toFixed(3)+')'); cg.addColorStop(1,'hsla('+hue+',72%,48%,0)');
+    ctx.fillStyle=cg; ctx.beginPath(); ctx.arc(w.x,w.y,cr*2.6,0,TAU); ctx.fill();
     // 4) lethal core marker (coreR>0): a tight bright ring + faint additive centre so the death-zone reads apart from the harmless lens
     if(danger&&w.state==='active'){ ctx.strokeStyle='hsla('+hue+',95%,86%,'+(0.6*breathe).toFixed(3)+')'; ctx.lineWidth=1.8; ctx.beginPath(); ctx.arc(w.x,w.y,w.coreR,0,TAU); ctx.stroke();
       ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.fillStyle='hsla('+hue+',90%,80%,'+(0.32*breathe).toFixed(3)+')'; ctx.beginPath(); ctx.arc(w.x,w.y,w.coreR*0.6,0,TAU); ctx.fill(); ctx.restore(); }
@@ -2419,7 +2447,7 @@ const THEMES = {
   // of the draw code (a stage can recolour them); the well/渦 danmaku reads in the same cool steel-blue register.
   storm: { name:'High Plain Tempest', storm:true,
     sky:{ top:'#161e2e', mid:'#2a3850', bot:'#43586e' }, cloud:'rgba(184,202,230,0.18)',
-    petal:['#aab8d2','#c8d4ea','#dfe8f6'], petalEdge:'#eef4ff', petalAlpha:0.45,   // wind-driven rain-streaks / pale light-motes, receded below the bullet band
+    petal:['#aab8d2','#c8d4ea','#dfe8f6'], petalEdge:'#eef4ff', petalAlpha:0.5, petalShape:'streak',   // wind-driven rain/mist STREAKS (petalShape:'streak' → bakePetals bakes slivers, not sakura petals: cherry blossoms don't fall at cloud height; the "something fluttering down" read is kept, just re-shaped)
     tempest:{ hue:212,
               eye:['rgba(214,228,250,0.50)','rgba(150,178,224,0.12)','rgba(150,178,224,0)'],
               glow:['rgba(150,178,224,0.22)','rgba(120,150,200,0.10)','rgba(120,150,200,0)'],
@@ -2447,9 +2475,9 @@ const BOSS_DESIGNS = {
                               {dx:-23,dy:-10,r:19}, {dx:-49,dy:-19,r:18}, {dx:-80,dy:-27,r:17} ] },
   yamauba:      { draw:drawBossYamauba,    scale:0.92, hitR:28 },   // 山姥 — white-haired crone (Stage 4 midboss)
   fujin:        { draw:drawBossFujin,      scale:0.92, hitR:28 },   // 風神 — wind-bag gatekeeper (Stage 5 midboss)
-  susanoo:      { draw:drawBossSusanoo,    scale:1.0,  hitR:32 },   // 須佐之男 — storm god (Stage 5 boss)
+  susanoo:      { draw:drawBossSusanoo,    scale:1.1,  hitR:35 },   // 須佐之男 — storm god (Stage 5 boss); larger than 風神 (0.92) so the two read as DIFFERENT beings, not one character
 };
-function bakePetals(theme){ const out=[]; theme.petal.forEach(col=>{ const W=24,cv=document.createElement('canvas'); cv.width=W; cv.height=W; const c=cv.getContext('2d'); c.translate(W/2,W/2); c.fillStyle=col; c.beginPath(); c.moveTo(0,-9); c.bezierCurveTo(7,-6,7,6,0,9); c.bezierCurveTo(-7,6,-7,-6,0,-9); c.fill(); c.strokeStyle=theme.petalEdge; c.lineWidth=0.8; c.beginPath(); c.moveTo(0,-8); c.lineTo(0,7); c.stroke(); out.push(cv); }); _petalSprite=out; }
+function bakePetals(theme){ const out=[]; const streak=theme.petalShape==='streak'; theme.petal.forEach(col=>{ const W=24,cv=document.createElement('canvas'); cv.width=W; cv.height=W; const c=cv.getContext('2d'); c.translate(W/2,W/2); if(streak){ /* wind-driven rain/mist sliver (NOT a sakura petal) — fits a high storm sky */ c.strokeStyle=col; c.lineCap='round'; c.lineWidth=1.7; c.beginPath(); c.moveTo(-0.6,-9); c.lineTo(0.6,8); c.stroke(); c.strokeStyle=theme.petalEdge; c.lineWidth=0.7; c.beginPath(); c.moveTo(-0.4,-7); c.lineTo(0.4,6); c.stroke(); } else { c.fillStyle=col; c.beginPath(); c.moveTo(0,-9); c.bezierCurveTo(7,-6,7,6,0,9); c.bezierCurveTo(-7,6,-7,-6,0,-9); c.fill(); c.strokeStyle=theme.petalEdge; c.lineWidth=0.8; c.beginPath(); c.moveTo(0,-8); c.lineTo(0,7); c.stroke(); } out.push(cv); }); _petalSprite=out; }
 function setTheme(key){ const t=THEMES[key]; if(!t) return; activeTheme=t; _skyCache.d=999; bakePetals(t); buildScenery(); }
 
 // ============================ PATTERNS ===============================
@@ -2707,7 +2735,7 @@ function fireShot(x,y,a,speed,dmg,style){ const b=playerShots.acquire(); if(!b) 
 function nearestEnemy(x,y){ let best=null,bd=1e9; for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(!e||e.dead) continue; const d=(e.x-x)*(e.x-x)+(e.y-y)*(e.y-y); if(d<bd){ bd=d; best=e; } } return best; }
 // homing only targets enemies with an effective hitbox — skip invulnerable ones (an entering/announcing "準備中" boss),
 // but a boss in a survival/耐久 spell IS targetable since the power-up's pierce damages it.
-function nearestHomingTarget(x,y){ let best=null,bd=1e9; for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(!e||e.dead) continue; const owner=e._shareHpWith||e; if(owner.invuln&&!(owner.boss&&owner.survivalActive)) continue; const d=(e.x-x)*(e.x-x)+(e.y-y)*(e.y-y); if(d<bd){ bd=d; best=e; } } return best; }   // owner-gated so a twin body isn't targeted during the shared pool's invuln windows
+function nearestHomingTarget(x,y){ let best=null,bd=1e9; for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(!e||e.dead) continue; if(e.y>PF_H||e.x<0||e.x>PF_W) continue; /* skip enemies that have left the visible playfield (exiting down/sideways): they're unkillable, so don't waste homing shots chasing them off-screen */ const owner=e._shareHpWith||e; if(owner.invuln&&!(owner.boss&&owner.survivalActive)) continue; const d=(e.x-x)*(e.x-x)+(e.y-y)*(e.y-y); if(d<bd){ bd=d; best=e; } } return best; }   // owner-gated so a twin body isn't targeted during the shared pool's invuln windows
 function clampAngle(a,lo,hi){ while(a>Math.PI) a-=TAU; while(a<-Math.PI) a+=TAU; return a<lo?lo:(a>hi?hi:a); }
 
 // ---- graze power-up: activation + the super-shot (ignores power level; fires regardless of fireHeld) ----
@@ -3077,7 +3105,57 @@ function waveStormSprite(opts){ return (function*(){
         yield* exitOff(e,(i%2)?Math.PI*0.82:Math.PI*0.18,150);
       } });
     yield* waitT(opts.spacing!=null?opts.spacing:0.6); } })(); }
-const WAVES = { sideSweep:waveSideSweep, vFormation:waveVFormation, stream:waveStream, turrets:waveTurrets, drifters:waveDrifters, wraith:waveWraith, stalkColumn:waveStalkColumn, lantern:waveLantern, kodama:waveKodama, crowBeam:waveCrowBeam, stormSprite:waveStormSprite };
+// waveVortexRing — Stage 5's NEW road identity: a ROTATING RING of cloud-sprites orbiting a shared centre. No other
+// wave moves a GROUP on a shared orbit — every prior wave descends-a-lane or hovers-at-anchor. The ring descends into
+// view while spinning, then spirals slowly INWARD (a true vortex 編隊). A HARMLESS well sits BELOW the ring (not on it); each
+// sprite fires STRAIGHT rings (av:0) that travel down then HOOK into the swirl → the well reads as a separate bender + the road's clearest 嵐の渦 read and
+// the boss-vortex 慣らし場. well:false ⇒ the sprites instead fire PULSING expandingRings (accel) — a distinct firing
+// pattern with no swirl. All sprites share ONE t0 so the ring stays phase-locked; spawn-all-in-one-tick (no per-sprite
+// spacing) keeps it rigid. dir flips spin + swirl sign → counter-rotating rings compose into a双つ巴 climax.
+function waveVortexRing(opts){ return (function*(){
+  const n=opts.n||5, cx=opts.cx!=null?opts.cx:PF_W*0.5, cy=opts.cy!=null?opts.cy:PF_H*0.30,
+        rad0=opts.rad||116, hue=opts.hue!=null?opts.hue:206, hold=opts.hold!=null?opts.hold:5.0,
+        spin=opts.spin!=null?opts.spin:0.65, dir=opts.dir||1, shrink=opts.shrink!=null?opts.shrink:0.4,
+        well=opts.well!==false, fcount=opts.fcount||5, fperiod=opts.fperiod||0.6, halveP=!!opts.halvePower, sparse=!!opts.sparse;
+  const t0=T, acc=well?0:(opts.accel||74), wellY=cy+(opts.wellDy!=null?opts.wellDy:118);   // the well sits BELOW the orbiting ring, NOT on it: the sprites' straight rings travel a clear stretch then visibly HOOK into the swirl. Co-locating the well on the emitters made the bend look like the bullets were simply fired at an angle from the start.
+  if(well) placeWell({ x:cx, y:wellY, R:opts.wellR||76, strength:opts.strength||5400, swirl:dir*(opts.swirl||9800), coreR:0, warn:1.2, active:hold+1.6, fade:0.5, hue:189 });
+  for(let i=0;i<n;i++){ const base=i/n*TAU;
+    spawnEnemy({ x:cx+Math.cos(base)*rad0, y:-SPAWN_MARGIN+Math.sin(base)*rad0*0.78, hp:HP_POP_HEAVY*0.78, r:R_POP_HEAVY, hue:hue, score:1000,
+      drops:(sparse&&i%2!==0)?[]:(halveP?['power','point','point']:['power','power','point']), cancelOnDeath:0.4,
+      coro:function*(e){
+        const fc=Director.fork(function*(){ while(true){ ring(e,{count:fcount,speed:104,accel:acc,hue:hue,style:'small'}); yield* waitT(fperiod); } },e);   // straight rings (well ON → swirl-caught) or expandingRings (well OFF)
+        while(true){ const dt2=T-t0; if(dt2>=hold+1.2) break;
+          const grow=clamp(dt2/1.2,0,1), shr=clamp((dt2-1.2)/Math.max(0.1,hold),0,1), rad=rad0*(1-shrink*shr), cyN=(-SPAWN_MARGIN)+(cy+SPAWN_MARGIN)*grow, a=base+dir*spin*dt2;
+          e.x=cx+Math.cos(a)*rad; e.y=cyN+Math.sin(a)*rad*0.78; e._steered=true; yield; }   // descend-while-spinning (grow), then orbit + spiral inward (shr); _steered every tick
+        Director.kill(fc);
+        yield* exitOff(e,(i%2)?Math.PI*0.82:Math.PI*0.18,150);
+      } });
+  }
+  yield;
+})(); }
+// waveSwoopDive — a swooping ARC-DIVE formation (no prior wave arcs the field). A file of sprites enters from one UPPER
+// CORNER, draws an elliptical arc DOWN, dives fast through the lower centre (急降下 — EASE.inOut accelerates the middle),
+// and exits the OPPOSITE upper corner. Pair it with a mirror:true partner (delayed) for a line-symmetric crossing X over
+// the player. Each sprite trails the one ahead along the curve (a snake); they fire aimed bursts through the dive.
+function waveSwoopDive(opts){ return (function*(){
+  const n=opts.n||5, dur=opts.dur||4.4, mir=!!opts.mirror, hue=opts.hue!=null?opts.hue:208,
+        baseY=opts.baseY!=null?opts.baseY:PF_H*0.13, dip=opts.dip!=null?opts.dip:PF_H*0.62,
+        gap=opts.gap!=null?opts.gap:0.05, halveP=!!opts.halvePower, sparse=!!opts.sparse;
+  const PX=(s)=>{ const xr=PF_W*1.08 - PF_W*1.16*s; return mir?(PF_W-xr):xr; };   // sweeps one high corner across to the opposite high corner (mirror flips L↔R)
+  const PY=(s)=> baseY + dip*Math.sin(Math.PI*clamp(s,0,1));                       // dips LOW at s=0.5 (the dive), high at both ends
+  const t0=T;
+  for(let i=0;i<n;i++){
+    spawnEnemy({ x:PX(-i*gap), y:PY(-i*gap), hp:HP_POP_HEAVY*0.72, r:R_POP_HEAVY, hue:hue, score:900,
+      drops:(sparse&&i%2!==0)?[]:(halveP?['power','point']:['power','power','point']), cancelOnDeath:0.4,
+      coro:function*(e){
+        const fc=Director.fork(function*(){ while(true){ aimedShot(e,{n:3,spread:0.34,speed:142,hue:hue,style:'mid'}); yield* waitT(0.6); } },e);
+        while(true){ const s=(T-t0)/dur - i*gap; if(s>=1) break; const ss=EASE.inOut(clamp(s,0,1)); e.x=PX(ss); e.y=PY(ss); e._steered=true; yield; }   // EASE.inOut → graceful arc in, FAST dive through centre, ease out the far corner
+        Director.kill(fc); despawnEnemy(e);
+      } });
+  }
+  yield;
+})(); }
+const WAVES = { sideSweep:waveSideSweep, vFormation:waveVFormation, stream:waveStream, turrets:waveTurrets, drifters:waveDrifters, wraith:waveWraith, stalkColumn:waveStalkColumn, lantern:waveLantern, kodama:waveKodama, crowBeam:waveCrowBeam, stormSprite:waveStormSprite, vortexRing:waveVortexRing, swoopDive:waveSwoopDive };
 
 // ---- boss: descriptor-driven phase machine ----
 function makeBoss(spec){ const _bd=BOSS_DESIGNS[spec.design]; const b=spawnEnemy({ x:spec.enterFrom?spec.enterFrom.x:PF_W/2, y:spec.enterFrom?spec.enterFrom.y:-60, hp:1, r:_bd?_bd.hitR:18, hue:spec.hue!=null?spec.hue:320, boss:true, score:spec.score||50000, drops:[], coro:null }); b.invuln=true; b.phaseTotal=spec.phases.length; b.phaseIndex=0; b.phasesLeft=spec.phases.length; b.spellName=''; b.inSpell=false; b.timer=null; b.hpMax=1; b.design=spec.design; b.survivalActive=false; b.survivalTotal=0; return b; }
@@ -3144,7 +3222,7 @@ const FINALBOSS_SPEC = { name:'Flower King', design:'mandala', hue:300, enterFro
       { kind:'nonspell', hp:1600, body:'raw', raw:function*(b){ let a=0; Director.fork(function*(){ while(true){ yield* moveTo(b,PF_W*0.3,140,1.4,EASE.inOut); yield* moveTo(b,PF_W*0.7,140,1.4,EASE.inOut); } },b); while(true){ spiral(b,{angle:a,arms:4,speed:135,hue:(300+T*40)%360,style:'small'}); a+=0.4; yield* waitT(0.045); } } },
       { kind:'spell', name:'Night Sign "Lunar Rain"', hp:2240, drops:['power','point','point','point'], body:'raw', raw:function*(b){ while(true){ for(let k=0;k<3;k++){ ring(b,{count:32,speed:70,accel:90,hue:(220+k*30)%360,style:'orb'}); yield* waitT(0.18); } wall(b,{n:13,speed:210,hue:0,style:'dart'}); yield* waitT(1.3); } } },
       { kind:'spell', name:'Time Sign "Spiral Mandala"', hp:2560, drops:['power','point','point','point'], body:'raw', raw:function*(b){ let a=0; Director.fork(function*(){ while(true){ ring(b,{count:18,speed:105,hue:(280+T*15)%360,style:'mid',rot:T*0.4}); yield* waitT(0.9); } },b); while(true){ spiral(b,{angle:a,arms:5,speed:145,hue:(0+T*50)%360,style:'small'}); spiral(b,{angle:-a*1.6,arms:5,speed:145,hue:(180+T*50)%360,style:'small'}); a+=0.23; yield* waitT(0.04); } } },
-      { kind:'spell', name:'"Eternal Spring — Last Word"', survival:FB_SURVIVAL_TIME, drops:[], body:'raw', raw:function*(b){ let a=0,wave=0; Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:10,speed:60,gravity:42.5,hue:(330+T*30)%360,style:'petal'}); yield* waitT(0.3); } },b); Director.fork(function*(){ while(true){ burst(b,{count:40,speed:130,hue:(T*60)%360,style:'orb'}); yield* waitT(2.2); } },b); while(true){ spiral(b,{angle:a,arms:6,speed:140+wave*4,hue:(T*70)%360,style:'small'}); spiral(b,{angle:-a*1.4,arms:6,speed:140+wave*4,hue:(120+T*70)%360,style:'small'}); a+=0.21; wave+=0.05; yield* waitT(0.035); } } }
+      { kind:'spell', name:'"Eternal Spring — Last Word"', survival:FB_SURVIVAL_TIME, drops:[], body:'raw', raw:function*(b){ let a=0,wave=0; const t0=T, RAMP=Math.max(1,FB_SURVIVAL_TIME-5); /* ramp easy→current over (survival−5)s — full intensity only in the last 5s, matching Boss 4's last-word onset */ Director.fork(function*(){ while(true){ const k=clamp((T-t0)/RAMP,0,1); rain(b,{across:PF_W,count:Math.round(lerp(5,10,k)),speed:60,gravity:42.5,hue:(330+T*30)%360,style:'petal'}); yield* waitT(lerp(0.5,0.3,k)); } },b); Director.fork(function*(){ while(true){ const k=clamp((T-t0)/RAMP,0,1); burst(b,{count:Math.round(lerp(16,40,k)),speed:130,hue:(T*60)%360,style:'orb'}); yield* waitT(lerp(3.0,2.2,k)); } },b); while(true){ const k=clamp((T-t0)/RAMP,0,1), sp=lerp(95,140,k)+wave*4; spiral(b,{angle:a,arms:6,speed:sp,hue:(T*70)%360,style:'small'}); spiral(b,{angle:-a*1.4,arms:6,speed:sp,hue:(120+T*70)%360,style:'small'}); a+=lerp(0.10,0.21,k); wave+=0.05; yield* waitT(0.035); } } }
     ] };
 
 // ---- STAGE 2 boss "Tasokare", the twilight 蛟 (water-serpent) — appears TWICE: an early retreating
@@ -3185,7 +3263,7 @@ const TASOKARE_SPEC = { name:'Tasokare', design:'mizuchi', hue:190, enterFrom:{x
           off+=0.42; yield* waitT(1.3); } } },
       { kind:'nonspell', hp:1400, body:'raw', raw:function*(b){ let a=0; Director.fork(function*(){ while(true){ burst(b,{count:22,speed:120,hue:(195+T*40)%360,style:'orb'}); yield* waitT(1.9); } },b); while(true){ spiral(b,{angle:a,arms:3,speed:128,hue:(210+T*50)%360,style:'small'}); spiral(b,{angle:-a*1.3,arms:3,speed:128,hue:(258+T*50)%360,style:'small'}); a+=0.32; yield* waitT(0.05); } }, onEnter:wander(PF_W*0.5,140,90,40,1.5) },
       { kind:'spell', name:'Twilight Sign "Hitodama Drift"', hp:1736, drops:['power','point','point','point'], body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:10,speed:55,gravity:40,hue:(200+T*30)%360,style:'orb'}); yield* waitT(0.5); } },b); while(true){ pat.randomScatter(b,{count:18,baseAngle:HALFPI,spread:Math.PI*1.25,speedMin:70,speedMax:150,jitterHue:30,hue:215,style:'pellet'}); yield* waitT(0.7); ring(b,{count:16,speed:100,accel:70,hue:280,style:'orb'}); yield* waitT(0.7); } } },
-      { kind:'spell', name:'"Twilight Hour — Last Word"', survival:26, drops:[], body:'raw', raw:function*(b){ let a=0,wave=0; Director.fork(function*(){ while(true){ pat.delayedTurn(b,{count:16,spread:TAU,baseAngle:a*2,speed:80,delay:0.8,turnAim:true,speed2:160,hue:205,style:'orb'}); yield* waitT(1.7); } },b); Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:9,speed:60,gravity:42,hue:(195+T*40)%360,style:'orb'}); yield* waitT(0.36); } },b); while(true){ spiral(b,{angle:a,arms:5,speed:135+wave*3,hue:(210+T*60)%360,style:'small'}); spiral(b,{angle:-a*1.4,arms:5,speed:135+wave*3,hue:(258+T*60)%360,style:'small'}); a+=0.22; wave+=0.04; yield* waitT(0.04); } } }
+      { kind:'spell', name:'"Twilight Hour — Last Word"', survival:26, drops:[], body:'raw', raw:function*(b){ let a=0,wave=0; const t0=T, RAMP=Math.max(1,26-5); /* ramp easy→current over (survival−5)s — full intensity only in the last 5s */ Director.fork(function*(){ while(true){ const k=clamp((T-t0)/RAMP,0,1); pat.delayedTurn(b,{count:Math.round(lerp(8,16,k)),spread:TAU,baseAngle:a*2,speed:80,delay:0.8,turnAim:true,speed2:160,hue:205,style:'orb'}); yield* waitT(lerp(2.4,1.7,k)); } },b); Director.fork(function*(){ while(true){ const k=clamp((T-t0)/RAMP,0,1); rain(b,{across:PF_W,count:Math.round(lerp(4,9,k)),speed:60,gravity:42,hue:(195+T*40)%360,style:'orb'}); yield* waitT(lerp(0.6,0.36,k)); } },b); while(true){ const k=clamp((T-t0)/RAMP,0,1), sp=lerp(88,135,k)+wave*3; spiral(b,{angle:a,arms:5,speed:sp,hue:(210+T*60)%360,style:'small'}); spiral(b,{angle:-a*1.4,arms:5,speed:sp,hue:(258+T*60)%360,style:'small'}); a+=lerp(0.11,0.22,k); wave+=0.04; yield* waitT(0.04); } } }
     ] };
 
 // ---- STAGE 3 BOSS: the twin sisters 宵 & 暁 — 2体同時出現 (体力共有). 宵 (Yoi, indigo, the primary/left)
@@ -3229,10 +3307,10 @@ const TWINS_SPEC = { name:'宵 & 暁', design:'twinYoi', hue:265, enterFrom:{x:P
           while(true){ wall(b,{n:6,spread:0.7,speed:172,hue:210,style:'dart'}); if(tw) wall(tw,{n:6,spread:0.7,speed:172,hue:48,style:'dart'}); yield* waitT(1.0); } },
         onEnter:_twinSway(PF_W*0.24,PF_W*0.46,128,1.7) },
       // 5 — survival Last Word: the sisters hold the flanks, the grove fills with woven indigo+amber until dawn
-      { kind:'spell', name:'"Until Dawn — Last Word"', survival:28, drops:[], cutinHue:265, body:'raw', raw:function*(b){ const tw=b._twin; let a=0,wave=0;
-          Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:11,speed:58,gravity:42,hue:(255+T*30)%360,style:'orb'}); yield* waitT(0.34); } },b);
-          while(true){ spiral(b,{angle:a,arms:4,speed:132+wave*3,hue:(258+T*40)%360,style:'small'}); if(tw) spiral(tw,{angle:-a,arms:4,speed:132+wave*3,hue:(30+T*40)%360,style:'small'});
-            a+=0.2; wave+=0.04; yield* waitT(0.04); } },
+      { kind:'spell', name:'"Until Dawn — Last Word"', survival:28, drops:[], cutinHue:265, body:'raw', raw:function*(b){ const tw=b._twin; let a=0,wave=0; const t0=T, RAMP=Math.max(1,28-5); /* ramp easy→current over (survival−5)s — full intensity only in the last 5s; one k drives both sisters symmetrically */
+          Director.fork(function*(){ while(true){ const k=clamp((T-t0)/RAMP,0,1); rain(b,{across:PF_W,count:Math.round(lerp(6,11,k)),speed:58,gravity:42,hue:(255+T*30)%360,style:'orb'}); yield* waitT(lerp(0.6,0.34,k)); } },b);
+          while(true){ const k=clamp((T-t0)/RAMP,0,1), sp=lerp(86,132,k)+wave*3; spiral(b,{angle:a,arms:4,speed:sp,hue:(258+T*40)%360,style:'small'}); if(tw) spiral(tw,{angle:-a,arms:4,speed:sp,hue:(30+T*40)%360,style:'small'});
+            a+=lerp(0.10,0.2,k); wave+=0.04; yield* waitT(0.04); } },
         onEnter:_twinSway(PF_W*0.28,PF_W*0.28,120,3.0) }
     ] };
 // STAGE 3 MIDBOSS — only ONE of the sisters, 宵 (Yoi, indigo), appears solo to test the player: a single
@@ -3348,10 +3426,16 @@ const YATAGARASU_SPEC = { name:'Yatagarasu', design:'yatagarasu', hue:44, enterF
 // midboss5 BGM. Beating the gatekeeper opens the way to the eye's master, Susanoo (the user-specified 中ボス→大ボス導線). ----
 const FUJIN_SPEC = { name:'Fūjin', design:'fujin', hue:158, enterFrom:{x:PF_W/2,y:-70}, enterTo:{x:PF_W/2,y:150}, score:100000, drops:['bomb','bigpower','point','point','point','point','power'],
     phases:[
-      // 1 nonspell — the gust NAGI: a wide wind-rake sweeping back and forth + periodic aimed gusts
-      { kind:'nonspell', hp:1360, body:'raw', raw:function*(b){ let dir=1, base=HALFPI-0.6;
-          Director.fork(function*(){ while(true){ aimedShot(b,{n:4,spread:0.5,speed:140,hue:150,style:'mid'}); yield* waitT(1.2); } },b);
-          while(true){ pat.nWaySpread(b,{count:11,spread:1.0,baseAngle:base,speed:124,hue:158,hueSpread:24,style:'rice'}); base+=dir*0.12; if(base>HALFPI+0.6||base<HALFPI-0.6) dir=-dir; yield* waitT(0.14); } },
+      // 1 nonspell — 疾風 (gust-rake): a CONTINUOUS wide rake whose centre LEANS to alternating sides like wind (not the S4
+      // 山姥's symmetric nagi), punctuated by periodic STRONG wide gusts to alternating sides, over a denser rain sheet +
+      // steady aimed pressure. Tuned a notch ABOVE the S4 midboss P1 (continuous base + the extra gust bursts + faster bullets).
+      { kind:'nonspell', hp:1400, body:'raw', raw:function*(b){
+          Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:6,speed:74,gravity:30,hue:150,style:'rice'}); yield* waitT(0.6); } },b);
+          Director.fork(function*(){ while(true){ aimedShot(b,{n:3,spread:0.32,speed:152,hue:152,style:'mid'}); yield* waitT(0.82); } },b);
+          let k=0; while(true){ const lean=Math.sin(k*0.17)*0.72;
+            pat.nWaySpread(b,{count:9,spread:0.92,baseAngle:HALFPI+lean,speed:132,hue:158,hueSpread:20,style:'rice'});
+            if(k%7===0) pat.nWaySpread(b,{count:13,spread:1.3,baseAngle:HALFPI+((k%14<7)?0.85:-0.85),speed:158,hue:152,hueSpread:18,style:'rice'});   // periodic STRONG gust to an alternating side
+            k++; yield* waitT(0.16); } },
         onEnter:_sway(PF_W*0.34,PF_W*0.66,150,2.3) },
       // 2 spell「つむじ風の門」— a wind-vortex of the spirit: thick slow counter-spirals (the 渦 foreshadow — visual only,
       // NO well) over aimed gust sprays. The slow rice spirals read as a whirlwind, setting up the boss's real vortices.
@@ -3379,9 +3463,9 @@ const SUSANOO_SPEC = { name:'Susanoo', design:'susanoo', hue:212, enterFrom:{x:P
       // P2 spell「嵐の目」— ONE central HARMLESS vortex (follow:b); the full omni-spiral winds into a turning galaxy at
       // the eye = "space is bending"初出. Boss CENTRED & static so the swirl reads cleanly; spiral kept slippable.
       { kind:'spell', name:'Storm Sign "Eye of the Tempest"', hp:2000, drops:['power','point','point','point'], cutinHue:206, body:'raw', raw:function*(b){
-          placeWell({ x:b.x, y:b.y, R:150, strength:6600, swirl:12500, coreR:0, warn:1.0, active:99999, fade:0.5, hue:206, follow:b });
+          placeWell({ x:PF_W*0.5, y:PF_H*0.62, R:74, strength:7000, swirl:12500, coreR:0, warn:1.1, active:99999, fade:0.5, hue:189 });   // a SMALL bright eye LOW in the field (near the player) — NOT mounted on the boss. The boss's straight spiral descends from above and visibly whirls around it right in the player's dodging space → the gimmick 初出 reads as "space is bending HERE", not a curved shot up by the boss
           let a=0; while(true){ spiral(b,{angle:a,arms:4,speed:102,hue:(206+18*Math.sin(T*0.45)),style:'small'}); a+=0.17; yield* waitT(0.07); } },
-        onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,PF_H*0.40,1.1,EASE.out); },b); } },
+        onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,PF_H*0.32,1.1,EASE.out); },b); } },
       // P3 nonspell — reversed DOUBLE full-spiral (双 rainband) + periodic gust bursts (well なし)
       { kind:'nonspell', hp:1750, body:'raw', raw:function*(b){ let a=0;
           Director.fork(function*(){ while(true){ burst(b,{count:22,speed:120,hue:(208+16*Math.sin(T*0.7)),style:'orb'}); yield* waitT(1.9); } },b);
@@ -3390,23 +3474,26 @@ const SUSANOO_SPEC = { name:'Susanoo', design:'susanoo', hue:212, enterFrom:{x:P
       // P4 spell「双つ巴」— TWO drifting counter-vortices weave the field into a lemniscate river; the boss's straight
       // rings/sprays thread the 8-figure between them. Boss centred. w1 swirls +, w2 swirls − → opposed 巴.
       { kind:'spell', name:'Storm Sign "Twin Vortices"', hp:2150, drops:['power','point','point','point'], cutinHue:212, body:'raw', raw:function*(b){
-          const w1=placeWell({ x:PF_W*0.32, y:PF_H*0.42, R:118, strength:6000, swirl:11500, coreR:0, warn:1.0, active:99999, fade:0.5, hue:204 });
-          const w2=placeWell({ x:PF_W*0.68, y:PF_H*0.42, R:118, strength:6000, swirl:-11500, coreR:0, warn:1.0, active:99999, fade:0.5, hue:216 });
-          Director.fork(function*(){ const t0=T; while(true){ const e=T-t0; if(w1&&w1.alive){ w1.x=PF_W*0.5+Math.cos(e*0.6)*PF_W*0.20; w1.y=PF_H*0.42+Math.sin(e*1.2)*44; } if(w2&&w2.alive){ w2.x=PF_W*0.5-Math.cos(e*0.6)*PF_W*0.20; w2.y=PF_H*0.42-Math.sin(e*1.2)*44; } yield; } },b);
+          const w1=placeWell({ x:PF_W*0.34, y:PF_H*0.58, R:66, strength:6400, swirl:11500, coreR:0, warn:1.0, active:99999, fade:0.5, hue:187 });   // two SMALL counter-vortices drifting LOW (lemniscate) in the player's band — the boss's straight rings/sprays descend and visibly thread + curl between them right in front of the player
+          const w2=placeWell({ x:PF_W*0.66, y:PF_H*0.58, R:66, strength:6400, swirl:-11500, coreR:0, warn:1.0, active:99999, fade:0.5, hue:193 });
+          Director.fork(function*(){ const t0=T; while(true){ const e=T-t0; if(w1&&w1.alive){ w1.x=PF_W*0.5+Math.cos(e*0.6)*PF_W*0.22; w1.y=PF_H*0.58+Math.sin(e*1.2)*40; } if(w2&&w2.alive){ w2.x=PF_W*0.5-Math.cos(e*0.6)*PF_W*0.22; w2.y=PF_H*0.58-Math.sin(e*1.2)*40; } yield; } },b);
           while(true){ ring(b,{count:20,speed:88,hue:(206+18*Math.sin(T*0.5)),style:'orb'}); yield* waitT(1.0); aimedShot(b,{n:5,spread:0.5,speed:132,hue:210,style:'pellet'}); yield* waitT(0.7); } },
         onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,128,1.0,EASE.out); },b); } },
-      // P5 nonspell「十拳剣の薙ぎ」— the relief局面 (well 休み): sword-slash ribbon WALLS sweeping across + aimed cuts. No
-      // vortex → the player presses the attack below. Two opposing dart-walls sweep back and forth and cross (剣閃).
-      { kind:'nonspell', hp:1850, body:'raw', raw:function*(b){ let s1=HALFPI-0.7, d1=1;
-          Director.fork(function*(){ while(true){ aimedShot(b,{n:3,spread:0.3,speed:165,hue:200,style:'mid'}); yield* waitT(0.9); } },b);
-          while(true){ pat.nWaySpread(b,{count:7,spread:0.42,baseAngle:s1,speed:185,hue:208,hueSpread:18,style:'dart'}); pat.nWaySpread(b,{count:7,spread:0.42,baseAngle:Math.PI-s1,speed:185,hue:194,hueSpread:18,style:'dart'}); s1+=d1*0.13; if(s1>HALFPI+0.7||s1<HALFPI-0.7) d1=-d1; yield* waitT(0.12); } },
+      // P5 nonspell「十拳剣の薙ぎ」— the relief局面 (well 休み): TWO diverging sword-slashes that sweep OUTWARD from a central
+      // lane. Both walls are biased ±GAP off vertical so their inner darts never cross the centre column (the old version
+      // mirrored straight onto vertical → at the sweep centre both fans coincided into a double-dense impassable wall). A
+      // navigable wedge stays open straight down, tracking the swaying boss; the forked aimed cut pressures the player IN
+      // the lane (剣閃 framing an open road, not blocking it).
+      { kind:'nonspell', hp:1850, body:'raw', raw:function*(b){ let sw=0, d1=1; const GAP=0.40;
+          Director.fork(function*(){ while(true){ aimedShot(b,{n:3,spread:0.34,speed:165,hue:200,style:'mid'}); yield* waitT(0.95); } },b);
+          while(true){ pat.nWaySpread(b,{count:7,spread:0.42,baseAngle:HALFPI+GAP+sw,speed:185,hue:208,hueSpread:18,style:'dart'}); pat.nWaySpread(b,{count:7,spread:0.42,baseAngle:HALFPI-GAP-sw,speed:185,hue:194,hueSpread:18,style:'dart'}); sw+=d1*0.06; if(sw>0.5||sw<0) d1=-d1; yield* waitT(0.12); } },
         onEnter:_sway(PF_W*0.30,PF_W*0.70,134,2.0) },
       // P6 spell「八雲立つ」看板 — a rotating MANDALA of 4 HARMLESS vortices around the boss; the full spiral is wound into
       // a turning GALAXY. Boss DEAD-CENTRE (rotation-spell理不尽回避 — S4 lesson); rotation ramps slow→fast; spiral kept
       // slippable. Well count capped at 4 (perf O(wells×bullets) + a fairness density cap).
       { kind:'spell', name:'Storm Sign "Eightfold Clouds"', hp:2400, drops:['power','point','point','point'], cutinHue:212, body:'raw', raw:function*(b){
-          const NW=4, cx=PF_W*0.5, cy=PF_H*0.44, rad=98, ws=[];
-          for(let i=0;i<NW;i++){ const a0=i/NW*TAU; const w=placeWell({ x:cx+Math.cos(a0)*rad, y:cy+Math.sin(a0)*0.72*rad, R:102, strength:5200, swirl:((i%2)?-1:1)*10800, coreR:0, warn:1.0, active:99999, fade:0.5, hue:204+i*5 }); if(w) ws.push(w); }
+          const NW=4, cx=PF_W*0.5, cy=PF_H*0.50, rad=104, ws=[];
+          for(let i=0;i<NW;i++){ const a0=i/NW*TAU; const w=placeWell({ x:cx+Math.cos(a0)*rad, y:cy+Math.sin(a0)*0.72*rad, R:66, strength:5600, swirl:((i%2)?-1:1)*10800, coreR:0, warn:1.0, active:99999, fade:0.5, hue:186+i*4 }); if(w) ws.push(w); }   // 4 SMALL bright vortices (was big overlapping fields) rotating around the lowered centre — they read as four discrete gravity sources, and the lower pair reach into the player's band
           Director.fork(function*(){ const t0=T; while(true){ const el=T-t0, spin=el*(0.16+Math.min(0.34,el*0.011)); for(let i=0;i<ws.length;i++){ const w=ws[i]; if(w&&w.alive){ const a=i/ws.length*TAU+spin; w.x=cx+Math.cos(a)*rad; w.y=cy+Math.sin(a)*0.72*rad; } } yield; } },b);
           let a=0; while(true){ spiral(b,{angle:a,arms:4,speed:96,hue:(206+20*Math.sin(T*0.45)),style:'small'}); a+=0.16; yield* waitT(0.07); } },
         onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,PF_H*0.44,1.2,EASE.out); },b); } },
@@ -3414,8 +3501,8 @@ const SUSANOO_SPEC = { name:'Susanoo', design:'susanoo', hue:212, enterFrom:{x:P
       // for ~30s. The spray is deliberately thin (one slow spiral, every other tick) so the spell IS the orbit, not a
       // wall (the rule: if you demand orbiting, keep the scatter trivially dodgeable). Wells stay HARMLESS (coreR:0).
       { kind:'spell', name:'"Amenomurakumo — Last Word"', survival:30, drops:[], cutinHue:212, body:'raw', raw:function*(b){
-          const ws=[]; for(let i=0;i<3;i++){ const w=placeWell({ x:PF_W*(0.3+i*0.2), y:PF_H*0.4, R:116, strength:5000, swirl:((i%2)?-1:1)*11000, coreR:0, warn:1.1, active:99999, fade:0.5, hue:204+i*6 }); if(w) ws.push(w); }
-          Director.fork(function*(){ const t0=T; while(true){ const e=T-t0; for(let i=0;i<ws.length;i++){ const w=ws[i]; if(w&&w.alive){ w.x=PF_W*0.5+Math.sin(e*(0.32+i*0.12)+i*2.1)*PF_W*0.30; w.y=PF_H*(0.36+0.16*Math.sin(e*(0.5+i*0.1)+i)); } } yield; } },b);
+          const ws=[]; for(let i=0;i<3;i++){ const w=placeWell({ x:PF_W*(0.3+i*0.2), y:PF_H*0.5, R:62, strength:5400, swirl:((i%2)?-1:1)*11000, coreR:0, warn:1.1, active:99999, fade:0.5, hue:186+i*5 }); if(w) ws.push(w); }   // 3 small roaming vortices over a wider, LOWER band so the orbit-dodge happens near the player (the spell IS the orbit)
+          Director.fork(function*(){ const t0=T; while(true){ const e=T-t0; for(let i=0;i<ws.length;i++){ const w=ws[i]; if(w&&w.alive){ w.x=PF_W*0.5+Math.sin(e*(0.32+i*0.12)+i*2.1)*PF_W*0.30; w.y=PF_H*(0.46+0.18*Math.sin(e*(0.5+i*0.1)+i)); } } yield; } },b);
           let a=0,wave=0,k2=0; while(true){ if(k2%2===0){ spiral(b,{angle:a,arms:3,speed:96+wave*3,hue:(208+18*Math.sin(T*0.5)),style:'small'}); a+=0.42; wave+=0.03; } k2++; yield; } },
         onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,PF_H*0.42,1.3,EASE.out); },b); } }
     ] };
@@ -3575,40 +3662,41 @@ const STAGES = [
       {stageEnd:true},                 // hand off to Stage 5 (was {stageClear:true}; Stage 4 is no longer the terminal stage)
     ] },
   // STAGE 5 — "High Plain Tempest" (高天原の嵐): 雲上の大嵐. Spine mirrors S4: road → MIDBOSS (風神, 2ph, DEFEATED on the
-  // dedicated midboss5 BGM) → more road → 山場 → the 須佐之男 boss (7ph, boss5). The ROAD identity is the cloud-sprites
-  // that place WEAK harmless wells and bend their own straight bullets (waveStormSprite) — the 周回読み 慣らし場 for the
-  // boss's vortices. 2D staggered formations braced by drifter/sideSweep fills (no flat curtains). Counts sized for the
+  // dedicated midboss5 BGM) → more road → 山場 → the 須佐之男 boss (7ph, boss5). The ROAD identity is the NEW VORTEX RING
+  // (waveVortexRing): cloud-sprites orbiting a shared central well, their straight rings swirled into a galaxy — a true
+  // rotating 編隊 (no other wave moves a group on a shared orbit) + a swirl-free pulsing-ring variant, climaxing in a
+  // DOUBLE counter-rotating 双つ巴 that foreshadows the boss. Drifter/turret/sideSweep fills only brace it. Counts sized for the
   // power=max real entry; halvePower+sparse keep the score-item flood down. The 嵐神 Susanoo is the 5-of-6 boss; the
   // myth arc S4陽(八咫烏)→S5嵐(須佐之男)→S6岩戸 means this stage hands off to S6 ({stageEnd}) once S6 lands (terminal for now).
   { id:5, title:'Stage 5', theme:'storm',
     music:{ stage:'stage5', midboss:'midboss5', boss:'boss5' },
     timeline:[
       {banner:'Stage 5'}, {wait:INTRO_FADE},
-      // opening: two sheared drifter lanes + a storm-sprite PAIR at staggered depth (the well 慣らし intro)
-      {parallel:[ {wave:'drifters',    opts:{n:10,x:PF_W*0.28,band:PF_W*0.34,amp:24,spacing:0.34,speed:48,speedJit:0.8,hue:206,halvePower:true,sparse:true}},
-                  {wave:'drifters',    opts:{n:10,x:PF_W*0.72,band:PF_W*0.34,amp:24,spacing:0.34,speed:54,speedJit:0.8,hue:222,halvePower:true,sparse:true}, delay:1.0},
-                  {wave:'stormSprite', opts:{xs:[PF_W*0.34,PF_W*0.66],y:100,yStep:22,hold:3.6,hue:206,halvePower:true}, delay:2.4} ]}, {waitClear:true}, {wait:WAVE_GAP},
-      // a wind-sprite V-formation (the power source) braced by a storm-sprite TRIO (overlapping swirls)
-      {parallel:[ {wave:'vFormation',  opts:{half:4,apexX:PF_W/2,apexY:78,hue:206,halvePower:true}},
-                  {wave:'stormSprite', opts:{xs:[PF_W*0.2,PF_W*0.5,PF_W*0.8],y:92,yStep:14,hold:3.8,spacing:0.7,hue:210,halvePower:true}, delay:1.8} ]}, {waitClear:true}, {wait:WAVE_GAP},
-      // a sideSweep echelon braced by a centre drifter fill (depth)
-      {parallel:[ {wave:'sideSweep', opts:{n:9,side:'right',y:64,yStep:16,spacing:0.16,hue:206,halvePower:true,sparse:true}},
-                  {wave:'drifters',  opts:{n:7,x:PF_W*0.5,band:PF_W*0.24,amp:28,spacing:0.5,speed:52,speedJit:0.9,hue:218,halvePower:true,sparse:true}, delay:1.2} ]}, {waitClear:true}, {wait:WAVE_GAP},
-      // ── 山場 (pre-midboss) ── a storm-sprite SEXTET at staggered depths + flanks: the road's swirl peak
-      {wave:'stormSprite', opts:{xs:[PF_W*0.5,PF_W*0.3,PF_W*0.7,PF_W*0.15,PF_W*0.85,PF_W*0.5],y:80,yStep:12,spacing:0.5,hold:4.4,hue:206,halvePower:true}}, {waitClear:true}, {wait:1.2},
+      // opening: the road's NEW signature — a slow VORTEX RING (sprites orbiting ABOVE a well placed below them; their
+      // straight rings travel down then HOOK into the swirl) states the 嵐の渦 read immediately, braced by ONE drifter lane
+      {parallel:[ {wave:'vortexRing', opts:{n:5,cx:PF_W*0.5,cy:PF_H*0.28,rad:108,spin:0.55,shrink:0.32,hold:4.2,fcount:5,fperiod:0.68,hue:206,halvePower:true,sparse:true}},
+                  {wave:'drifters',   opts:{n:9,x:PF_W*0.78,band:PF_W*0.30,amp:24,spacing:0.4,speed:50,speedJit:0.8,hue:222,halvePower:true,sparse:true}, delay:1.6} ]}, {waitClear:true}, {wait:WAVE_GAP},
+      // ── a SWOOPING ARC-DIVE pair (new movement, line-symmetric) ── one file enters top-RIGHT, arcs down, DIVES through the
+      // lower centre and exits top-LEFT; a mirrored file enters top-LEFT a beat later and crosses it in an X over the player
+      {parallel:[ {wave:'swoopDive', opts:{n:5,dur:4.4,hue:208,halvePower:true,sparse:true}},
+                  {wave:'swoopDive', opts:{n:5,dur:4.4,mirror:true,hue:214,halvePower:true,sparse:true}, delay:1.5} ]}, {waitClear:true}, {wait:WAVE_GAP},
+      // ── 山場 (pre-midboss) ── a TIGHT, fast vortex ring spiraling HARD inward (the swirl peak) flanked by a quick sideSweep
+      {parallel:[ {wave:'vortexRing', opts:{n:6,cx:PF_W*0.5,cy:PF_H*0.30,rad:120,spin:0.92,shrink:0.5,hold:4.6,fcount:5,fperiod:0.5,strength:5600,swirl:10200,hue:206,halvePower:true}},
+                  {wave:'sideSweep',  opts:{n:7,side:'right',y:64,yStep:16,spacing:0.18,hue:218,halvePower:true,sparse:true}, delay:1.0} ]}, {waitClear:true}, {wait:1.2},
       // ── MIDBOSS 風神 ── dedicated midboss5 BGM, DEFEATED (bossDefeat → death explosion + drops)
       {banner:'WARNING'}, {sfx:'warn'}, {music:'midboss'},
       {boss:'fujin'},
       {music:'stage'}, {wait:CALM_BEFORE_BOSS},
-      // post-midboss road: a heavier 2D assault — two sheared drifter lanes + a storm-sprite QUARTET crossing depths
-      {parallel:[ {wave:'drifters',    opts:{n:12,x:PF_W*0.27,band:PF_W*0.34,amp:24,spacing:0.30,speed:48,speedJit:0.8,hue:206,halvePower:true,sparse:true}},
-                  {wave:'drifters',    opts:{n:12,x:PF_W*0.73,band:PF_W*0.34,amp:24,spacing:0.30,speed:56,speedJit:0.8,hue:222,halvePower:true,sparse:true}, delay:1.4},
-                  {wave:'stormSprite', opts:{xs:[PF_W*0.25,PF_W*0.75,PF_W*0.45,PF_W*0.6],y:88,yStep:16,spacing:0.6,hold:4.0,hue:206,halvePower:true}, delay:3.0} ]}, {waitClear:true}, {wait:WAVE_GAP},
-      // a turret pair (steel) braced by a wind V down the centre
-      {parallel:[ {wave:'turrets',    opts:{xs:[PF_W*0.28,PF_W*0.72],y:124,hold:5.0,hue:206}},
-                  {wave:'vFormation', opts:{half:4,apexX:PF_W/2,apexY:76,hue:218,halvePower:true}, delay:0.8} ]}, {waitClear:true}, {wait:WAVE_GAP},
-      // ── 山場 (pre-final) ── a storm-sprite OCTET holds centre + flanks at staggered depths (the road's true swirl peak)
-      {wave:'stormSprite', opts:{xs:[PF_W*0.5,PF_W*0.35,PF_W*0.65,PF_W*0.22,PF_W*0.78,PF_W*0.12,PF_W*0.88,PF_W*0.5],y:76,yStep:10,spacing:0.42,hold:4.6,hue:206,halvePower:true}}, {waitClear:true}, {wait:1.6},
+      // post-midboss road: a turret pair (counter-spiral steel — storm-fitting) braced by a sheared drifter lane
+      {parallel:[ {wave:'turrets',  opts:{xs:[PF_W*0.28,PF_W*0.72],y:124,hold:5.0,hue:206}},
+                  {wave:'drifters', opts:{n:11,x:PF_W*0.5,band:PF_W*0.5,amp:26,spacing:0.34,speed:54,speedJit:0.9,hue:218,halvePower:true,sparse:true}, delay:1.0} ]}, {waitClear:true}, {wait:WAVE_GAP},
+      // a COUNTER-spun PULSING vortex ring (well OFF → expandingRings, the swirl-free firing read) + a sheared drifter lane
+      {parallel:[ {wave:'vortexRing', opts:{n:6,cx:PF_W*0.5,cy:PF_H*0.30,rad:120,spin:0.7,dir:-1,well:false,accel:80,fcount:4,fperiod:0.6,hold:4.2,hue:214,halvePower:true,sparse:true}},
+                  {wave:'drifters',   opts:{n:10,x:PF_W*0.24,band:PF_W*0.32,amp:24,spacing:0.34,speed:52,speedJit:0.8,hue:222,halvePower:true,sparse:true}, delay:1.4} ]}, {waitClear:true}, {wait:WAVE_GAP},
+      // ── 山場 (pre-final, HARD) ── DOUBLE COUNTER-ROTATING vortex rings (双つ巴): two phase-locked rings with OPPOSED spin
+      // + opposed well swirl, side by side — the road's true peak and a direct foreshadow of the boss's "Twin Vortices"
+      {parallel:[ {wave:'vortexRing', opts:{n:5,cx:PF_W*0.32,cy:PF_H*0.32,rad:92,spin:0.95,dir:1,shrink:0.46,hold:5.0,fcount:4,fperiod:0.54,wellR:80,strength:5400,swirl:10000,hue:206,halvePower:true,sparse:true}},
+                  {wave:'vortexRing', opts:{n:5,cx:PF_W*0.68,cy:PF_H*0.32,rad:92,spin:0.95,dir:-1,shrink:0.46,hold:5.0,fcount:4,fperiod:0.54,wellR:80,strength:5400,swirl:10000,hue:214,halvePower:true,sparse:true}, delay:0.6} ]}, {waitClear:true}, {wait:1.6},
       // ── FINAL BOSS 須佐之男 ── the one music switch to boss5
       {banner:'WARNING'}, {sfx:'warn'}, {flash:{color:'#9ec4ff',i:0.4}}, {shake:{mag:4,dur:0.6}}, {music:'boss'}, {wait:2.0},
       {boss:'susanoo'},
