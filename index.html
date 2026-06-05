@@ -58,6 +58,7 @@ const GRAZE_LASER_HALFW = 30, GRAZE_LASER_DPS = 620;  // HALFW drives both the b
 // survival timer by survivalTotal*(dmg/maxHp). Sized so a full 8s laser focus removes most of a 28s timer.
 const GRAZE_SURVIVAL_HP = 6000;
 const GRAZE_PIERCE = { pierce:true };                      // shared opts passed to damageEnemy by power-up shots
+const POWERUP_KILL_MULT = 10;                              // power-up (homing/laser) kills award this ×score (the pierce opts double as the "killed by a power-up shot" marker)
 const GRAZE_LASER_NOSE = 18;                               // laser emerges this far ahead of the player centre (a little past the nose)
 const GRAZE_ACTIVATE_CLEAR_R = 100;                        // radius of enemy-bullet clear when the power-up activates
 
@@ -1416,30 +1417,37 @@ function drawBossMandala(c,t){ const breath=Math.sin(t*1.0);
   const pulse=0.85+0.15*Math.sin(t*2.6); c.save(); c.globalCompositeOperation='lighter'; c.scale(pulse,pulse); bossGlow(c,30,48,95,82,0.95); c.restore();
   c.fillStyle='#fff6fb'; c.beginPath(); c.arc(0,0,10,0,TAU); c.fill(); c.fillStyle='hsla(330,90%,76%,0.92)'; c.beginPath(); c.arc(0,0,5,0,TAU); c.fill();
 }
-// STAGE 2 BOSS — "Tasokare", the twilight phantom (大ボス scale): a tall flowing spectral robe with a
-// tattered, widening hem, a crown of six orbiting hitodama (soul-flames), a big cold halo, and a veiled
-// head with eerie glowing eyes. Cold spectral blue (H=212) so she reads as an imposing 亡霊 against the
-// dusk sky. Centred on the origin = the gameplay hit point (drawBoss translates+scales); hitR covers the
-// opaque robe/head core. The 'lighter' halo / hem veils / flames / eye-glow are aura.
-function drawBossPhantom(c,t){ const H=212;
-  const pulse=0.9+0.08*Math.sin(t*2.4);
-  c.save(); c.globalCompositeOperation='lighter'; c.scale(pulse,pulse); bossGlow(c,76,H,72,56,0.42); c.restore();   // large cold halo
-  for(let i=0;i<6;i++){ const a=t*0.8+i/6*TAU, x=Math.cos(a)*62, y=Math.sin(a)*30-30, fh=(H+i*14+t*24)%360, sc=0.7+0.35*Math.sin(a);   // crown of hitodama
-    c.save(); c.translate(x,y); c.scale(sc,sc); c.globalCompositeOperation='lighter'; bossGlow(c,16,fh,90,74,0.8);
-    c.fillStyle='hsla('+fh+',96%,88%,0.95)'; c.beginPath(); c.moveTo(0,-8); c.quadraticCurveTo(6,2,0,8); c.quadraticCurveTo(-6,2,0,-8); c.fill(); c.restore(); }
-  c.save(); c.globalCompositeOperation='lighter';            // flowing tattered robe/hem below, wavering + widening
-  for(let k=3;k>=1;k--){ const ph=t*1.5; c.fillStyle='hsla('+H+',72%,'+(62+k*5)+'%,'+(0.12*k)+')';
-    c.beginPath(); c.moveTo(-22,-16);
-    for(let i=0;i<=12;i++){ const u=i/12, x=-34+72*u+Math.sin(ph+u*6+k)*5, y=-16+70*u+Math.sin(ph*1.2+u*7+k*1.4)*10*(0.3+u); c.lineTo(x,y); }
-    c.lineTo(22,-16); c.quadraticCurveTo(0,-6,-22,-16); c.fill(); }
+// STAGE 2 BOSS — "Tasokare" (大ボス scale), the twilight spirit manifest as a 蛟 (mizuchi, a drowned
+// water-serpent of the Far Shore): a sinuous vertical S-curve body (a traveling wave down the spine) with
+// a draconic horned head, barbel whiskers, and a saturated VIOLET (G=305) bioluminescent underglow over a
+// pale moonlit-cyan body (H=190). Deliberately NOT the spirit-maiden silhouette the Stage-3 twins share
+// with the old phantom — a serpent reads as a different creature, and the violet glow pops against the cool
+// jade dusk. Centred on the origin = the gameplay hit point (a violet spirit-halo + bright core mark it;
+// drawBoss translates+scales); hitR covers the central coil.
+function drawBossMizuchi(c,t){ const H=190, G=305;
+  const pulse=0.9+0.08*Math.sin(t*2.5);
+  c.save(); c.globalCompositeOperation='lighter'; c.scale(pulse,pulse); bossGlow(c,60,G,66,54,0.32); c.restore();   // centred cold spirit-halo (marks the gameplay centre)
+  const N=22, pts=[];
+  for(let i=0;i<=N;i++){ const u=i/N, y=-52+u*112, amp=9+u*24, x=Math.sin(u*6.0 - t*2.2)*amp; pts.push([x,y,u]); }   // spine: traveling wave, amplitude growing toward the tail
+  c.save(); c.globalCompositeOperation='lighter'; c.strokeStyle='hsla('+G+',92%,58%,0.45)'; c.lineWidth=20; c.lineJoin='round'; c.lineCap='round';   // violet bioluminescent underglow along the whole body
+  c.beginPath(); c.moveTo(pts[0][0],pts[0][1]); for(let i=1;i<pts.length;i++) c.lineTo(pts[i][0],pts[i][1]); c.stroke(); c.restore();
+  for(let i=0;i<N;i++){ const a=pts[i], b=pts[i+1], w=14*(1-a[2]*0.72);   // pale tapering body, head-to-tail
+    c.strokeStyle='hsla('+H+',52%,'+(82-a[2]*20)+'%,0.95)'; c.lineWidth=w; c.lineCap='round';
+    c.beginPath(); c.moveTo(a[0],a[1]); c.lineTo(b[0],b[1]); c.stroke();
+    if(i%2===0){ c.save(); c.globalCompositeOperation='lighter'; c.fillStyle='hsla('+G+',95%,82%,0.5)'; c.beginPath(); c.arc(a[0],a[1],1.5,0,TAU); c.fill(); c.restore(); } }   // dorsal scale-lights
+  const hx=pts[0][0], hy=pts[0][1]; c.save(); c.translate(hx,hy);   // draconic head at the crest
+  c.save(); c.globalCompositeOperation='lighter'; bossGlow(c,22,G,92,62,0.4); c.restore();
+  c.fillStyle='hsla('+H+',44%,89%,0.97)'; c.beginPath(); c.ellipse(0,-2,12,10,0,0,TAU); c.fill();
+  c.beginPath(); c.moveTo(-5,-7); c.quadraticCurveTo(0,-18,9,-11); c.quadraticCurveTo(4,-3,-5,-7); c.fill();   // snout
+  c.strokeStyle='hsla('+H+',40%,80%,0.95)'; c.lineWidth=2.4; c.lineCap='round';
+  c.beginPath(); c.moveTo(-5,-9); c.quadraticCurveTo(-15,-20,-8,-27); c.stroke();                              // horns
+  c.beginPath(); c.moveTo(5,-9); c.quadraticCurveTo(15,-20,8,-27); c.stroke();
+  c.strokeStyle='hsla('+G+',92%,82%,0.6)'; c.lineWidth=1.1;                                                    // barbel whiskers
+  for(const s of [-1,1]){ c.beginPath(); c.moveTo(s*6,-3); c.quadraticCurveTo(s*26,-1+Math.sin(t*2)*4,s*40,9); c.stroke(); }
+  c.save(); c.globalCompositeOperation='lighter'; const eg=0.6+0.4*Math.sin(t*3.2); bossGlow(c,6,G,96,72,0.7*eg);   // glowing eye
+  c.fillStyle='hsla('+G+',100%,'+(72+eg*16)+'%,0.97)'; c.beginPath(); c.ellipse(1,-4,2.2,3.0,0,0,TAU); c.fill(); c.restore();
   c.restore();
-  c.fillStyle='hsla('+H+',30%,90%,0.95)';                    // opaque robe + head (solid silhouette; hitR covers this)
-  c.beginPath(); c.moveTo(0,-46); c.bezierCurveTo(20,-44,25,-20,22,-2); c.bezierCurveTo(27,20,16,42,0,46); c.bezierCurveTo(-16,42,-27,20,-22,-2); c.bezierCurveTo(-25,-20,-20,-44,0,-46); c.fill();
-  c.strokeStyle='hsla('+H+',80%,86%,0.45)'; c.lineWidth=1.4; c.stroke();
-  c.fillStyle='hsla('+H+',55%,38%,0.34)'; c.beginPath(); c.ellipse(0,-27,16,17,0,0,TAU); c.fill();   // veil shadow over the face
-  c.save(); c.globalCompositeOperation='lighter'; const eg=0.65+0.35*Math.sin(t*3.3);   // eerie glowing eyes
-  for(const sx of [-6.5,6.5]){ c.save(); c.translate(sx,-28); bossGlow(c,9,H,96,82,0.7*eg); c.fillStyle='hsla('+H+',96%,'+(68+eg*20)+'%,0.96)'; c.beginPath(); c.ellipse(0,0,2.6,4.4,sx<0?0.3:-0.3,0,TAU); c.fill(); c.restore(); }
-  bossGlow(c,16,H,70,92,0.8); c.restore();                   // core glow at the gameplay centre
+  c.save(); c.globalCompositeOperation='lighter'; bossGlow(c,16,G,82,82,0.8*(0.8+0.2*Math.sin(t*3))); c.restore();   // bright core at the gameplay centre
 }
 // STAGE 3 BOSS — the twin sisters of the bamboo grove, 宵 (Yoi, deep indigo H=265) & 暁 (Akatsuki, amber
 // H=32), a MIRROR PAIR (drawn by the same fn; `flip` horizontally mirrors one so they read as reflections).
@@ -1696,7 +1704,7 @@ let activeTheme = THEMES.spring;
 const BOSS_DESIGNS = {
   wisp:    { draw:drawBossWisp,    scale:0.55, hitR:32 },
   mandala: { draw:drawBossMandala, scale:0.60, hitR:60 },
-  phantom: { draw:drawBossPhantom, scale:1.0,  hitR:40 },
+  mizuchi: { draw:drawBossMizuchi, scale:1.0,  hitR:40 },
   twinYoi:      { draw:(c,t)=>drawBossTwin(c,t,265,false), scale:0.82, hitR:30 },   // 宵 — deep indigo sister (left)
   twinAkatsuki: { draw:(c,t)=>drawBossTwin(c,t,32,true),   scale:0.82, hitR:30 },   // 暁 — amber sister (right, mirrored)
 };
@@ -2115,8 +2123,10 @@ function damageEnemy(e,dmg,opts){ if(!e) return false; if(e._shareHpWith) e=e._s
   // remaining timer in proportion to the HP fraction dealt. Bombs are not pierce-flagged → cannot break it.
   if(e.boss&&e.survivalActive){ if(opts&&opts.pierce){ if(e.survivalTotal>0&&e.maxHp>0) e.timer=Math.max(0,e.timer-e.survivalTotal*(dmg/e.maxHp)); e.hp=Math.max(0,e.hp-dmg); } return false; }   // pierce drains BOTH the HP bar and the survival timer (HP fraction removed == time fraction removed)
   if(e.invuln) return false;
-  e.hp-=dmg; if(e.hp<=0&&!e.boss){ killEnemy(e); return true; } return false; }
-function killEnemy(e){ if(e.dead) return; e.dead=true; sfx.enemyDeath&&sfx.enemyDeath(); spawnDeathPuff(e.x,e.y,e.hue); if(e._spec&&e._spec.cancelOnDeath) cancelBullets({x:e.x,y:e.y,radius:70,frac:e._spec.cancelOnDeath,toItems:false}); if(e.drops) for(const d of e.drops) dropItem(e.x+rng.range(-8,8),e.y+rng.range(-6,6),d); if(e._spec&&e._spec.onDeath) e._spec.onDeath(e); addScore(e.score||0); }
+  e.hp-=dmg; if(e.hp<=0&&!e.boss){ killEnemy(e, (opts&&opts.pierce)?POWERUP_KILL_MULT:1); return true; } return false; }
+function killEnemy(e,scoreMul){ if(e.dead) return; e.dead=true; scoreMul=scoreMul||1; sfx.enemyDeath&&sfx.enemyDeath(); spawnDeathPuff(e.x,e.y,e.hue); if(e._spec&&e._spec.cancelOnDeath) cancelBullets({x:e.x,y:e.y,radius:70,frac:e._spec.cancelOnDeath,toItems:false}); if(e.drops) for(const d of e.drops) dropItem(e.x+rng.range(-8,8),e.y+rng.range(-6,6),d); if(e._spec&&e._spec.onDeath) e._spec.onDeath(e);
+  if(scoreMul>1){ spawnParticle(e.x,e.y,0,0,{life:0.45,kind:'ring',hue:GRAZE_HUE,r:13}); for(let i=0;i<6;i++){ const a=i/6*TAU; spawnParticle(e.x,e.y,Math.cos(a)*95,Math.sin(a)*95,{life:0.4,kind:'sparkle',hue:GRAZE_HUE,r:2.4}); } }   // power-up bonus-kill accent in the verdant power-up hue (deterministic; only fires when a power-up shot lands the kill)
+  addScore((e.score||0)*scoreMul); }
 function despawnEnemy(e){ e.dead=true; }
 
 // ---- movement helpers (generators) ----
@@ -2346,8 +2356,8 @@ const FINALBOSS_SPEC = { name:'Flower King', design:'mandala', hue:300, enterFro
       { kind:'spell', name:'"Eternal Spring — Last Word"', survival:FB_SURVIVAL_TIME, drops:[], body:'raw', raw:function*(b){ let a=0,wave=0; Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:10,speed:60,gravity:42.5,hue:(330+T*30)%360,style:'petal'}); yield* waitT(0.3); } },b); Director.fork(function*(){ while(true){ burst(b,{count:40,speed:130,hue:(T*60)%360,style:'orb'}); yield* waitT(2.2); } },b); while(true){ spiral(b,{angle:a,arms:6,speed:140+wave*4,hue:(T*70)%360,style:'small'}); spiral(b,{angle:-a*1.4,arms:6,speed:140+wave*4,hue:(120+T*70)%360,style:'small'}); a+=0.21; wave+=0.05; yield* waitT(0.035); } } }
     ] };
 
-// ---- STAGE 2 boss "Tasokare", the twilight phantom — appears TWICE: an early retreating encounter
-// (TASOKARE_INTRO_SPEC: 1 nonspell + 1 spell, retreat:true → flees to return) and the full final
+// ---- STAGE 2 boss "Tasokare", the twilight 蛟 (water-serpent) — appears TWICE: an early retreating
+// encounter (TASOKARE_INTRO_SPEC: 1 nonspell + 1 spell, retreat:true → flees to return) and the full final
 // fight (TASOKARE_SPEC). Same design/hue/name so it reads as one character. Ghost vocabulary:
 // delayed-turn pursuit bullets (drift, then home), drifting soul-orbs, irregular scatter. ----
 // _sway: an onEnter helper that forks a left↔right glide for the phase (inherits the phase epoch, so
@@ -2362,7 +2372,7 @@ const figure8=(cx,cy,rw,rh,period)=>function(b){ const w=TAU/period; Director.fo
 const wander=(cx,cy,rx,ry,leg)=>function(b){ Director.fork(function*(){ while(true){ const tx=clamp(cx+rng.range(-rx,rx),40,PF_W-40), ty=clamp(cy+rng.range(-ry,ry),90,PF_H*0.55); yield* moveTo(b,tx,ty,leg||1.4,EASE.inOut); } },b); };   // ランダム: drift to random points in a box (seeded rng → deterministic)
 const divePush=(homeX,homeY,diveY,dive,hold,back)=>function(b){ Director.fork(function*(){ while(true){ yield* moveTo(b,homeX,clamp(diveY,90,PF_H*0.58),dive||0.6,EASE.in); yield* waitT(hold||0.9); yield* moveTo(b,homeX,homeY,back||1.2,EASE.out); yield* waitT(0.6); } },b); };   // 突撃: lunge DOWN toward the player, hold, retreat up; repeat
 const diveCharge=(homeX,homeY,diveY,dx,dive,hold,back)=>function(b){ let side=(homeX>PF_W*0.5)?-1:1; Director.fork(function*(){ while(true){ yield* moveTo(b,clamp(homeX+dx*side,40,PF_W-40),clamp(diveY,90,PF_H*0.58),dive||0.6,EASE.in); yield* waitT(hold||0.85); yield* moveTo(b,homeX,homeY,back||1.1,EASE.out); yield* waitT(0.45); side=-side; } },b); };   // 斜め突撃: divePush + x-axis — lunge DIAGONALLY to alternating sides, hold, retreat to home; repeat
-const TASOKARE_INTRO_SPEC = { name:'Tasokare', design:'phantom', hue:212, enterFrom:{x:PF_W/2,y:-70}, enterTo:{x:PF_W/2,y:150}, score:90000, retreat:true, retreatDrops:['bomb'],
+const TASOKARE_INTRO_SPEC = { name:'Tasokare', design:'mizuchi', hue:190, enterFrom:{x:PF_W/2,y:-70}, enterTo:{x:PF_W/2,y:150}, score:90000, retreat:true, retreatDrops:['bomb'],
     phases:[
       { kind:'nonspell', hp:1204, body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ aimedShot(b,{n:5,spread:0.6,speed:140,hue:285,style:'mid'}); yield* waitT(1.05); } },b); while(true){ ring(b,{count:18,speed:90,accel:55,hue:210,style:'orb'}); yield* waitT(1.6); } }, onEnter:diveCharge(PF_W*0.5,150,280,120,0.62,0.85,1.1) },
       // onEnter: glide back to the home HEIGHT (enterTo.y) while KEEPING the current x. The prior nonspell's
@@ -2371,7 +2381,7 @@ const TASOKARE_INTRO_SPEC = { name:'Tasokare', design:'phantom', hue:212, enterF
       // wherever the dive left it). Forked so it eases up as the spell opens.
       { kind:'spell', name:'Spirit Sign "Twilight Pursuit"', hp:1540, drops:['point','point','point','power'], body:'raw', raw:function*(b){ let off=0; while(true){ pat.delayedTurn(b,{count:14,spread:TAU,baseAngle:off,speed:88,delay:0.9,turnAim:true,speed2:165,hue:205,style:'orb'}); off+=0.5; yield* waitT(1.5); pat.aimedSpread(b,{count:7,spread:0.5,speed:150,hue:280,style:'pellet'}); yield* waitT(0.9); } }, onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,b.x,150,0.9,EASE.out); },b); } }
     ] };
-const TASOKARE_SPEC = { name:'Tasokare', design:'phantom', hue:212, enterFrom:{x:PF_W/2,y:-80}, enterTo:{x:PF_W/2,y:140}, score:600000, drops:['bigpower','power','point','point','point','point','point'],
+const TASOKARE_SPEC = { name:'Tasokare', design:'mizuchi', hue:190, enterFrom:{x:PF_W/2,y:-80}, enterTo:{x:PF_W/2,y:140}, score:600000, drops:['bigpower','power','point','point','point','point','point'],
     phases:[
       { kind:'nonspell', hp:1204, body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ aimedShot(b,{n:7,spread:0.7,speed:150,hue:285,style:'mid'}); yield* waitT(0.85); } },b); while(true){ ring(b,{count:22,speed:95,accel:55,hue:210,style:'orb'}); yield* waitT(1.3); } }, onEnter:orbitCircle(PF_W*0.5,160,60,5.5,1) },
       // a COMPLEXIFIED evolution of the midboss pursuit (same delayed-turn family, escalated): the
