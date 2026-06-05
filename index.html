@@ -2148,12 +2148,20 @@ function drawBossSusanoo(c,t){ const breath=0.92+0.06*Math.sin(t*2.2), H=212, HB
   c.strokeStyle='hsl('+(H+8)+',24%,28%)'; c.lineWidth=4; c.lineCap='round'; c.beginPath(); c.moveTo(0,12); c.lineTo(0,22); c.stroke();   // grip
   c.save(); c.globalCompositeOperation='lighter'; c.strokeStyle='hsla('+HG+',100%,82%,'+(0.5+0.35*Math.sin(t*6)).toFixed(2)+')'; c.lineWidth=1.0; c.beginPath(); c.moveTo(0,8); c.lineTo(0,-64); c.stroke(); c.restore();   // crackling GOLD lightning edge (Susanoo's signature warm accent)
   c.restore();
-  // 3) broad armored torso (solid silhouette; hitR covers it) + shoulder mantle + lightning rim
-  c.fillStyle='hsla('+HB+',42%,40%,0.98)'; c.beginPath(); c.moveTo(-20,-12); c.quadraticCurveTo(-28,6,-23,30);
-  for(let k=0;k<=6;k++){ const x=-23+(46*k/6), y=30+((k&1)?9:2); c.lineTo(x,y); }
-  c.quadraticCurveTo(28,6,20,-12); c.quadraticCurveTo(0,-22,-20,-12); c.closePath(); c.fill();
-  c.fillStyle='hsla('+HB+',56%,58%,0.92)'; c.beginPath(); c.moveTo(-22,-8); c.quadraticCurveTo(0,-20,22,-8); c.quadraticCurveTo(0,-2,-22,-8); c.fill();   // shoulder mantle (bright indigo)
-  c.strokeStyle='hsla('+HG+',96%,80%,0.9)'; c.lineWidth=1.9; c.beginPath(); c.moveTo(-20,-12); c.quadraticCurveTo(-28,6,-23,30); c.moveTo(20,-12); c.quadraticCurveTo(28,6,23,30); c.stroke();   // GOLD lightning rim-light — the warm contrast that lifts the indigo torso off the blue sky
+  // 3) broad armored torso + WIDE storm PAULDRONS jutting left & right (the god's broad span — the widened
+  //    horizontal hitbox reads honestly here; hitR core + side hitShapes cover the pauldrons) + lightning rim
+  // 3a) the two great pauldrons reaching OUT to the sides (drawn before the torso so it overlaps their inner roots)
+  for(const sx of [-1,1]){ c.save(); c.scale(sx,1);
+    c.fillStyle='hsla('+HB+',40%,33%,0.97)'; c.beginPath(); c.moveTo(15,-12); c.quadraticCurveTo(40,-17,50,-1); c.quadraticCurveTo(51,12,39,17); c.quadraticCurveTo(26,13,17,7); c.closePath(); c.fill();   // angular shoulder plate reaching out to ~x50
+    c.fillStyle='hsla('+(HB+6)+',56%,54%,0.9)'; c.beginPath(); c.moveTo(19,-7); c.quadraticCurveTo(37,-11,45,1); c.quadraticCurveTo(34,2,22,2); c.closePath(); c.fill();   // bright plate highlight
+    c.strokeStyle='hsla('+HG+',96%,80%,0.85)'; c.lineWidth=1.7; c.beginPath(); c.moveTo(15,-12); c.quadraticCurveTo(40,-17,50,-1); c.quadraticCurveTo(51,12,39,17); c.stroke();   // GOLD lightning rim on the outer pauldron edge
+    c.restore(); }
+  // 3b) broad armored torso (solid silhouette; hitR core)
+  c.fillStyle='hsla('+HB+',42%,40%,0.98)'; c.beginPath(); c.moveTo(-24,-12); c.quadraticCurveTo(-33,6,-27,30);
+  for(let k=0;k<=6;k++){ const x=-27+(54*k/6), y=30+((k&1)?9:2); c.lineTo(x,y); }
+  c.quadraticCurveTo(33,6,24,-12); c.quadraticCurveTo(0,-23,-24,-12); c.closePath(); c.fill();
+  c.fillStyle='hsla('+HB+',56%,58%,0.92)'; c.beginPath(); c.moveTo(-27,-8); c.quadraticCurveTo(0,-21,27,-8); c.quadraticCurveTo(0,-2,-27,-8); c.fill();   // shoulder mantle (bright indigo), spanning the wider torso
+  c.strokeStyle='hsla('+HG+',96%,80%,0.9)'; c.lineWidth=1.9; c.beginPath(); c.moveTo(-24,-12); c.quadraticCurveTo(-33,6,-27,30); c.moveTo(24,-12); c.quadraticCurveTo(33,6,27,30); c.stroke();   // GOLD lightning rim-light — warm contrast lifting the indigo torso off the blue sky
   // 4) fierce head + glowing storm-eyes
   c.fillStyle='hsla('+H+',26%,72%,0.97)'; c.beginPath(); c.ellipse(0,-16,10,11,0,0,TAU); c.fill();
   c.fillStyle='hsla('+H+',30%,30%,0.5)'; c.beginPath(); c.ellipse(0,-19,11,7,0,0,TAU); c.fill();   // brow shadow under the mane
@@ -2475,7 +2483,11 @@ const BOSS_DESIGNS = {
                               {dx:-23,dy:-10,r:19}, {dx:-49,dy:-19,r:18}, {dx:-80,dy:-27,r:17} ] },
   yamauba:      { draw:drawBossYamauba,    scale:0.92, hitR:28 },   // 山姥 — white-haired crone (Stage 4 midboss)
   fujin:        { draw:drawBossFujin,      scale:0.92, hitR:28 },   // 風神 — wind-bag gatekeeper (Stage 5 midboss)
-  susanoo:      { draw:drawBossSusanoo,    scale:1.1,  hitR:35 },   // 須佐之男 — storm god (Stage 5 boss); larger than 風神 (0.92) so the two read as DIFFERENT beings, not one character
+  // 須佐之男 — storm god (Stage 5 boss); larger than 風神 (0.92) so the two read as DIFFERENT beings. WIDE
+  // horizontal hitbox: the core (hitR) + four side lobes spanning the broad pauldrons so the god reads &
+  // registers as a BROAD target (offsets in the design's local/unscaled frame, scaled by scale=1.1).
+  susanoo:      { draw:drawBossSusanoo,    scale:1.1,  hitR:34,
+                  hitShapes:[ {dx:21,dy:5,r:15}, {dx:40,dy:1,r:13}, {dx:-21,dy:5,r:15}, {dx:-40,dy:1,r:13} ] },
 };
 function bakePetals(theme){ const out=[]; const streak=theme.petalShape==='streak'; theme.petal.forEach(col=>{ const W=24,cv=document.createElement('canvas'); cv.width=W; cv.height=W; const c=cv.getContext('2d'); c.translate(W/2,W/2); if(streak){ /* wind-driven rain/mist sliver (NOT a sakura petal) — fits a high storm sky */ c.strokeStyle=col; c.lineCap='round'; c.lineWidth=1.7; c.beginPath(); c.moveTo(-0.6,-9); c.lineTo(0.6,8); c.stroke(); c.strokeStyle=theme.petalEdge; c.lineWidth=0.7; c.beginPath(); c.moveTo(-0.4,-7); c.lineTo(0.4,6); c.stroke(); } else { c.fillStyle=col; c.beginPath(); c.moveTo(0,-9); c.bezierCurveTo(7,-6,7,6,0,9); c.bezierCurveTo(-7,6,-7,-6,0,-9); c.fill(); c.strokeStyle=theme.petalEdge; c.lineWidth=0.8; c.beginPath(); c.moveTo(0,-8); c.lineTo(0,7); c.stroke(); } out.push(cv); }); _petalSprite=out; }
 function setTheme(key){ const t=THEMES[key]; if(!t) return; activeTheme=t; _skyCache.d=999; bakePetals(t); buildScenery(); }
@@ -3497,13 +3509,19 @@ const SUSANOO_SPEC = { name:'Susanoo', design:'susanoo', hue:212, enterFrom:{x:P
           Director.fork(function*(){ const t0=T; while(true){ const el=T-t0, spin=el*(0.16+Math.min(0.34,el*0.011)); for(let i=0;i<ws.length;i++){ const w=ws[i]; if(w&&w.alive){ const a=i/ws.length*TAU+spin; w.x=cx+Math.cos(a)*rad; w.y=cy+Math.sin(a)*0.72*rad; } } yield; } },b);
           let a=0; while(true){ spiral(b,{angle:a,arms:4,speed:96,hue:(206+20*Math.sin(T*0.45)),style:'small'}); a+=0.16; yield* waitT(0.07); } },
         onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,PF_H*0.44,1.2,EASE.out); },b); } },
-      // P7 survival「天叢雲」— drifting vortices roam the whole field, winding a SPARSE omni-spiral into an orbiting river
-      // for ~30s. The spray is deliberately thin (one slow spiral, every other tick) so the spell IS the orbit, not a
-      // wall (the rule: if you demand orbiting, keep the scatter trivially dodgeable). Wells stay HARMLESS (coreR:0).
+      // P7 survival「天叢雲」— drifting vortices roam the whole field, winding a SPARSE omni-spiral into an orbiting
+      // river. The OPENING stays gentle (the spell IS the orbit, trivially dodgeable — the original feel); a
+      // latter-half ramp (kOf: 0 through the first ~13s, then climbing across the back half) escalates it — denser
+      // arms, a counter-rotating second spiral fading in, periodic rings caught into the swirl, and livelier wells —
+      // so the LAST WORD genuinely BITES toward the end without a hard opening. Wells stay HARMLESS (coreR:0):
+      // escalation only adds (swirl-caught) danmaku, never a death-clump. ramp constants: full intensity by ~e27.6s.
       { kind:'spell', name:'"Amenomurakumo — Last Word"', survival:30, drops:[], cutinHue:212, body:'raw', raw:function*(b){
           const ws=[]; for(let i=0;i<3;i++){ const w=placeWell({ x:PF_W*(0.3+i*0.2), y:PF_H*0.5, R:62, strength:5400, swirl:((i%2)?-1:1)*11000, coreR:0, warn:1.1, active:99999, fade:0.5, hue:186+i*5 }); if(w) ws.push(w); }   // 3 small roaming vortices over a wider, LOWER band so the orbit-dodge happens near the player (the spell IS the orbit)
-          Director.fork(function*(){ const t0=T; while(true){ const e=T-t0; for(let i=0;i<ws.length;i++){ const w=ws[i]; if(w&&w.alive){ w.x=PF_W*0.5+Math.sin(e*(0.32+i*0.12)+i*2.1)*PF_W*0.30; w.y=PF_H*(0.46+0.18*Math.sin(e*(0.5+i*0.1)+i)); } } yield; } },b);
-          let a=0,wave=0,k2=0; while(true){ if(k2%2===0){ spiral(b,{angle:a,arms:3,speed:96+wave*3,hue:(208+18*Math.sin(T*0.5)),style:'small'}); a+=0.42; wave+=0.03; } k2++; yield; } },
+          const t0=T; const kOf=function(){ return clamp((T-t0-12.6)/15,0,1); };   // 0 for the first ~13s (initial = original spell), then ramps to full over the back half
+          Director.fork(function*(){ while(true){ const e=T-t0, sp=1+0.55*kOf(); for(let i=0;i<ws.length;i++){ const w=ws[i]; if(w&&w.alive){ w.x=PF_W*0.5+Math.sin(e*(0.32+i*0.12)*sp+i*2.1)*PF_W*0.30; w.y=PF_H*(0.46+0.18*Math.sin(e*(0.5+i*0.1)*sp+i)); } } yield; } },b);   // wells roam a touch faster as the storm builds
+          Director.fork(function*(){ let a=0; while(true){ const k=kOf(); if(k>0){ spiral(b,{angle:a,arms:Math.round(lerp(2,4,k)),speed:90+34*k,hue:(230+18*Math.sin(T*0.45)),style:'small'}); a-=lerp(0.36,0.5,k); } yield* waitT(lerp(0.14,0.07,k)); } },b);   // latter-half: a counter-rotating second spiral fades in (the 双 rainband)
+          Director.fork(function*(){ while(true){ const k=kOf(); yield* waitT(lerp(3.2,1.6,k)); if(k>0.12) ring(b,{count:Math.round(lerp(10,20,k)),speed:78+26*k,hue:(200+20*Math.sin(T*0.6)),style:'orb'}); } },b);   // latter-half: periodic rings, themselves caught into the swirl
+          let a=0,wave=0,k2=0; while(true){ const k=kOf(); if(k2%2===0){ spiral(b,{angle:a,arms:Math.round(lerp(3,4,k)),speed:96+wave*3+22*k,hue:(208+18*Math.sin(T*0.5)),style:'small'}); a+=lerp(0.42,0.32,k); wave+=0.03; } k2++; yield; } },
         onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,PF_H*0.42,1.3,EASE.out); },b); } }
     ] };
 
@@ -3674,25 +3692,29 @@ const STAGES = [
       {banner:'Stage 5'}, {wait:INTRO_FADE},
       // opening: the road's NEW signature — a slow VORTEX RING (sprites orbiting ABOVE a well placed below them; their
       // straight rings travel down then HOOK into the swirl) states the 嵐の渦 read immediately, braced by ONE drifter lane
+      // road beats are TIMER-PACED (no waitClear): the next wave comes on a fixed beat (parallel spawn-in ~5s +
+      // WAVE_GAP), NOT when you finish killing — so the road reads as a continuous flowing stream like Stages 1-4
+      // (whose road waitClear is, in real play, already satisfied by the descended-through stream by the time it's
+      // reached). waitClear is kept ONLY at the two 山場→boss gates below so 風神/須佐之男 still enter on a clean field.
       {parallel:[ {wave:'vortexRing', opts:{n:5,cx:PF_W*0.5,cy:PF_H*0.28,rad:108,spin:0.55,shrink:0.32,hold:4.2,fcount:5,fperiod:0.68,hue:206,halvePower:true,sparse:true}},
-                  {wave:'drifters',   opts:{n:9,x:PF_W*0.78,band:PF_W*0.30,amp:24,spacing:0.4,speed:50,speedJit:0.8,hue:222,halvePower:true,sparse:true}, delay:1.6} ]}, {waitClear:true}, {wait:WAVE_GAP},
+                  {wave:'drifters',   opts:{n:9,x:PF_W*0.78,band:PF_W*0.30,amp:24,spacing:0.4,speed:50,speedJit:0.8,hue:222,halvePower:true,sparse:true}, delay:1.6} ]}, {wait:5},
       // ── a SWOOPING ARC-DIVE pair (new movement, line-symmetric) ── one file enters top-RIGHT, arcs down, DIVES through the
       // lower centre and exits top-LEFT; a mirrored file enters top-LEFT a beat later and crosses it in an X over the player
       {parallel:[ {wave:'swoopDive', opts:{n:5,dur:4.4,hue:208,halvePower:true,sparse:true}},
-                  {wave:'swoopDive', opts:{n:5,dur:4.4,mirror:true,hue:214,halvePower:true,sparse:true}, delay:1.5} ]}, {waitClear:true}, {wait:WAVE_GAP},
+                  {wave:'swoopDive', opts:{n:5,dur:4.4,mirror:true,hue:214,halvePower:true,sparse:true}, delay:1.5} ]}, {wait:6},   // timer-paced; +extra gap (swoops self-exit fast, so the spawn-in is short) to keep a steady road beat
       // ── 山場 (pre-midboss) ── a TIGHT, fast vortex ring spiraling HARD inward (the swirl peak) flanked by a quick sideSweep
       {parallel:[ {wave:'vortexRing', opts:{n:6,cx:PF_W*0.5,cy:PF_H*0.30,rad:120,spin:0.92,shrink:0.5,hold:4.6,fcount:5,fperiod:0.5,strength:5600,swirl:10200,hue:206,halvePower:true}},
-                  {wave:'sideSweep',  opts:{n:7,side:'right',y:64,yStep:16,spacing:0.18,hue:218,halvePower:true,sparse:true}, delay:1.0} ]}, {waitClear:true}, {wait:1.2},
+                  {wave:'sideSweep',  opts:{n:7,side:'right',y:64,yStep:16,spacing:0.18,hue:218,halvePower:true,sparse:true}, delay:1.0} ]}, {waitClear:true}, {wait:4},
       // ── MIDBOSS 風神 ── dedicated midboss5 BGM, DEFEATED (bossDefeat → death explosion + drops)
       {banner:'WARNING'}, {sfx:'warn'}, {music:'midboss'},
       {boss:'fujin'},
       {music:'stage'}, {wait:CALM_BEFORE_BOSS},
       // post-midboss road: a turret pair (counter-spiral steel — storm-fitting) braced by a sheared drifter lane
       {parallel:[ {wave:'turrets',  opts:{xs:[PF_W*0.28,PF_W*0.72],y:124,hold:5.0,hue:206}},
-                  {wave:'drifters', opts:{n:11,x:PF_W*0.5,band:PF_W*0.5,amp:26,spacing:0.34,speed:54,speedJit:0.9,hue:218,halvePower:true,sparse:true}, delay:1.0} ]}, {waitClear:true}, {wait:WAVE_GAP},
+                  {wave:'drifters', opts:{n:11,x:PF_W*0.5,band:PF_W*0.5,amp:26,spacing:0.34,speed:54,speedJit:0.9,hue:218,halvePower:true,sparse:true}, delay:1.0} ]}, {wait:WAVE_GAP},   // timer-paced (no waitClear)
       // a COUNTER-spun PULSING vortex ring (well OFF → expandingRings, the swirl-free firing read) + a sheared drifter lane
       {parallel:[ {wave:'vortexRing', opts:{n:6,cx:PF_W*0.5,cy:PF_H*0.30,rad:120,spin:0.7,dir:-1,well:false,accel:80,fcount:4,fperiod:0.6,hold:4.2,hue:214,halvePower:true,sparse:true}},
-                  {wave:'drifters',   opts:{n:10,x:PF_W*0.24,band:PF_W*0.32,amp:24,spacing:0.34,speed:52,speedJit:0.8,hue:222,halvePower:true,sparse:true}, delay:1.4} ]}, {waitClear:true}, {wait:WAVE_GAP},
+                  {wave:'drifters',   opts:{n:10,x:PF_W*0.24,band:PF_W*0.32,amp:24,spacing:0.34,speed:52,speedJit:0.8,hue:222,halvePower:true,sparse:true}, delay:1.4} ]}, {wait:6},   // timer-paced (no waitClear)
       // ── 山場 (pre-final, HARD) ── DOUBLE COUNTER-ROTATING vortex rings (双つ巴): two phase-locked rings with OPPOSED spin
       // + opposed well swirl, side by side — the road's true peak and a direct foreshadow of the boss's "Twin Vortices"
       {parallel:[ {wave:'vortexRing', opts:{n:5,cx:PF_W*0.32,cy:PF_H*0.32,rad:92,spin:0.95,dir:1,shrink:0.46,hold:5.0,fcount:4,fperiod:0.54,wellR:80,strength:5400,swirl:10000,hue:206,halvePower:true,sparse:true}},

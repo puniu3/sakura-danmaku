@@ -30,3 +30,7 @@ endurance-demo.html
 # Bomb-item differentiation harness (throwaway; port the chosen token look into
 # index.html drawItems on 反映, then this can be deleted)
 bomb-item-demo.html
+
+# Gravity-well-bends-items experiment harness (throwaway prototype; port the chosen
+# behaviour into index.html's applyGravity/updateItems on 反映, then this can be deleted)
+well-item-demo.html
