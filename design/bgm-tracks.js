@@ -22,6 +22,10 @@ const SCALES = {
   Amaj:  [1,2,4,6,8,9,11],   // A major / D Lydian collection (3 sharps): A B C# D E F# G#   (Stage 4 road + boss — bright dawn)
   Fsharm:[1,2,5,6,8,9,11],   // F# harmonic minor: F# G# A B C# D E#   (Stage 4 midboss 山姥 — cold gate-keeper, aug-2nd D↔E#)
   Cmaj:  [0,2,4,5,7,9,11],   // C major   (Stage 4 boss daybreak key-lift, +3 from A major)
+  Gdor:  [0,2,4,5,7,9,10],   // G Dorian: G A Bb C D E F   (Stage 5 road — modal, restless wind; bright IV=C is the Dorian colour)
+  Bharm: [1,2,4,6,7,10,11],  // B harmonic minor: B C# D E F# G A#   (Stage 5 midboss 風神 — tense gatekeeper, aug-2nd G↔A#)
+  Bphrygdom: [0,3,4,6,7,9,11], // B Phrygian dominant: B C D# E F# G A   (Stage 5 boss 須佐之男 — fierce exotic storm, b2=C menace)
+  Ephrygdom: [0,2,4,5,8,9,11], // E Phrygian dominant: E F G# A B C D   (Stage 5 boss climax lift, +5 from B phryg-dom)
 };
 function parseChord(sym) {
   let bass = null, s = sym;
@@ -639,7 +643,146 @@ const BOSS4 = {
   arrangement: ['intro','A1','A2','B','bridge','climax','A3','outro'],
 };
 
-const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER, stage2: STAGE2, boss2: BOSS2, stage3: STAGE3, boss3: BOSS3, stage4: STAGE4, midboss4: MIDBOSS4, boss4: BOSS4 };
+// ================================================================ STAGE 5
+// "Tempest Road" (高天原の道) — G Dorian, 130 BPM. The cloud sea before the storm's eye. A modal, restless
+// road: the bright Dorian IV (C major) over a minor home gives wind-blown motion that's neither sweet nor
+// grim. The hook is a CIRCLING ostinato (rises, curls, falls back) — the spinning vortex put to a tune;
+// a fresh root (G) and modal colour set it apart from the four roads before. DRAFT — awaiting user audition.
+const S5_HOOK = [
+  [0,67],[4,70],[6,72],[8,74],[12,72],[14,70],   // G Bb C D  C Bb — rise and curl back (the orbiting motif)
+  [16,69],[20,72],[24,74],[28,76],                // A C D E
+  [32,77],[36,76],[38,74],[40,72],[44,70],        // F E D C Bb — fall
+  [48,74],[52,72],[56,70],[60,69],                // D C Bb A — settle
+];
+const S5_HOOK2 = [ // variation — hangs open on D (the modal 5th)
+  [0,67],[4,70],[6,72],[8,74],[12,76],
+  [16,77],[20,76],[24,74],[28,72],
+  [32,70],[36,72],[40,74],[44,76],
+  [48,72],[52,74],[56,76],[60,74],
+];
+const S5_B = [ // 8-bar lift, upper register
+  [0,79],[4,82],[8,84],[12,81],[16,79],[24,76],
+  [32,77],[40,79],[48,81],[56,84],
+  [64,82],[72,79],[80,77],[88,76],
+  [96,74],[104,77],[112,79],[120,82],
+];
+const S5_BRIDGE = [ [0,74],[8,72],[16,70],[24,69],[32,76],[40,74],[48,72],[56,70] ];
+const S5_OUTRO  = [ [0,81],[4,79],[8,77],[12,76],[16,74],[20,72],[24,70],[28,69],[32,72],[40,69],[48,76],[56,74] ];
+const STAGE5 = {
+  title: 'Tempest Road', keyName: 'G Dorian', bpm: 130, gain: 0.55,
+  // cool, windy timbre: a saw-led triangle lead with a sine octave shimmer, a glassy arp, a saw bass, a wide pad.
+  voices: {
+    lead: { layers:[ { type:'triangle', octave:0, detune:0, gain:1.0 }, { type:'sawtooth', octave:0, detune:8, gain:0.34, filter:'lowpass', filterFreq:2200 }, { type:'sine', octave:1, detune:0, gain:0.22 } ], atk:0.005, dec:0.06, sus:0.52, rel:0.15, maxGate:6 },
+    arp:  { layers:[ { type:'triangle', octave:1, detune:0, gain:1.0 } ], atk:0.002, dec:0.03, sus:0.13, rel:0.06, filter:'lowpass', filterFreq:3200, maxGate:1 },
+    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.06, sus:0.55, rel:0.1, filter:'lowpass', filterFreq:920, maxGate:3 },
+    pad:  { octave:1, voices:3, detune:10, type:'sawtooth', atk:0.1, dec:0.14, sus:0.72, rel:0.42, filter:'lowpass', filterFreq:1750 } },
+  gains: { lead:0.135, harm:0.07, counter:0.075, arp:0.055, bass:0.15, sub:0.12, pad:0.052 },
+  sections: {
+    intro: makeSection({ bars:4, scale:'Gdor', chords:['Gm','Gm','Bb','C'], bassStyle:'half', arpRate:2, groove:'introTick', sub:true, crash:true }),
+    A:     makeSection({ bars:8, scale:'Gdor', chords:['Gm','Bb','C','Dm','Gm','Bb','F','C'], lead:cat(S5_HOOK, off(64,S5_HOOK2)), bassStyle:'pump8', arpRate:2, groove:'four', sub:true }),
+    A2:    makeSection({ bars:8, scale:'Gdor', chords:['Gm','Bb','C','Dm','Gm','Am','F','C'], lead:cat(S5_HOOK, off(64,S5_HOOK2)), harm:true, bassStyle:'pump8', arpRate:2, groove:'four', sub:true }),
+    B:     makeSection({ bars:8, scale:'Gdor', chords:['C','Dm','Bb','Gm','C','Am','F','C'], lead:S5_B, counter:true, bassStyle:'pump8', arpRate:1, groove:'four', sub:true, crash:true }),
+    bridge:makeSection({ bars:4, scale:'Gdor', chords:['Am','Bb','Gm','C'], lead:S5_BRIDGE, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
+    A2b:   makeSection({ bars:8, scale:'Gdor', chords:['Gm','Bb','C','Dm','Gm','Am','F','C'], lead:cat(S5_HOOK, off(64,S5_HOOK2)), harm:true, counter:true, bassStyle:'pump8', arpRate:1, groove:'four', sub:true, crash:true }),
+    outro: makeSection({ bars:4, scale:'Gdor', chords:['Gm','Bb','F','C'], lead:S5_OUTRO, bassStyle:'pump8', arpRate:1, groove:'four', sub:true, crash:true }),
+  },
+  arrangement: ['intro','A','A2','B','bridge','A2b','outro'],
+};
+
+// ================================================================ STAGE 5 MIDBOSS
+// "Wind Gate" (風の門) — B harmonic minor, 138 BPM. The wind-bag gatekeeper 風神 who bars the way to the eye.
+// B harmonic minor's augmented-2nd shimmer (b6 G ↔ #7 A#) gives a tense, circling menace, a fresh root, an
+// angular gust hook over a relentless gallop. Distinct from S4's F#-minor gatekeeper. DRAFT — awaiting audition.
+const M5_HOOK = [
+  [0,71],[4,74],[6,73],[8,71],          // B D C# B        — a circling gust motif
+  [16,78],[20,79],[24,82],[26,79],      // F# G A# G        — the aug-2nd shimmer G↔A#
+  [32,76],[36,74],[40,73],[44,71],      // E D C# B         — descent
+  [48,78],[52,73],[56,71],              // F# C# B          — cadence
+];
+const M5_HOOK2 = [
+  [0,83],[4,86],[6,85],[8,83],
+  [16,79],[20,82],[24,78],[28,79],
+  [32,76],[36,78],[40,74],[44,73],
+  [48,71],[52,74],[56,78],[60,71],
+];
+const M5_B = [
+  [0,90],[8,91],[12,88],
+  [16,86],[24,83],[28,85],
+  [32,82],[40,83],[48,86],[56,90],
+  [64,91],[72,88],[80,86],[88,83],
+  [96,85],[104,86],[112,88],[120,90],
+];
+const M5_BRIDGE = [ [0,74],[8,79],[16,82],[24,79],[32,78],[40,74],[48,73],[56,71] ];
+const M5_OUTRO  = [ [0,83],[8,79],[16,82],[24,78],[32,76],[40,74],[48,71] ];
+const MIDBOSS5 = {
+  title: 'Wind Gate', keyName: 'B harmonic minor', bpm: 138, gain: 0.58,
+  // cold tense timbre: saw+square lead, a square counter, a square arp, a gritty saw bass, a dark forward pad.
+  voices: {
+    lead: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:0.9, filter:'lowpass', filterFreq:2500 }, { type:'square', octave:0, detune:7, gain:0.5, filter:'lowpass', filterFreq:2000 } ], atk:0.004, dec:0.05, sus:0.42, rel:0.12, maxGate:5 },
+    counter: { layers:[ { type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:1900 } ], atk:0.005, dec:0.04, sus:0.36, rel:0.1, maxGate:4 },
+    arp: { layers:[ { type:'square', octave:0, detune:7, gain:1.0 } ], atk:0.002, dec:0.025, sus:0.14, rel:0.05, filter:'lowpass', filterFreq:3000, maxGate:1 },
+    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.05, sus:0.55, rel:0.08, filter:'lowpass', filterFreq:880, maxGate:3 },
+    pad: { octave:0, voices:3, detune:11, type:'sawtooth', atk:0.08, dec:0.13, sus:0.66, rel:0.38, filter:'lowpass', filterFreq:1400 } },
+  gains: { lead:0.14, harm:0.075, counter:0.085, arp:0.06, bass:0.165, sub:0.12, pad:0.05, hat:1.05 },
+  sections: {
+    intro:  makeSection({ bars:4, scale:'Bharm', chords:['Bm','Bm','G','F#'], bassStyle:'half', arpRate:1, groove:'introTick', sub:true, crash:true }),
+    A:      makeSection({ bars:8, scale:'Bharm', chords:['Bm','Bm','Em','F#','Bm','G','F#','Bm'], lead:cat(M5_HOOK, off(32,M5_HOOK), off(64,M5_HOOK), off(96,M5_HOOK2)), counter:true, bassStyle:'walk8', arpRate:2, groove:'midGroove', sub:true }),
+    A2:     makeSection({ bars:8, scale:'Bharm', chords:['Bm','Bm','Em','F#','Bm','G','F#7','Bm'], lead:cat(M5_HOOK, off(32,M5_HOOK), off(64,M5_HOOK), off(96,M5_HOOK2)), harm:true, counter:true, bassStyle:'gallop', arpRate:2, groove:'midGallop', sub:true, crash:true }),
+    B:      makeSection({ bars:8, scale:'Bharm', chords:['Em','G','F#','Bm','Em','G','F#','F#'], lead:M5_B, bassStyle:'pump8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
+    bridge: makeSection({ bars:4, scale:'Bharm', chords:['Em','F#','Bm','F#'], lead:M5_BRIDGE, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
+    outro:  makeSection({ bars:4, scale:'Bharm', chords:['Em','F#','Bm','Bm'], lead:M5_OUTRO, bassStyle:'walk8', arpRate:1, groove:'introTick', sub:true }),
+  },
+  arrangement: ['intro','A','A2','B','bridge','A2','B','outro'],
+};
+
+// ================================================================ STAGE 5 BOSS
+// "God of Storms" (須佐之男) — B Phrygian dominant, key-lift to E Phrygian dominant (+5) at the climax, 152 BPM.
+// The raging storm god: the b2 (C) over a B-major-ish home is the fierce, exotic Phrygian-dominant menace; a
+// driving fanfare hook of stormy leaps, then the modulation up +5 as the tempest breaks. An independent anthem —
+// not the bright S4 daybreak reshaped (this is dark-exotic, lifts via Phrygian dominant, not major). DRAFT — audition.
+const B5_HOOK = [
+  [0,71],[2,72],[4,75],[8,76],[10,79],[12,78],[14,75],   // B C D# E  G F# D#  — fierce rise (the b2 C bites)
+  [16,72],[18,76],[20,81],[24,79],[26,78],[28,76],        // C E A  G F# E
+];
+const B5_CLOSE = [ [0,83],[4,79],[8,78],[12,76],[16,75],[20,76],[24,78],[28,75] ];   // B6 G F# E D# E F# D#
+const B5_B = [ // upper-register lift
+  [0,88],[4,87],[8,84],[12,83],[16,81],[24,78],
+  [32,83],[40,84],[48,87],[56,88],
+  [64,87],[72,84],[80,81],[88,79],
+  [96,76],[104,81],[112,84],[120,88],
+];
+const B5_BRIDGE = [ // hush then a leading climb into the +5 modulation
+  [0,71],[8,75],[16,76],[24,75],
+  [32,72],[40,71],[48,72],[56,75],
+  [64,76],[72,78],[80,79],[88,81],
+  [96,83],[104,84],[112,87],[120,88],
+];
+const B5_OUTRO = [ [0,71],[2,72],[6,76],[12,79],[16,78],[24,76],[32,75],[48,76] ];
+const BOSS5 = {
+  title: 'God of Storms', keyName: 'B Phryg-dom → E', bpm: 152, gain: 0.62,
+  // fierce powerful timbre: triangle+saw+octave lead, a triangle harm, a square counter, a square arp, a driving saw bass, a wide pad.
+  voices: {
+    lead: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:2700 }, { type:'triangle', octave:0, detune:-9, gain:0.5 }, { type:'square', octave:1, detune:0, gain:0.2, filter:'lowpass', filterFreq:3200 } ], atk:0.005, dec:0.05, sus:0.5, rel:0.13, maxGate:6 },
+    harm: { layers:[ { type:'triangle', octave:0, detune:-4, gain:1.0 } ], atk:0.007, dec:0.05, sus:0.45, rel:0.14, filter:'lowpass', filterFreq:2600, maxGate:6 },
+    counter: { layers:[ { type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:2000 } ], atk:0.006, dec:0.05, sus:0.4, rel:0.12, maxGate:5 },
+    arp: { layers:[ { type:'square', octave:0, detune:7, gain:1.0 } ], atk:0.002, dec:0.025, sus:0.15, rel:0.05, filter:'lowpass', filterFreq:3300, maxGate:1 },
+    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.05, sus:0.6, rel:0.08, filter:'lowpass', filterFreq:980, maxGate:3 },
+    pad: { octave:0, voices:3, detune:11, type:'sawtooth', atk:0.08, dec:0.13, sus:0.7, rel:0.4, filter:'lowpass', filterFreq:1500 } },
+  gains: { lead:0.145, harm:0.08, counter:0.085, arp:0.06, bass:0.17, sub:0.14, pad:0.056, kick:1.1, snare:1.05, crash:1.05 },
+  sections: {
+    intro:  makeSection({ bars:8, scale:'Bphrygdom', chords:['B','B','F#','F#','Em','Em','F#','F#'], lead:cat(B5_HOOK, off(64,B5_HOOK)), harm:true, bassStyle:'half', arpRate:2, groove:'fourLite', sub:true, crash:true }),
+    A1:     makeSection({ bars:8, scale:'Bphrygdom', chords:['B','Em','F#','G','B','Em','C','B'], lead:cat(B5_HOOK, off(32,B5_HOOK), off(64,B5_HOOK), off(96,B5_CLOSE)), bassStyle:'drive8', arpRate:1, groove:'bossDrive', sub:true, crash:true }),
+    A2:     makeSection({ bars:8, scale:'Bphrygdom', chords:['B','Em','F#','G','B','Am','C','B'], lead:cat(B5_HOOK, off(32,B5_HOOK), off(64,B5_HOOK), off(96,B5_CLOSE)), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossDrive', sub:true, crash:true }),
+    B:      makeSection({ bars:8, scale:'Bphrygdom', chords:['Em','B','F#','G','Em','B','C','B'], lead:B5_B, harm:true, counter:true, bassStyle:'pump8', arpRate:1, groove:'bossDrive', sub:true, crash:true }),
+    bridge: makeSection({ bars:8, scale:null, chords:['Em','Em','C','B','Am','Am','F#7','F#7'], lead:B5_BRIDGE, bassStyle:'half', arpRate:2, groove:'bossBridge', sub:true }),
+    climax: makeSection({ bars:8, scale:'Ephrygdom', chords:['E','Am','B','C','E','Dm','F','E'], lead:cat(transpose(B5_HOOK,5), off(32,transpose(B5_HOOK,5)), off(64,transpose(B5_HOOK,5)), off(96,transpose(B5_CLOSE,5))), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
+    A3:     makeSection({ bars:8, scale:'Bphrygdom', chords:['B','Em','F#','G','B','Em','C','B'], lead:cat(B5_HOOK, off(32,B5_HOOK), off(64,B5_HOOK), off(96,B5_CLOSE)), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
+    outro:  makeSection({ bars:4, scale:null, chords:['C','F#','B','B'], lead:B5_OUTRO, bassStyle:'half', arpRate:2, groove:'bossDrive', sub:true, crash:true }),
+  },
+  arrangement: ['intro','A1','A2','B','bridge','climax','A3','outro'],
+};
+
+const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER, stage2: STAGE2, boss2: BOSS2, stage3: STAGE3, boss3: BOSS3, stage4: STAGE4, midboss4: MIDBOSS4, boss4: BOSS4, stage5: STAGE5, midboss5: MIDBOSS5, boss5: BOSS5 };
 
 // ---------------------------------------------------------------- validation (Node only)
 function validateTracks() {
