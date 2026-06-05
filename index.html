@@ -2901,7 +2901,7 @@ const YATAGARASU_SPEC = { name:'Yatagarasu', design:'yatagarasu', hue:44, enterF
       // P4 spell「日輪」— multiple 日輪 cross slowly from alternating sides; pellet rings fill the gaps; weave between
       // the solar cores (small hitR) and the rings. 巨大弾が主役.
       { kind:'spell', name:'Solar Sign "Nichirin"', hp:2050, drops:['power','point','point','point'], cutinHue:46, body:'raw', raw:function*(b){
-          Director.fork(function*(){ let s=0; while(true){ const L=(s%2===0); const ly=clamp(140+(s%4)*110+rng.range(-20,30),120,500); spawnSun({x:L?-56:PF_W+56,y:ly,r:46,hitR:12,hue:46,vx:L?42:-42,vy:rng.range(2,16)}); s++; yield* waitT(2.0); } },b);   // spawn band cycles top→bottom (y 140/250/360/470) AND every 日輪 drifts DOWN (vy 2..16) so the lowest band + the downward sweep reach the very bottom — the bottom is no longer a safe camp
+          Director.fork(function*(){ let s=0; while(true){ const L=(s%2===0); const ly=clamp(140+(s%4)*110+rng.range(-20,30),120,500); spawnSun({x:L?-56:PF_W+56,y:ly,r:46,hitR:12,hue:46,vx:L?80:-80,vy:rng.range(2,16)}); s++; yield* waitT(2.0); } },b);   // spawn band cycles top→bottom (y 140/250/360/470) AND every 日輪 drifts DOWN (vy 2..16) so the lowest band + the downward sweep reach the very bottom — the bottom is no longer a safe camp. vx ±80 (was ±42): the 主役 日輪 now crosses to screen-centre in ~3.4s (was ~6.5s) so a centre-camp 撃ち込み kill can't end the phase before the star sun ever arrives.
           while(true){ ring(b,{count:20,speed:95,hue:40,style:'pellet',rot:T*0.3}); yield* waitT(1.15); ring(b,{count:16,speed:78,accel:42,hue:50,style:'pellet',rot:-T*0.3}); yield* waitT(1.15); } },
         onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,130,1.0,EASE.out); },b); } },
       // P5 nonspell — counter-rotating reversed double-spiral feathers + periodic feather bursts (中盤の圧)
@@ -2909,9 +2909,9 @@ const YATAGARASU_SPEC = { name:'Yatagarasu', design:'yatagarasu', hue:44, enterF
           Director.fork(function*(){ while(true){ burst(b,{count:22,speed:120,hue:(40+T*40)%360,style:'kite'}); yield* waitT(1.9); } },b);
           while(true){ spiral(b,{angle:a,arms:4,speed:130,hue:(44+T*50)%360,style:'small'}); spiral(b,{angle:-a*1.3,arms:4,speed:130,hue:(20+T*50)%360,style:'small'}); a+=0.30; yield* waitT(0.05); } },
         onEnter:wander(PF_W*0.5,140,92,36,1.5) },
-      // P6 spell「御来光」— 2 opposed beams sweep CONTINUOUSLY, then BLINK off for a BRIEF ~0.55s gap. That short
-      // hole-in-the-traffic is the window the player times a dash through (跨ぎ — like crossing a highway), NOT the
-      // long leisurely pause it used to be. Beams persist (fire:9999, reaped at phase end) and only flip to a short
+      // P6 spell「御来光」— 2 opposed beams sweep CONTINUOUSLY, then BLINK off for a ~1.1s gap. That
+      // hole-in-the-traffic is the window the player times a dash through (跨ぎ — like crossing a highway); it's a
+      // forgiving-but-not-leisurely window. Beams persist (fire:9999, reaped at phase end) and only flip to a short
       // warn for the gap. Rotation stays modest; spiral-feather density unchanged. Distinct from P7's open orbit.
       { kind:'spell', name:'Sign "First Light"', hp:2300, drops:['power','point','point','point'], cutinHue:48, body:'raw', raw:function*(b){
           Director.fork(function*(){ let base=HALFPI, sweep=0; const beams=[];
@@ -2919,8 +2919,8 @@ const YATAGARASU_SPEC = { name:'Yatagarasu', design:'yatagarasu', hue:44, enterF
               const setAngs=()=>{ for(let k=0;k<beams.length;k++){ const L=beams[k]; if(L&&L.alive) L.ang=base+k*Math.PI+sweep; } };
               while(true){
                 let t0=T; while(T-t0 < 2.4){ sweep+=0.26*STEP; setAngs(); yield; }                                  // ~2.4s of lethal sweep (the moving wall of cars)
-                for(const L of beams) if(L&&L.alive){ L.state='warn'; L.t=0; L.warnDur=0.55; }                       // BLINK to a short telegraph = the brief gap — dash NOW
-                t0=T; while(T-t0 < 0.57){ sweep+=0.26*STEP; setAngs(); yield; }                                       // ~0.55s non-lethal, then integrateLasers auto-refires the beams
+                for(const L of beams) if(L&&L.alive){ L.state='warn'; L.t=0; L.warnDur=1.1; }                        // BLINK to a telegraph = the gap — dash NOW (1.1s, was 0.55s: a wider, more forgiving crossing window)
+                t0=T; while(T-t0 < 1.12){ sweep+=0.26*STEP; setAngs(); yield; }                                       // ~1.1s non-lethal, then integrateLasers auto-refires the beams
               } },b);
           let a=0,k2=0; while(true){ if(k2%5===0){ spiral(b,{angle:a,arms:3,speed:120,hue:(40+T*40)%360,style:'rice'}); a+=0.8; } k2++; yield; } },
         onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,130,1.0,EASE.out); },b); } },
