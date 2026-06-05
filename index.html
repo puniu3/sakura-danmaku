@@ -340,18 +340,23 @@ function integrateWells(dt){ const it=wells.items, n=wells.count;
 // (b.av===0 AND no b.update = integrateBullets' branch 3): polar-curve bullets (b.av!==0) recompute vx/vy from
 // dir/speed every tick and would simply ignore Δv, and b.update bullets steer themselves. So Stage-5 spirals/
 // sprays MUST be fired av:0 (straight) to feel the field. Self-targets enemyBullets only (player shots untouched).
-function applyGravity(dt){ const wit=wells.items, wn=wells.count; if(!wn) return;
-  const bit=enemyBullets.items, bn=enemyBullets.count; if(!bn) return;
+// Bend ONE free-flying {x,y,vx,vy} by every ACTIVE well (the same radial+tangential field bullets feel).
+// setDir keeps oriented sprites (rice/arrow) pointing along the bent path; items pass setDir=false (they don't render by .dir).
+// Early-returns on wells.count===0 → complete no-op (Stages 1-4 / item callers stay byte-identical, golden-inert).
+function applyWellsTo(o,dt,setDir){ const wit=wells.items, wn=wells.count; if(!wn) return;
   for(let wi=0;wi<wn;wi++){ const w=wit[wi]; if(!w.alive||w.state!=='active'||(w.strength===0&&w.swirl===0)) continue;
-    const wx=w.x, wy=w.y, R=w.R, R2=R*R, invR=1/R, k=WELL_SOFTEN, str=w.strength, sw=w.swirl;
-    for(let bi=0;bi<bn;bi++){ const b=bit[bi]; if(!b.alive||b.av!==0||b.update) continue;
-      const dx=wx-b.x, dy=wy-b.y, d2=dx*dx+dy*dy; if(d2>R2||d2<1e-4) continue;   // skip out-of-range AND the degenerate exact-centre (d2≈0): there the radial/tangential unit vector is undefined → it nets zero force ("stuck"); a moving bullet leaves the centre next tick and the field grabs it then (honours the no-dead-point fairness rule)
-      const d=Math.sqrt(d2), ux=dx/d, uy=dy/d, inv=1/(d+k), taper=1-d*invR;   // taper→0 at the rim so a bullet gets no velocity step crossing R (smooth field edge)
-      let ar=str*inv*taper, at=sw*inv*taper;
-      let ax=ar*ux + at*(-uy), ay=ar*uy + at*ux;                                       // radial (toward centre) + tangential (perpendicular) accel
-      const am=Math.sqrt(ax*ax+ay*ay); if(am>WELL_AMAX){ const s=WELL_AMAX/am; ax*=s; ay*=s; }
-      b.vx+=ax*dt; b.vy+=ay*dt; b.dir=Math.atan2(b.vy,b.vx);                            // keep oriented sprites (rice/arrow) pointing along the bent path
-    } } }
+    const R=w.R, R2=R*R, invR=1/R, k=WELL_SOFTEN, str=w.strength, sw=w.swirl;
+    const dx=w.x-o.x, dy=w.y-o.y, d2=dx*dx+dy*dy; if(d2>R2||d2<1e-4) continue;   // skip out-of-range AND the degenerate exact-centre (d2≈0): the unit vector is undefined there → next tick the (moving) target leaves the core and the field grabs it (no dead point)
+    const d=Math.sqrt(d2), ux=dx/d, uy=dy/d, inv=1/(d+k), taper=1-d*invR;   // taper→0 at the rim so crossing R imparts no velocity step (smooth field edge)
+    let ar=str*inv*taper, at=sw*inv*taper;
+    let ax=ar*ux + at*(-uy), ay=ar*uy + at*ux;                                       // radial (toward centre) + tangential (swirl); swirl>strength → orbit-out, never a death-clump
+    const am=Math.sqrt(ax*ax+ay*ay); if(am>WELL_AMAX){ const s=WELL_AMAX/am; ax*=s; ay*=s; }
+    o.vx+=ax*dt; o.vy+=ay*dt; if(setDir) o.dir=Math.atan2(o.vy,o.vx);
+  } }
+function applyGravity(dt){ const wn=wells.count; if(!wn) return;
+  const bit=enemyBullets.items, bn=enemyBullets.count; if(!bn) return;
+  for(let bi=0;bi<bn;bi++){ const b=bit[bi]; if(!b.alive||b.av!==0||b.update) continue;   // only STRAIGHT bullets (b.av===0 & no b.update); polar/steered bullets ignore Δv
+    applyWellsTo(b,dt,true); } }
 function collidePlayerWells(){ if(!player||player.dead||player.invuln>0) return;
   const px=player.x, py=player.y, it=wells.items, n=wells.count;
   for(let i=0;i<n;i++){ const w=it[i]; if(!w.alive||w.state!=='active'||w.coreR<=0) continue;
@@ -429,6 +434,7 @@ const Audio = (function(){
   function sfxEnemyDeath(){ if(!ctx) return; const t=now(); noise({t0:t,filter:'bandpass',filterFreq:2400,filterFreq1:300,q:1.2,peak:0.2,atk:0.002,rel:0.22,dur:0.26}); tone({t0:t,type:'sawtooth',f0:rnd(420,500),f1:90,glideExp:true,peak:0.14,atk:0.002,dec:0.04,sus:0.3,rel:0.18,dur:0.26,filter:'lowpass',filterFreq:2000,filterFreq1:500}); }
   function sfxGraze(){ if(!ctx) return; const t=now(); tone({t0:t,type:'sine',f0:1760,f1:2640,peak:0.1,atk:0.001,dec:0.01,sus:0.5,rel:0.05,dur:0.07}); tone({t0:t+0.005,type:'sine',f0:2640,peak:0.05,atk:0.001,dec:0.005,sus:0.4,rel:0.04,dur:0.05}); }
   function sfxBomb(){ if(!ctx) return; const t=now(); tone({t0:t,type:'sawtooth',f0:1200,f1:80,glideExp:true,peak:0.3,atk:0.005,dec:0.1,sus:0.6,rel:0.5,dur:0.85,filter:'lowpass',filterFreq:3000,filterFreq1:400}); tone({t0:t,type:'sine',f0:160,f1:50,glideExp:true,peak:0.34,atk:0.005,dec:0.1,sus:0.5,rel:0.5,dur:0.8}); noise({t0:t,filter:'lowpass',filterFreq:6000,filterFreq1:300,peak:0.24,atk:0.01,rel:0.7,dur:0.8}); }
+  function sfxBossDefeat(){ if(!ctx) return; const t=now(); noise({t0:t,filter:'bandpass',filterFreq:6000,filterFreq1:120,q:2.2,peak:0.34,atk:0.04,rel:0.5,dur:0.8}); noise({t0:t,filter:'lowpass',filterFreq:5000,filterFreq1:300,peak:0.16,atk:0.02,rel:0.6,dur:0.75}); tone({t0:t,type:'sine',f0:mtof(72),f1:mtof(45),glideExp:true,peak:0.06,atk:0.03,dec:0.1,sus:0.6,rel:0.4,dur:0.7}); }   /* 消散の風 — a pure filtered-noise sweep falling away (wind/energy dissipating downward). Dedicated BOSS-DEFEAT cue (candidate 14, user-picked from defeat-demo.html); distinct from the bomb's saw/sub blast. */
   function sfxPlayerDeath(){ if(!ctx) return; const t=now(); noise({t0:t,filter:'lowpass',filterFreq:4000,filterFreq1:200,peak:0.3,atk:0.002,rel:0.5,dur:0.55}); tone({t0:t,type:'triangle',f0:440,f1:70,glideExp:true,peak:0.26,atk:0.004,dec:0.08,sus:0.5,rel:0.45,dur:0.7}); tone({t0:t,type:'sine',f0:120,f1:40,glideExp:true,peak:0.3,atk:0.004,dec:0.1,sus:0.5,rel:0.4,dur:0.6}); }
   function sfxSpellDeclare(){ if(!ctx) return; const t=now(); const chord=[57,60,64,69]; for(let i=0;i<chord.length;i++) tone({t0:t,type:'sawtooth',f0:mtof(chord[i]),peak:0.11,atk:0.004,dec:0.06,sus:0.5,rel:0.5,dur:0.7,filter:'lowpass',filterFreq:3500,filterFreq1:1400}); const shim=[76,79,83,88]; for(let j=0;j<shim.length;j++) tone({t0:t+0.04+j*0.05,type:'triangle',f0:mtof(shim[j]),peak:0.08,atk:0.002,dec:0.02,sus:0.3,rel:0.18,dur:0.22}); }
   function sfxItemGet(midi){ if(!ctx) return; const t=now(), m=midi||84; tone({t0:t,type:'square',f0:mtof(m),peak:0.1,atk:0.001,dec:0.02,sus:0.3,rel:0.06,dur:0.09}); tone({t0:t+0.05,type:'square',f0:mtof(m+7),peak:0.1,atk:0.001,dec:0.02,sus:0.3,rel:0.08,dur:0.12}); }
@@ -1548,12 +1554,12 @@ const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER,
     tone({t0:t,type:'sawtooth',f0:base*2.0,f1:base*0.9,glideExp:true,peak:0.08,atk:0.002,dec:0.05,sus:0.32,rel:0.1,dur:0.22,filter:'lowpass',filterFreq:3200,filterFreq1:1100});
     tone({t0:t,type:'sine',f0:base*1.2,f1:base*0.55,glideExp:true,peak:0.055,atk:0.001,dec:0.04,sus:0.28,rel:0.08,dur:0.18});
     noise({t0:t,filter:'bandpass',filterFreq:base*3.0,filterFreq1:base*1.0,q:1.6,peak:0.045,atk:0.001,rel:0.12,dur:0.14}); }
-  return { unlock, toggleMute, setMuted, isMuted, sfxShoot, sfxEnemyHit, sfxEnemyDeath, sfxGraze, sfxGrazeHit, sfxBomb, sfxPlayerDeath, sfxSpellDeclare, sfxItemGet, sfxExtend, sfxOneUpCadence, sfxBossWarn, sfxPowerShot, sfxBeam, playMusic, fadeOutMusic, suspendForHidden, resumeFromHidden };
+  return { unlock, toggleMute, setMuted, isMuted, sfxShoot, sfxEnemyHit, sfxEnemyDeath, sfxGraze, sfxGrazeHit, sfxBomb, sfxBossDefeat, sfxPlayerDeath, sfxSpellDeclare, sfxItemGet, sfxExtend, sfxOneUpCadence, sfxBossWarn, sfxPowerShot, sfxBeam, playMusic, fadeOutMusic, suspendForHidden, resumeFromHidden };
 })();
 
 // sfx shim (method-name facade used by systems/stage)
 const sfx = {
-  shoot:()=>Audio.sfxShoot(), powerShot:()=>Audio.sfxPowerShot(), bomb:()=>Audio.sfxBomb(), deathbomb:()=>Audio.sfxBomb(),
+  shoot:()=>Audio.sfxShoot(), powerShot:()=>Audio.sfxPowerShot(), bomb:()=>Audio.sfxBomb(), deathbomb:()=>Audio.sfxBomb(), bossDefeat:()=>Audio.sfxBossDefeat(),
   death:()=>Audio.sfxPlayerDeath(), graze:()=>Audio.sfxGraze(), grazeHit:()=>Audio.sfxGrazeHit(),
   item:(k,m)=>Audio.sfxItemGet(m), powerup:()=>Audio.sfxItemGet(), extend:()=>Audio.sfxExtend(), oneup:()=>Audio.sfxOneUpCadence(),
   capture:()=>Audio.sfxSpellDeclare(), enemyHit:()=>Audio.sfxEnemyHit(), enemyDeath:()=>Audio.sfxEnemyDeath(),
@@ -2842,7 +2848,7 @@ function updateItems(dt){ const pAlive=(player.state==='alive'||player.state==='
       const radial=vx*ux+vy*uy, minClose=ITEM_MAGNET_PULL*it.spd;
       if(radial<minClose){ const tx=vx-radial*ux, ty=vy-radial*uy, tlen=Math.hypot(tx,ty), maxTang=Math.sqrt(Math.max(0,it.spd*it.spd-minClose*minClose)), sc=tlen>0?Math.min(1,maxTang/tlen):0; vx=minClose*ux+tx*sc; vy=minClose*uy+ty*sc; it.dir=Math.atan2(vy,vx); }
       it.vx=vx; it.vy=vy;
-    } else { it.vy+=ITEM_GRAV*dt; if(it.vy>ITEM_TERMINAL) it.vy=ITEM_TERMINAL; it.vx*=0.992; if(it.spd!=null){ it.spd=null; it.dir=null; } }
+    } else { it.vy+=ITEM_GRAV*dt; if(it.vy>ITEM_TERMINAL) it.vy=ITEM_TERMINAL; it.vx*=0.992; if(it.spd!=null){ it.spd=null; it.dir=null; } applyWellsTo(it,dt,false); }   // free-falling items feel the 嵐の渦 too (radial pull + swirl orbit); ONLY in this free-fall branch — the magnet / POC auto-collect branch above fully recomputes vx/vy so the player magnet ALWAYS wins → items stay collectable. No-op when no well is live (Stages 1-4 unchanged).
     it.x+=it.vx*dt; it.y+=it.vy*dt;
     if(pAlive){ const ddx=it.x-player.x, ddy=it.y-player.y; if(ddx*ddx+ddy*ddy<=ITEM_COLLECT_R*ITEM_COLLECT_R){ collectItem(it); swapRemove(items,i); continue; } }
     if(it.y>PF_H+ITEM_DESPAWN_GRACE){ swapRemove(items,i); }
@@ -3131,13 +3137,14 @@ function waveVortexRing(opts){ return (function*(){
         well=opts.well!==false, fcount=opts.fcount||5, fperiod=opts.fperiod||0.6, halveP=!!opts.halvePower, sparse=!!opts.sparse;
   const t0=T, acc=well?0:(opts.accel||74), wellY=cy+(opts.wellDy!=null?opts.wellDy:118);   // the well sits BELOW the orbiting ring, NOT on it: the sprites' straight rings travel a clear stretch then visibly HOOK into the swirl. Co-locating the well on the emitters made the bend look like the bullets were simply fired at an angle from the start.
   if(well) placeWell({ x:cx, y:wellY, R:opts.wellR||76, strength:opts.strength||5400, swirl:dir*(opts.swirl||9800), coreR:0, warn:1.2, active:hold+1.6, fade:0.5, hue:189 });
+  const y0=-(SPAWN_MARGIN+rad0*0.78);   // the ring's vertical CENTRE starts high enough that even its LOWEST sprite (sin(base)=+1, protruding rad0*0.78 below centre) is fully off-screen → the whole ring SLIDES IN from the top. (was -SPAWN_MARGIN, which left lower-half sprites popping in mid-air at Y up to rad0*0.78-SPAWN_MARGIN.)
   for(let i=0;i<n;i++){ const base=i/n*TAU;
-    spawnEnemy({ x:cx+Math.cos(base)*rad0, y:-SPAWN_MARGIN+Math.sin(base)*rad0*0.78, hp:HP_POP_HEAVY*0.78, r:R_POP_HEAVY, hue:hue, score:1000,
+    spawnEnemy({ x:cx+Math.cos(base)*rad0, y:y0+Math.sin(base)*rad0*0.78, hp:HP_POP_HEAVY*0.78, r:R_POP_HEAVY, hue:hue, score:1000,
       drops:(sparse&&i%2!==0)?[]:(halveP?['power','point','point']:['power','power','point']), cancelOnDeath:0.4,
       coro:function*(e){
         const fc=Director.fork(function*(){ while(true){ ring(e,{count:fcount,speed:104,accel:acc,hue:hue,style:'small'}); yield* waitT(fperiod); } },e);   // straight rings (well ON → swirl-caught) or expandingRings (well OFF)
         while(true){ const dt2=T-t0; if(dt2>=hold+1.2) break;
-          const grow=clamp(dt2/1.2,0,1), shr=clamp((dt2-1.2)/Math.max(0.1,hold),0,1), rad=rad0*(1-shrink*shr), cyN=(-SPAWN_MARGIN)+(cy+SPAWN_MARGIN)*grow, a=base+dir*spin*dt2;
+          const grow=clamp(dt2/1.2,0,1), shr=clamp((dt2-1.2)/Math.max(0.1,hold),0,1), rad=rad0*(1-shrink*shr), cyN=y0+(cy-y0)*grow, a=base+dir*spin*dt2;
           e.x=cx+Math.cos(a)*rad; e.y=cyN+Math.sin(a)*rad*0.78; e._steered=true; yield; }   // descend-while-spinning (grow), then orbit + spiral inward (shr); _steered every tick
         Director.kill(fc);
         yield* exitOff(e,(i%2)?Math.PI*0.82:Math.PI*0.18,150);
@@ -3184,7 +3191,15 @@ function* runBoss(spec){ const boss=makeBoss(spec); hud.setBoss(boss);
   boss.invuln=false; if(twin) twin.invuln=false;
   for(let pi=0;pi<spec.phases.length;pi++){ const ph=spec.phases[pi]; boss.phaseIndex=pi; boss.phasesLeft=spec.phases.length-pi; yield* runPhase(boss,ph,pi);
     sfx.bomb&&sfx.bomb(); cancelBullets({all:true,toItems:CANCEL_TO_ITEM}); screenFlash('#ffffff',0.35); shake(6,0.3);
-    for(const d of (ph.drops||[])) dropItem(boss.x+rng.range(-20,20),boss.y+rng.range(-10,10),d);
+    // per-phase drops: an opt-in ph.dropSpread fans them across a band centred on the boss (with matching lateral pop) so
+    // they DON'T stack in the boss-centre column the NEXT phase may immediately flood (S5 須佐之男 P2→P3: dropped items fell
+    // straight down x≈216 into P3's centre-origin burst/spiral → forced hit to collect). dropSpread absent/0 = the old
+    // boss.x cluster, byte-identical (same dropItem call + rng draw order) → every other boss/stage unchanged.
+    { const _drops=ph.drops||[], _ds=ph.dropSpread||0;
+      for(let _i=0;_i<_drops.length;_i++){
+        if(_ds>0){ const _fx=(_drops.length>1)?(_i/(_drops.length-1)-0.5):0; const _x=clamp(boss.x+_fx*_ds+rng.range(-12,12),28,PF_W-28);
+          spawnItem(_drops[_i], _x, boss.y+rng.range(-10,10), _fx*120+rng.range(-40,40), -rng.range(40,90)); }
+        else dropItem(boss.x+rng.range(-20,20),boss.y+rng.range(-10,10),_drops[_i]); } }
     boss.invuln=true; boss.timer=null; hud.clearSpell(); yield* waitT(PHASE_HEAL); boss.invuln=false; }
   if(spec.retreat) yield* bossRetreat(boss,spec); else yield* bossDefeat(boss,spec);
 }
@@ -3219,7 +3234,7 @@ function* runPhase(boss,ph,pi){
   else { boss.survivalActive=false; boss.timer=null; while(boss.hp>0) yield; }
   Director.endGroup(g); lasers.clear(); wells.clear();   // tear down the phase's emitters AND any of its lasers/wells (sweeping beams & long-lived vortices must not leak into the next phase). No-op for laser/well-free phases.
 }
-function* bossDefeat(boss,spec){ sfx.bomb&&sfx.bomb(); boss.invuln=true; lasers.clear(); wells.clear(); const bodies=boss._twin?[boss,boss._twin]:[boss]; slowmo(SLOWMO_DEFEAT,SLOWMO_DEFEAT_DUR); shake(10,1.4); for(let i=0;i<6;i++){ for(const bd of bodies){ cancelBullets({x:bd.x,y:bd.y,radius:60+i*60,frac:1.0,toItems:true}); spawnDeathPuff(bd.x+rng.range(-30,30),bd.y+rng.range(-20,20),(bd.hue+i*40)%360); } yield* waitT(0.12); } screenFlash('#ffffff',0.9); for(let di=0;di<(spec.drops||[]).length;di++){ const bd=(boss._twin&&(di&1))?boss._twin:boss; dropItem(bd.x+rng.range(-40,40),bd.y+rng.range(-20,20),spec.drops[di]); }   /* twin (shared-HP): split the SAME total across BOTH sisters' positions → symmetric drops, no reward inflation */ if(boss._twin) boss._twin.dead=true; hud.clearBoss(); boss.dead=true; yield* waitT(1.2); }
+function* bossDefeat(boss,spec){ sfx.bossDefeat&&sfx.bossDefeat(); boss.invuln=true; lasers.clear(); wells.clear(); const bodies=boss._twin?[boss,boss._twin]:[boss]; slowmo(SLOWMO_DEFEAT,SLOWMO_DEFEAT_DUR); shake(10,1.4); for(let i=0;i<6;i++){ for(const bd of bodies){ cancelBullets({x:bd.x,y:bd.y,radius:60+i*60,frac:1.0,toItems:true}); spawnDeathPuff(bd.x+rng.range(-30,30),bd.y+rng.range(-20,20),(bd.hue+i*40)%360); } yield* waitT(0.12); } screenFlash('#ffffff',0.9); for(let di=0;di<(spec.drops||[]).length;di++){ const bd=(boss._twin&&(di&1))?boss._twin:boss; dropItem(bd.x+rng.range(-40,40),bd.y+rng.range(-20,20),spec.drops[di]); }   /* twin (shared-HP): split the SAME total across BOTH sisters' positions → symmetric drops, no reward inflation */ if(boss._twin) boss._twin.dead=true; hud.clearBoss(); boss.dead=true; yield* waitT(1.2); }
 
 // ---- boss descriptors (hoisted from stageScript; read-only data, shared instance) ----
 const MIDBOSS_SPEC = { name:'Ariel', design:'wisp', hue:140, enterFrom:{x:PF_W/2,y:-60}, enterTo:{x:PF_W/2,y:150}, score:80000, drops:['bomb','bigpower','point','point','point','point','power'],
@@ -3474,7 +3489,7 @@ const SUSANOO_SPEC = { name:'Susanoo', design:'susanoo', hue:212, enterFrom:{x:P
         onEnter:_sway(PF_W*0.38,PF_W*0.62,140,2.6) },
       // P2 spell「嵐の目」— ONE central HARMLESS vortex (follow:b); the full omni-spiral winds into a turning galaxy at
       // the eye = "space is bending"初出. Boss CENTRED & static so the swirl reads cleanly; spiral kept slippable.
-      { kind:'spell', name:'Storm Sign "Eye of the Tempest"', hp:2000, drops:['power','point','point','point'], cutinHue:206, body:'raw', raw:function*(b){
+      { kind:'spell', name:'Storm Sign "Eye of the Tempest"', hp:2000, drops:['power','point','point','point'], dropSpread:260, cutinHue:206, body:'raw', raw:function*(b){
           placeWell({ x:PF_W*0.5, y:PF_H*0.62, R:74, strength:7000, swirl:12500, coreR:0, warn:1.1, active:99999, fade:0.5, hue:189 });   // a SMALL bright eye LOW in the field (near the player) — NOT mounted on the boss. The boss's straight spiral descends from above and visibly whirls around it right in the player's dodging space → the gimmick 初出 reads as "space is bending HERE", not a curved shot up by the boss
           let a=0; while(true){ spiral(b,{angle:a,arms:4,speed:102,hue:(206+18*Math.sin(T*0.45)),style:'small'}); a+=0.17; yield* waitT(0.07); } },
         onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,PF_H*0.32,1.1,EASE.out); },b); } },
@@ -3730,9 +3745,10 @@ function* runStage(stage){
   if(stage.theme) setTheme(stage.theme);
   const diff=(run&&run.difficulty)||'normal';
   const M=stage.music||{}, music=name=>(M[name]!=null?M[name]:name);
+  const s5road = stage.id===5;   // S5 road is timer-paced (no waitClear) so a wave can spawn INSIDE the bomb's residual bossDot window → it gets mown down at the screen edge and reads as "never appeared". Cancel the lingering bomb DoT at each S5 ROAD wave switch only — {boss} entries never run this branch, so bomb-vs-boss DoT stays intact.
   for(const e of stage.timeline){
-    if(e.wave!=null)        yield* spawnWave(WAVES[e.wave](resolveWave(e.opts||{}, diff)));
-    else if(e.parallel)     yield* parallel(...e.parallel.map(p=> p.delay ? delayed(p.delay, WAVES[p.wave](resolveWave(p.opts||{}, diff))) : WAVES[p.wave](resolveWave(p.opts||{}, diff)) ));
+    if(e.wave!=null)        { if(s5road) player.bossDot=0; yield* spawnWave(WAVES[e.wave](resolveWave(e.opts||{}, diff))); }
+    else if(e.parallel)     { if(s5road) player.bossDot=0; yield* parallel(...e.parallel.map(p=> p.delay ? delayed(p.delay, WAVES[p.wave](resolveWave(p.opts||{}, diff))) : WAVES[p.wave](resolveWave(p.opts||{}, diff)) )); }
     else if(e.boss!=null)   yield* runBoss(resolveBoss(BOSSES[e.boss], diff));
     else if(e.wait!=null)   yield* waitT(e.wait);
     else if(e.waitClear)    yield* waitClear({minHp:e.minHp||0});
