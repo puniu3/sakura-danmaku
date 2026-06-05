@@ -260,8 +260,11 @@ function collideShotsEnemies(){
     const pierceable=owner.boss&&owner.survivalActive;   // endurance spell: only pierce-shots may connect
     if(owner.invuln&&!pierceable) continue;
     const ex=e.x,ey=e.y,er=e.r;
+    const _D=e.design?BOSS_DESIGNS[e.design]:null, shapes=(_D&&_D.hitShapes)||null, ssc=_D?_D.scale:1;   // extra hit circles (八咫烏's spread wings) tested alongside the body core; null for everything else → unchanged
     for(let i=0;i<sn;i++){ const s=sh[i]; if(!s.alive) continue; if(owner.invuln&&!s.pierceSpell) continue; const rr=er+s.r;
-      if(dist2(s.x,s.y,ex,ey)<=rr*rr){ onEnemyHit(e,s); if(s.pierce>0) s.pierce--; else s.alive=false; if(owner.dead) break; } } }
+      let hit=dist2(s.x,s.y,ex,ey)<=rr*rr;
+      if(!hit&&shapes){ for(let k=0;k<shapes.length;k++){ const sp=shapes[k], hrr=sp.r*ssc+s.r; if(dist2(s.x,s.y,ex+sp.dx*ssc,ey+sp.dy*ssc)<=hrr*hrr){ hit=true; break; } } }   // wing hit
+      if(hit){ onEnemyHit(e,s); if(s.pierce>0) s.pierce--; else s.alive=false; if(owner.dead) break; } } }
 }
 function collidePlayerEnemies(){
   if(!player||player.dead||player.invuln>0) return;
@@ -2054,7 +2057,14 @@ const BOSS_DESIGNS = {
   mizuchi: { draw:drawBossMizuchi, scale:1.0,  hitR:40 },
   twinYoi:      { draw:(c,t)=>drawBossTwin(c,t,265,false), scale:0.82, hitR:30 },   // 宵 — deep indigo sister (left)
   twinAkatsuki: { draw:(c,t)=>drawBossTwin(c,t,32,true),   scale:0.82, hitR:30 },   // 暁 — amber sister (right, mirrored)
-  yatagarasu:   { draw:drawBossYatagarasu, scale:1.0,  hitR:30 },   // 八咫烏 — three-legged sun-crow (Stage 4 boss)
+  // 八咫烏 — three-legged sun-crow (Stage 4 boss). hitR covers the body core; hitShapes add the SPREAD
+  // WINGS so player shots that visually land on the plumage register (3 overlapping circles per wing,
+  // x-mirrored, traced along the swept wing centreline ~local x6..90 / y up to ~-37 over the flap cycle —
+  // sized generously to absorb the flap sweep, player-favourable). Offsets are in the design's local
+  // (unscaled) frame; collideShotsEnemies scales them by design.scale (1.0 here).
+  yatagarasu:   { draw:drawBossYatagarasu, scale:1.0,  hitR:30,
+                  hitShapes:[ {dx:23,dy:-10,r:19}, {dx:49,dy:-19,r:18}, {dx:80,dy:-27,r:17},
+                              {dx:-23,dy:-10,r:19}, {dx:-49,dy:-19,r:18}, {dx:-80,dy:-27,r:17} ] },
   yamauba:      { draw:drawBossYamauba,    scale:0.92, hitR:28 },   // 山姥 — white-haired crone (Stage 4 midboss)
 };
 function bakePetals(theme){ const out=[]; theme.petal.forEach(col=>{ const W=24,cv=document.createElement('canvas'); cv.width=W; cv.height=W; const c=cv.getContext('2d'); c.translate(W/2,W/2); c.fillStyle=col; c.beginPath(); c.moveTo(0,-9); c.bezierCurveTo(7,-6,7,6,0,9); c.bezierCurveTo(-7,6,-7,-6,0,-9); c.fill(); c.strokeStyle=theme.petalEdge; c.lineWidth=0.8; c.beginPath(); c.moveTo(0,-8); c.lineTo(0,7); c.stroke(); out.push(cv); }); _petalSprite=out; }
