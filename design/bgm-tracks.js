@@ -27,6 +27,10 @@ const SCALES = {
   Bphrygdom: [0,3,4,6,7,9,11], // B Phrygian dominant: B C D# E F# G A   (Stage 5 boss 須佐之男 — fierce exotic storm, b2=C menace)
   Ephrygdom: [0,2,4,5,8,9,11], // E Phrygian dominant: E F G# A B C D   (Stage 5 boss climax lift, +5 from B phryg-dom)
   Coct:  [0,1,3,4,6,7,9,10],    // C octatonic (half-whole): C Db Eb E F# G A Bb   (Stage 5 boss "Yamata Coils" — queasy 8-note serpent, shifting tonality, unlike anything else in-game)
+  Cphryg:[0,1,3,5,7,8,10],   // C Phrygian: C Db Eb F G Ab Bb   (Stage 6 road — hushed eternal-night dread, b2=Db is the creeping menace; a fresh dark root)
+  // ---- Stage 6 scales (Csphrygdom = midboss6 Chromatic Crawl; Ephryg = boss6 Motorik Dawn ACT I; dawn ACT II uses Amaj) ----
+  Csphrygdom:[1,2,5,6,8,9,11], // C# Phrygian dominant: C# D E# F# G# A B   (midboss6b — chromatic crawl, b2=D leans, raised-3rd E# bite)
+  Ephryg:[0,2,4,5,7,9,11],   // E Phrygian: E F G A B C D   (boss6c ACT I — motorik chase dread, b2=F drives the engine)
 };
 function parseChord(sym) {
   let bass = null, s = sym;
@@ -801,7 +805,184 @@ const BOSS5 = {
   arrangement: ['intro','call','callH','B','bridge','callF','outro'],
 };
 
-const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER, stage2: STAGE2, boss2: BOSS2, stage3: STAGE3, boss3: BOSS3, stage4: STAGE4, midboss4: MIDBOSS4, boss4: BOSS4, stage5: STAGE5, midboss5: MIDBOSS5, boss5: BOSS5 };
+// ================================================================ STAGE 6
+// "Tokoyo Road" (常夜への道) — C Phrygian, 78 BPM. The road into the eternal night. The world has gone dark;
+// this is NOT a march — it is hushed and slow, a single brazier-lit lantern carried into the cave-mouth while
+// a vast quiet menace gathers ahead. The Phrygian b2 (Db) leans down onto the tonic again and again — a slow
+// creeping dread that never resolves bright. An INDEPENDENT tune: where every earlier road drives or wanders,
+// this one BREATHES in long sustained notes over a near-still bass, building tension by stillness, not motion.
+// The slowest road in the game. Drumless / barely-there pulse; the saw bite of the other roads is gone.
+const S6_HOOK = [ // a slow sighing fall: the b2 Db leans onto C, then sinks
+  [0,72],[8,73],[12,72],            // C5 … Db5 → C5  (the Phrygian lean — dread)
+  [16,79],[24,80],[28,79],          // G5 … Ab5 → G5  (the lean again, a fifth up)
+  [32,77],[44,75],                  // F5 … Eb5  — slow descent
+  [48,72],[56,73],[60,72],          // C5 … Db5 → C5  (settle, unresolved on the dark tonic)
+];
+const S6_HOOK2 = [ // variation — hangs higher and open, the dread doesn't lift
+  [0,75],[8,77],[12,75],            // Eb5 … F5 → Eb5
+  [16,80],[24,82],                  // Ab5 … Bb5
+  [32,79],[44,77],
+  [48,75],[56,72],[60,72],          // Eb5 … C5  — sinks back to the tonic
+];
+const S6_B = [ // 8-bar swell — the menace surfaces; still spacious, reaches up but is pulled back down
+  [0,80],[8,82],[16,79],[24,75],
+  [32,77],[40,80],[48,82],[56,84],
+  [64,82],[72,80],[80,79],[88,77],
+  [96,75],[104,79],[112,77],[120,72],
+];
+const S6_BRIDGE = [ [0,67],[8,68],[16,72],[24,68],[32,67],[40,72],[48,73],[56,72] ];
+const S6_OUTRO = [ [0,79],[8,77],[16,75],[24,73],[32,72],[40,68],[48,72] ];
+const STAGE6 = {
+  title: 'Tokoyo Road', keyName: 'C Phrygian — hushed eternal night', bpm: 78, gain: 0.5,
+  // hushed dark timbre: a breathy sine+triangle lead with NO saw bite, a deep round sine bass, a faint glass
+  // bell arp glinting like a distant brazier, and a wide low dark pad pushed forward. A held, tense night-walk.
+  voices: {
+    lead: { layers:[ { type:'sine', octave:0, detune:0, gain:1.0 }, { type:'triangle', octave:0, detune:4, gain:0.5 }, { type:'sine', octave:-1, detune:-6, gain:0.4 } ], atk:0.02, dec:0.12, sus:0.55, rel:0.3, maxGate:8 },
+    arp:  { layers:[ { type:'triangle', octave:1, detune:0, gain:1.0 } ], atk:0.003, dec:0.05, sus:0.1, rel:0.1, filter:'lowpass', filterFreq:2600, maxGate:1 },
+    bass: { layers:[ { type:'sine', octave:0, detune:0, gain:1.0 }, { type:'triangle', octave:0, detune:0, gain:0.3 } ], atk:0.01, dec:0.08, sus:0.66, rel:0.18, filter:'lowpass', filterFreq:540, maxGate:6 },
+    pad:  { octave:0, voices:3, detune:12, type:'sawtooth', atk:0.26, dec:0.24, sus:0.82, rel:0.9, filter:'lowpass', filterFreq:980 } },
+  gains: { lead:0.12, harm:0.065, counter:0.065, arp:0.05, bass:0.155, sub:0.14, pad:0.085 },
+  sections: {
+    intro: makeSection({ bars:4, scale:'Cphryg', chords:['Cm','Cm','Db','Cm'], bassStyle:'whole', arpRate:4, groove:'none', sub:true }),
+    A:     makeSection({ bars:8, scale:'Cphryg', chords:['Cm','Cm','Ab','Db','Cm','Fm','Db','Cm'], lead:cat(S6_HOOK, off(64,S6_HOOK2)), bassStyle:'half', arpRate:4, groove:'halfTime', sub:true }),
+    A2:    makeSection({ bars:8, scale:'Cphryg', chords:['Cm','Cm','Ab','Db','Cm','Fm','Db','Cm'], lead:cat(S6_HOOK, off(64,S6_HOOK2)), harm:true, bassStyle:'half', arpRate:4, groove:'halfTime', sub:true }),
+    B:     makeSection({ bars:8, scale:'Cphryg', chords:['Fm','Db','Ab','Cm','Fm','Db','Gm','Cm'], lead:S6_B, counter:true, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true, crash:true }),
+    bridge:makeSection({ bars:4, scale:'Cphryg', chords:['Ab','Db','Cm','Cm'], lead:S6_BRIDGE, bassStyle:'whole', arpRate:4, groove:'none', sub:true }),
+    A2b:   makeSection({ bars:8, scale:'Cphryg', chords:['Cm','Cm','Ab','Db','Cm','Fm','Db','Cm'], lead:cat(S6_HOOK, off(64,S6_HOOK2)), harm:true, counter:true, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
+    outro: makeSection({ bars:4, scale:'Cphryg', chords:['Cm','Ab','Db','Cm'], lead:S6_OUTRO, bassStyle:'half', arpRate:4, groove:'none', sub:true }),
+  },
+  arrangement: ['intro','A','A2','B','bridge','A2b','outro'],
+};
+
+// ================================================================ STAGE 6 MIDBOSS — "Chromatic Crawl" (土蜘蛛)
+// "Chromatic Crawl" — C# Phrygian dominant (C# D E# F# G# A B), 140 BPM. A spider-midboss before the cave.
+// MENACING / UNSTABLE: the b2 (D) leans hard onto the tonic and the RAISED 3rd (E#) bites against the minor
+// expectation, so the centre never settles. The identity is a creeping CHROMATIC CRAWL — the lead slithers
+// UPWARD through the in-scale half-step pairs (C#→D, E#→F#, G#→A) like legs climbing, then SNAPS back down to
+// the dim/leading b2 in one jagged drop. Predatory, twitchy — never the wandering road, never the held boss.
+// Scale PCs usable in lead/harm/counter: C#=1, D=2, E#=5, F#=6, G#=8, A=9, B=11.
+const M6B_HOOK = [
+  // bar 1 (steps 0..15): the crawl climbs the half-step clusters, leg over leg
+  [0,61],[2,62],   // C# D    — first half-step creep (b2 lean)
+  [4,65],[6,66],   // E# F#   — second creep, the raised-3rd bite into the 4th
+  [8,68],[10,69],  // G# A    — third creep, highest legs
+  // ...then SNAP back down to the leaning b2 / tonic in one jagged drop
+  [12,62],[13,61], // D C#    — the snapback, clipped & quick
+  // bar 2 (steps 16..31): a tighter, faster repeat of the crawl — predatory acceleration
+  [16,61],[17,62], // C# D    (sixteenths now — twitchier)
+  [18,65],[19,66], // E# F#
+  [20,68],[22,69], // G# A
+  [24,66],[26,65],[28,62],[30,61], // F# E# D C#  — chromatic-edged collapse to the dim tonic
+];
+const M6B_HOOK2 = [ // the crawl an octave up — the spider lunges high
+  [0,73],[2,74],   // C#6 D6
+  [4,77],[6,78],   // E#6 F#6
+  [8,80],[10,81],  // G#6 A6
+  [12,74],[13,73],
+  [16,73],[18,74],[20,77],[22,78],
+  [24,78],[26,77],[28,74],[30,73],
+];
+const M6B_B = [ // the malice rises — a high circling whirl that keeps grinding the b2/raised-3rd against the centre
+  [0,81],[8,85],[12,83],     // A C# B — high lunge then sink (A6=81, C#7=85, B6=83)
+  [16,80],[24,78],[28,77],
+  [32,74],[40,77],[48,80],[56,83],
+  [64,85],[72,83],[80,80],[88,78],
+  [96,77],[104,80],[112,78],[120,74],
+];
+const M6B_BRIDGE = [ [0,69],[8,73],[16,74],[24,73],[32,69],[40,66],[48,65],[56,61] ];
+const M6B_OUTRO  = [ [0,80],[8,73],[16,74],[24,69],[32,66],[40,65],[48,61] ];
+const MIDBOSS6 = {
+  title: 'Chromatic Crawl', keyName: 'C# Phrygian dominant — creeping half-step menace', bpm: 140, gain: 0.58,
+  // twitchy predatory timbre: a saw+square stabbing lead crawling the chromatic clusters, a hollow square
+  // counter snapping a beat behind, a gritty saw bass driving hard, a cold dark pad. A flailing spider, never held.
+  voices: {
+    lead: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:0.9, filter:'lowpass', filterFreq:2400 }, { type:'square', octave:0, detune:8, gain:0.5, filter:'lowpass', filterFreq:2100 } ], atk:0.003, dec:0.04, sus:0.34, rel:0.09, maxGate:4 },
+    counter: { layers:[ { type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:1800 } ], atk:0.004, dec:0.035, sus:0.32, rel:0.08, maxGate:3 },
+    arp: { layers:[ { type:'square', octave:0, detune:7, gain:1.0 } ], atk:0.002, dec:0.022, sus:0.12, rel:0.04, filter:'lowpass', filterFreq:3000, maxGate:1 },
+    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.05, sus:0.5, rel:0.07, filter:'lowpass', filterFreq:880, maxGate:3 },
+    pad: { octave:0, voices:3, detune:11, type:'sawtooth', atk:0.07, dec:0.12, sus:0.62, rel:0.34, filter:'lowpass', filterFreq:1350 } },
+  gains: { lead:0.14, harm:0.075, counter:0.085, arp:0.06, bass:0.165, sub:0.12, pad:0.05, hat:1.08 },
+  sections: {
+    intro:  makeSection({ bars:4, scale:'Csphrygdom', chords:['C#','C#','A+','G#dim'], bassStyle:'half', arpRate:1, groove:'introTick', sub:true, crash:true }),
+    A:      makeSection({ bars:8, scale:'Csphrygdom', chords:['C#','F#m','A+','G#dim','C#','D','Bm','C#'], lead:cat(M6B_HOOK, off(32,M6B_HOOK), off(64,M6B_HOOK), off(96,M6B_HOOK2)), counter:true, bassStyle:'gallop', arpRate:2, groove:'midGallop', sub:true }),
+    A2:     makeSection({ bars:8, scale:'Csphrygdom', chords:['C#','F#m','A+','G#dim','C#','D','Fdim','C#'], lead:cat(M6B_HOOK, off(32,M6B_HOOK), off(64,M6B_HOOK), off(96,M6B_HOOK2)), harm:true, counter:true, bassStyle:'gallop', arpRate:2, groove:'midGallop', sub:true, crash:true }),
+    B:      makeSection({ bars:8, scale:'Csphrygdom', chords:['F#m','A+','D','Bm','F#m','G#dim','C#','C#'], lead:M6B_B, bassStyle:'pump8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
+    bridge: makeSection({ bars:4, scale:'Csphrygdom', chords:['F#m','G#dim','C#','G#dim'], lead:M6B_BRIDGE, bassStyle:'half', arpRate:2, groove:'halfTime', sub:true }),
+    outro:  makeSection({ bars:4, scale:'Csphrygdom', chords:['F#m','G#dim','C#','C#'], lead:M6B_OUTRO, bassStyle:'gallop', arpRate:1, groove:'introTick', sub:true }),
+  },
+  arrangement: ['intro','A','A2','B','bridge','A2','B','outro'],
+};
+
+// ============================================== STAGE 6 BOSS — "Motorik Dawn" (常夜)
+// "Motorik Dawn" (驀進の夜明け) — TWO-PART 暗→光, E Phrygian DRIVING-MOTORIK chase → A MAJOR sunrise (+5), 160 BPM.
+// A different finale flavour from BOSS6's slow tolling: where "Eternal Night" presses DOWN, "Motorik Dawn"
+// RUNS — a relentless straight-8th krautrock engine. ACT I lives in E Phrygian, the b2 (F) leaning down into
+// the tonic on every bar to propel the motor forward; the lead is a tight, circling chase figure that never
+// stops moving. The whole act is forward motion with no rest, a headlong pursuit through the dark. At the
+// modulating bridge the engine keeps turning but the harmony tips upward, and ACT II LIFTS a perfect-fourth
+// to A MAJOR: the same straight-8th drive, now flooded with light — a radiant fanfare SOARS over the engine
+// that never broke stride. The dawn doesn't slow the chase; it sets it ablaze.
+const B6C_HOOK = [ // ACT I motorik chase: a tight circling engine figure, the b2 F leaning into E on every turn
+  [0,64],[2,67],[4,65],[6,64],[8,69],[10,67],[12,65],[14,64],   // E G F E | A G F E — the relentless turn
+  [16,71],[18,69],[20,67],[22,69],[24,72],[26,71],[28,69],[30,67],   // B A G A | C B A G — circling higher, still driving
+];
+const B6C_CLOSE = [ // the chase tightens and hammers the b2→tonic lean
+  [0,74],[2,72],[4,71],[6,69],[8,67],[10,69],[12,65],[14,64],
+  [16,67],[18,69],[20,71],[22,69],[24,67],[26,65],[28,64],[30,64],   // settles back onto E, ready to run again
+];
+const B6C_B = [ // the pursuit climbs — a high relentless circling over the unbroken engine
+  [0,76],[4,74],[8,72],[12,74],[16,71],[20,72],[24,69],[28,71],
+  [32,67],[36,69],[40,71],[44,72],[48,74],[52,72],[56,71],[60,69],
+  [64,76],[68,77],[72,79],[76,77],[80,76],[84,74],[88,72],[92,71],
+  [96,69],[100,71],[104,72],[108,74],[112,76],[116,72],[120,69],[124,67],
+];
+const B6C_BRIDGE = [ // the engine keeps turning while the harmony tips toward the light — a leading climb into the lift
+  [0,64],[4,65],[8,67],[12,69],
+  [16,71],[20,69],[24,67],[28,69],
+  [32,72],[36,71],[40,69],[44,67],
+  [48,69],[52,71],[56,72],[60,74],   // the climb that breaks into the A-major dawn modulation
+];
+// ACT II : the chase reborn in A MAJOR — same straight-8th drive, now a soaring sunrise fanfare (authored fresh)
+const B6C_DAWN = [ // the motor becomes a radiant ascending fanfare
+  [0,69],[2,73],[4,76],[6,78],[8,81],[10,78],[12,76],[14,73],   // A C# E F# | A F# E C# — bright leap and answer
+  [16,74],[18,76],[20,78],[22,80],[24,81],[26,80],[28,78],[30,76],   // D E F# G# | A G# F# E — soaring over the engine
+];
+const B6C_DAWNCLOSE = [ // the fanfare crests and settles bright, the chase still running underneath
+  [0,85],[2,83],[4,81],[6,80],[8,78],[10,76],[12,74],[14,73],
+  [16,74],[18,76],[20,78],[22,76],[24,74],[26,73],[28,69],[30,69],
+];
+const B6C_OUTRO = [ [0,69],[2,73],[4,76],[8,81],[12,78],[16,76],[20,78],[24,81],[28,76],[32,81],[40,76],[48,69] ];   // A-major dawn fanfare tail, still driving
+const BOSS6 = {
+  title: 'Motorik Dawn', keyName: 'E Phrygian → A major', bpm: 160, gain: 0.62,
+  // ACT I timbre runs hard and dark, ACT II the same engine flooded with light: a triangle+saw+octave lead
+  // (chasing & circling in the dark, blazing in the dawn), a triangle harm, a square counter snapping along,
+  // a square arp ticking the motor, a driving saw bass laying the straight-8th pedal, a wide pad. The dawn
+  // is EARNED by the perfect-fourth lift — the motor never broke stride, the light just caught up to it.
+  voices: {
+    lead: { layers:[ { type:'triangle', octave:0, detune:0, gain:1.0 }, { type:'sawtooth', octave:0, detune:9, gain:0.5, filter:'lowpass', filterFreq:2600 }, { type:'triangle', octave:1, detune:0, gain:0.22 } ], atk:0.005, dec:0.05, sus:0.48, rel:0.12, maxGate:5 },
+    harm: { layers:[ { type:'triangle', octave:0, detune:-4, gain:1.0 } ], atk:0.007, dec:0.05, sus:0.42, rel:0.13, filter:'lowpass', filterFreq:2500, maxGate:5 },
+    counter: { layers:[ { type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:1950 } ], atk:0.005, dec:0.04, sus:0.36, rel:0.1, maxGate:4 },
+    arp: { layers:[ { type:'square', octave:0, detune:7, gain:1.0 } ], atk:0.002, dec:0.022, sus:0.13, rel:0.04, filter:'lowpass', filterFreq:3400, maxGate:1 },
+    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.003, dec:0.045, sus:0.58, rel:0.07, filter:'lowpass', filterFreq:1000, maxGate:3 },
+    pad: { octave:0, voices:3, detune:11, type:'sawtooth', atk:0.09, dec:0.14, sus:0.7, rel:0.42, filter:'lowpass', filterFreq:1450 } },
+  gains: { lead:0.145, harm:0.08, counter:0.085, arp:0.062, bass:0.17, sub:0.14, pad:0.06, kick:1.1, snare:1.05, crash:1.05 },
+  sections: {
+    // ---- ACT I : E Phrygian motorik chase — straight-8th engine, b2 F propelling the drive ----
+    intro:  makeSection({ bars:8, scale:'Ephryg', chords:['Em','Em','F','F','Em','Em','Dm','Dm'], lead:cat(B6C_HOOK, off(64,B6C_HOOK)), harm:true, bassStyle:'drive8', arpRate:2, groove:'fourLite', sub:true, crash:true }),
+    A1:     makeSection({ bars:8, scale:'Ephryg', chords:['Em','F','C','G','Em','F','Dm','Em'], lead:cat(B6C_HOOK, off(32,B6C_HOOK), off(64,B6C_HOOK), off(96,B6C_CLOSE)), bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
+    A2:     makeSection({ bars:8, scale:'Ephryg', chords:['Em','F','C','G','Em','Am','F','Em'], lead:cat(B6C_HOOK, off(32,B6C_HOOK), off(64,B6C_HOOK), off(96,B6C_CLOSE)), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
+    B:      makeSection({ bars:8, scale:'Ephryg', chords:['Am','F','C','G','Am','Dm','F','Em'], lead:B6C_B, harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossDrive', sub:true, crash:true }),
+    // ---- the engine keeps turning, harmony tips upward (modulating bridge) ----
+    bridge: makeSection({ bars:8, scale:null, chords:['Em','Em','C','G','Dm','Dm','E7','E7'], lead:B6C_BRIDGE, bassStyle:'pump8', arpRate:2, groove:'bossBridge', sub:true }),
+    // ---- ACT II : LIFT a perfect-fourth to A MAJOR — the chase reborn as a radiant sunrise fanfare ----
+    climax: makeSection({ bars:8, scale:'Amaj', chords:['A','D','E','F#m','A','D','E7','A'], lead:cat(B6C_DAWN, off(32,B6C_DAWN), off(64,B6C_DAWN), off(96,B6C_DAWNCLOSE)), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
+    A3:     makeSection({ bars:8, scale:'Amaj', chords:['A','D','E','F#m','A','D','E7','A'], lead:cat(B6C_DAWN, off(32,B6C_DAWN), off(64,B6C_DAWN), off(96,B6C_DAWNCLOSE)), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
+    outro:  makeSection({ bars:4, scale:'Amaj', chords:['D','E','A','A'], lead:B6C_OUTRO, bassStyle:'drive8', arpRate:2, groove:'bossDrive', sub:true, crash:true }),
+  },
+  arrangement: ['intro','A1','A2','B','bridge','climax','A3','outro'],
+};
+
+const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER, stage2: STAGE2, boss2: BOSS2, stage3: STAGE3, boss3: BOSS3, stage4: STAGE4, midboss4: MIDBOSS4, boss4: BOSS4, stage5: STAGE5, midboss5: MIDBOSS5, boss5: BOSS5, stage6: STAGE6, midboss6: MIDBOSS6, boss6: BOSS6 };
 
 // ---------------------------------------------------------------- validation (Node only)
 function validateTracks() {

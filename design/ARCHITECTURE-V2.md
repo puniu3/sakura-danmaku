@@ -61,6 +61,10 @@ title を飛ばして `startRun(diff, N-1)`。`?golden` 下では無効（ハー
 ### Phase 11 — Stage 3–6（1ステージずつ）
 各 = `STAGES[N]` データ + 1テーマ + 1–2 BGM。`?stage=N` で個別プレビュー。各追加後に出荷可能。
 practice/stage-select 解禁は `save.furthestStage`（Phase 8 でスキーマ用意）に gate。
+**Stage 3–6 すべて実装済 → Phase 11 完了**（竹林/双子・曙の嶺/八咫烏・高天原の嵐/須佐之男・**天岩戸/常夜＝黒い日輪・禍津日 撃破**）。
+Stage 6（終幕）＝`design/STAGE6-DESIGN.md`：新ギミック＝置き弾幕+弾生成〔既存 `enemyBullets`+`b.update` だけ＝**新エンジン配管ゼロ**〕、
+拡張フィナーレ8ph＝**暗→光の変身**（`_iwatoLight` 0→1 で岩戸開き）、`THEMES.iwato` 暗洞 scenery、BGM 3曲（boss6 に暗→光 key-lift・ドラフト=audition待ち）。
+golden で Stage1/boot byte-identical 維持、全 boss phase 弾数 headless 有界（≤309）、5次元 adversarial review クリア。S6 撃破→ALL CLEAR（陽が還る）で光の循環が一巡して閉じる。
 
 ### Phase 12 — パフォーマンス & 仕上げ
 真の山は衝突でなく**弾プールの integrate + compact + draw スループット**（`collidePlayerBullets` は自機1点
