@@ -15,7 +15,7 @@ const FNS = ['tryResume','startPump','stopPump','rampMusic','playMusic','applyMu
 function run(useFix) {
   let ctx = null;
   const musicGain = { gain: { value: 0.0001, cancelScheduledValues(){}, setValueAtTime(v){this.value=v;}, exponentialRampToValueAtTime(v){this.value=v;} } };
-  let curTrack = 'none', pumpTimer = 0, nextNoteTime = 0, stepIndex = 0, muted = false;
+  let curTrack = 'none', pendingTrack = null, pumpTimer = 0, nextNoteTime = 0, stepIndex = 0, muted = false;
   const MUSIC_FADE = 0.18;
   let pumpRuns = 0;
   const now = () => ctx ? ctx.currentTime : 0;

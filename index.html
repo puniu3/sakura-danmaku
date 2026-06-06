@@ -418,7 +418,7 @@ const Audio = (function(){
   let muted=(()=>{ try{ return localStorage.getItem('bh.muted')==='1'; }catch(e){ return false; } })();
   let masterVol=(()=>{ try{ const v=parseFloat(localStorage.getItem('bh.vol')); return isFinite(v)?Math.min(1,Math.max(0,v)):1; }catch(e){ return 1; } })();
   let ctx=null, masterGain=null, limiter=null, musicGain=null, musicDuck=null, sfxGain=null, cueGain=null, cueHP=null, noiseBuf=null;
-  let curTrack='none', pumpTimer=0, nextNoteTime=0, stepIndex=0, lastShoot=0;
+  let curTrack='none', pendingTrack=null, pendingAlign=16, pumpTimer=0, nextNoteTime=0, stepIndex=0, lastShoot=0;
   const MASTER_BASE_GAIN=0.90, SCHEDULE_AHEAD=0.10, PUMP_MS=25, MUSIC_FADE=0.18, SHOOT_MIN_GAP=0.045;
   function mtof(m){ return 440*Math.pow(2,(m-69)/12); }
   function now(){ return ctx?ctx.currentTime:0; }
@@ -1664,7 +1664,7 @@ const B6C_DAWNCLOSE = [ // the fanfare crests and settles bright, the chase stil
 ];
 const B6C_OUTRO = [ [0,69],[2,73],[4,76],[8,81],[12,78],[16,76],[20,78],[24,81],[28,76],[32,81],[40,76],[48,69] ];   // A-major dawn fanfare tail, still driving
 const BOSS6 = {
-  title: 'Motorik Dawn', keyName: 'E Phrygian → A major', bpm: 160, gain: 0.62,
+  title: 'Motorik Dawn (ACT I — Night)', keyName: 'E Phrygian', bpm: 160, gain: 0.62,
   // ACT I timbre runs hard and dark, ACT II the same engine flooded with light: a triangle+saw+octave lead
   // (chasing & circling in the dark, blazing in the dawn), a triangle harm, a square counter snapping along,
   // a square arp ticking the motor, a driving saw bass laying the straight-8th pedal, a wide pad. The dawn
@@ -1690,20 +1690,33 @@ const BOSS6 = {
     A3:     makeSection({ bars:8, scale:'Amaj', chords:['A','D','E','F#m','A','D','E7','A'], lead:cat(B6C_DAWN, off(32,B6C_DAWN), off(64,B6C_DAWN), off(96,B6C_DAWNCLOSE)), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
     outro:  makeSection({ bars:4, scale:'Amaj', chords:['D','E','A','A'], lead:B6C_OUTRO, bassStyle:'drive8', arpRate:2, groove:'bossDrive', sub:true, crash:true }),
   },
-  arrangement: ['intro','A1','A2','B','bridge','climax','A3','outro'],
+  // Split into two TRACKS so the 暗→光 modulation can be GAME-GATED to the boss's P7 突破 (the rock-door opening) rather
+  // than firing on the playback timer: 'boss6' loops ACT I (dark E Phrygian motorik) through P1–P7; the game swaps to
+  // 'boss6dawn' (below — the A-major ACT II) at P8 entry so the music's key-lift lands together with _iwatoLight's visual
+  // dawn. The 'bridge' section stays defined (a modulating climb) but is unused by either arrangement — at 160 BPM its 8
+  // bars (~12s) would outrun the 5s visual ramp and re-introduce a desync; the swap's crossfade carries the lift instead.
+  arrangement: ['intro','A1','A2','B'],
+};
+// ACT II as its own looping track — the A-major sunrise. Reuses BOSS6's voices/gains/sections; ONLY the arrangement
+// differs (jumps straight to the bright A-major fanfare so the brightness lands the instant the cave door opens at P8).
+const BOSS6DAWN = {
+  title: 'Motorik Dawn (ACT II — Sunrise)', keyName: 'A major', bpm: 160, gain: 0.62,
+  voices: BOSS6.voices, gains: BOSS6.gains, sections: BOSS6.sections,
+  arrangement: ['climax','A3','outro'],
 };
 
-const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER, stage2: STAGE2, boss2: BOSS2, stage3: STAGE3, boss3: BOSS3, stage4: STAGE4, midboss4: MIDBOSS4, boss4: BOSS4, stage5: STAGE5, midboss5: MIDBOSS5, boss5: BOSS5, stage6: STAGE6, midboss6: MIDBOSS6, boss6: BOSS6 };
+const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER, stage2: STAGE2, boss2: BOSS2, stage3: STAGE3, boss3: BOSS3, stage4: STAGE4, midboss4: MIDBOSS4, boss4: BOSS4, stage5: STAGE5, midboss5: MIDBOSS5, boss5: BOSS5, stage6: STAGE6, midboss6: MIDBOSS6, boss6: BOSS6, boss6dawn: BOSS6DAWN };
   /*END:BGM:GEN*/
 
   function trackOf(n){ return (TRACKS && TRACKS[n]) ? TRACKS[n] : null; }
-  function pump(){ if(!ctx) return; if(nextNoteTime<ctx.currentTime) nextNoteTime=ctx.currentTime+0.06; const trk=trackOf(curTrack); if(trk){ const C=compile(trk); while(nextNoteTime<ctx.currentTime+SCHEDULE_AHEAD){ scheduleTrackStep(C, musicGain, stepIndex%C.totalSteps, nextNoteTime); stepIndex++; nextNoteTime+=C.step16; } } pumpTimer=setTimeout(pump,PUMP_MS); }
+  function pump(){ if(!ctx) return; if(nextNoteTime<ctx.currentTime) nextNoteTime=ctx.currentTime+0.06; let trk=trackOf(curTrack); if(trk){ let C=compile(trk); while(nextNoteTime<ctx.currentTime+SCHEDULE_AHEAD){ if(pendingTrack && trackOf(pendingTrack) && (stepIndex%pendingAlign)===0){ curTrack=pendingTrack; pendingTrack=null; stepIndex=0; trk=trackOf(curTrack); C=compile(trk); } scheduleTrackStep(C, musicGain, stepIndex%C.totalSteps, nextNoteTime); stepIndex++; nextNoteTime+=C.step16; } } pumpTimer=setTimeout(pump,PUMP_MS); }   // queueMusic seam-switch: at a downbeat on the pendingAlign grid (16 steps=1 bar; boss6dawn uses 64=4-bar phrase) cleanly CUT to a queued track — no crossfade. boss6↔boss6dawn share gain(0.62) so musicGain is left untouched.
 
     function startPump(){ if(pumpTimer||!ctx) return; nextNoteTime=ctx.currentTime+0.06; pump(); }
   function stopPump(){ if(pumpTimer){ clearTimeout(pumpTimer); pumpTimer=0; } }
   function rampMusic(target,dur){ if(!musicGain) return; const t=now(); musicGain.gain.cancelScheduledValues(t); musicGain.gain.setValueAtTime(Math.max(0.0001,musicGain.gain.value),t); musicGain.gain.exponentialRampToValueAtTime(Math.max(0.0001,target),t+dur); }
   function fadeOutMusic(dur){ if(!ctx||!musicGain) return; const d=(dur>0)?dur:MUSIC_FADE, trk=curTrack; rampMusic(0.0001,d); setTimeout(()=>{ if(curTrack===trk){ stopPump(); curTrack='none'; } },(d+0.05)*1000); }   // one-shot tail fade: ramp to silence over d, then stop the pump so the loop is never regenerated (used by the GAME OVER lament)
-  function playMusic(name){ if(name!=='none' && !trackOf(name)) return; if(!ctx){ curTrack=name; return; } if(name===curTrack) return; if(name==='none'){ rampMusic(0.0001,MUSIC_FADE); setTimeout(()=>{ if(curTrack==='none') stopPump(); },(MUSIC_FADE+0.3)*1000); curTrack='none'; return; } const trk=trackOf(name); const target=(trk&&trk.gain)?trk.gain:0.55; if(curTrack==='none'){ curTrack=name; stepIndex=0; startPump(); rampMusic(target,MUSIC_FADE); } else { rampMusic(0.0001,MUSIC_FADE); setTimeout(()=>{ curTrack=name; stepIndex=0; if(ctx) nextNoteTime=ctx.currentTime+0.04; rampMusic(target,MUSIC_FADE); },MUSIC_FADE*1000); } }
+  function playMusic(name){ if(name!=='none' && !trackOf(name)) return; pendingTrack=null; if(!ctx){ curTrack=name; return; } if(name===curTrack) return; if(name==='none'){ rampMusic(0.0001,MUSIC_FADE); setTimeout(()=>{ if(curTrack==='none') stopPump(); },(MUSIC_FADE+0.3)*1000); curTrack='none'; return; } const trk=trackOf(name); const target=(trk&&trk.gain)?trk.gain:0.55; if(curTrack==='none'){ curTrack=name; stepIndex=0; startPump(); rampMusic(target,MUSIC_FADE); } else { rampMusic(0.0001,MUSIC_FADE); setTimeout(()=>{ curTrack=name; stepIndex=0; if(ctx) nextNoteTime=ctx.currentTime+0.04; rampMusic(target,MUSIC_FADE); },MUSIC_FADE*1000); } }
+  function queueMusic(name,bars){ if(name!=='none' && !trackOf(name)) return; if(!ctx || curTrack==='none' || name==='none'){ playMusic(name); return; } if(name===curTrack || name===pendingTrack) return; pendingAlign=Math.max(1,bars||1)*16; pendingTrack=name; if(!pumpTimer) startPump(); }   // 音楽の切れ目で自然に繋ぐ: クロスフェードせず pump が次の境界(bars 小節, 既定1)頭でクリーンにカット切替。何も鳴ってない時は即時 playMusic にフォールバック。
   function applyMuteToCtx(){ if(!ctx) return; if(muted){ if(ctx.state==='running') ctx.suspend(); } else { tryResume(); } }
   function setMuted(m){ muted=!!m; try{ localStorage.setItem('bh.muted',muted?'1':'0'); }catch(e){} applyMuteToCtx(); }
   function toggleMute(){ setMuted(!muted); return muted; }
@@ -1732,7 +1745,7 @@ const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER,
     tone({t0:t,type:'sawtooth',f0:base*2.0,f1:base*0.9,glideExp:true,peak:0.08,atk:0.002,dec:0.05,sus:0.32,rel:0.1,dur:0.22,filter:'lowpass',filterFreq:3200,filterFreq1:1100});
     tone({t0:t,type:'sine',f0:base*1.2,f1:base*0.55,glideExp:true,peak:0.055,atk:0.001,dec:0.04,sus:0.28,rel:0.08,dur:0.18});
     noise({t0:t,filter:'bandpass',filterFreq:base*3.0,filterFreq1:base*1.0,q:1.6,peak:0.045,atk:0.001,rel:0.12,dur:0.14}); }
-  return { unlock, toggleMute, setMuted, isMuted, sfxShoot, sfxEnemyHit, sfxEnemyDeath, sfxGraze, sfxGrazeHit, sfxBomb, sfxPlayerDeath, sfxSpellDeclare, sfxItemGet, sfxExtend, sfxOneUpCadence, sfxBossWarn, sfxPowerShot, sfxBeam, playMusic, fadeOutMusic, suspendForHidden, resumeFromHidden };
+  return { unlock, toggleMute, setMuted, isMuted, sfxShoot, sfxEnemyHit, sfxEnemyDeath, sfxGraze, sfxGrazeHit, sfxBomb, sfxPlayerDeath, sfxSpellDeclare, sfxItemGet, sfxExtend, sfxOneUpCadence, sfxBossWarn, sfxPowerShot, sfxBeam, playMusic, queueMusic, fadeOutMusic, suspendForHidden, resumeFromHidden };
 })();
 
 // sfx shim (method-name facade used by systems/stage)
@@ -2142,13 +2155,12 @@ function drawSceneryStorm(sc){
 // — the boss's true-final phase ramps it for the 暗→光 catharsis. T-driven (freezes on pause / scales with slow-mo).
 function buildIwatoScenery(srng){
   _iwatoLight=0;                                                  // every Stage-6 entry starts in full dark (reset here so a replay doesn't keep last run's dawn)
-  _iwatoBraziers.length=0; const NB=14;
+  _iwatoBraziers.length=0; const NB=7;   // COMBO B: fewer braziers — big soft blooms, not a field of bullet-sized dots (srng-driven scenery only → golden-inert)
   for(let i=0;i<NB;i++) _iwatoBraziers.push({ worldY:i*(IWATO_SPAN/NB)+srng()*12, lat:(srng()*2-1), w:0.7+srng()*0.8, ph:srng()*TAU, spd:3+srng()*4 });
 }
-function drawIwatoBrazier(x,y,s,a,fl,col){   // a brazier flame: warm flickering glow + bright ember core (fire in the dark — no crisp edge)
-  const w=20*s*(0.85+fl*0.3); ctx.save(); ctx.globalAlpha=a; ctx.globalCompositeOperation='lighter';
-  const g=ctx.createRadialGradient(x,y,1,x,y,w); g.addColorStop(0,col[0]); g.addColorStop(0.4,col[1]); g.addColorStop(1,col[2]); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,w,0,TAU); ctx.fill();
-  ctx.fillStyle='rgba(255,228,180,'+(0.7*a).toFixed(3)+')'; ctx.beginPath(); ctx.arc(x,y-w*0.1,w*0.18,0,TAU); ctx.fill();
+function drawIwatoBrazier(x,y,s,a,fl,col){   // COMBO (Stage6 視認性 fix=採択 B+C+D): a big SOFT ember bloom, NOT a bullet — ×2.3 size, half-alpha, ember-red col, bright stop pushed inward (0.75) + NO crisp core dot. Separates from enemy bullets on every axis a player parses (shape=soft bloom / blend / size=out of the 4-10px band / hue=ember-red, far from gold seeds & cold lamps).
+  const w=20*s*(0.85+fl*0.3)*2.3; ctx.save(); ctx.globalAlpha=a*0.5; ctx.globalCompositeOperation='lighter';
+  const g=ctx.createRadialGradient(x,y,1,x,y,w); g.addColorStop(0,col[0]); g.addColorStop(0.75,col[1]); g.addColorStop(1,col[2]); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,w,0,TAU); ctx.fill();
   ctx.restore();
 }
 function drawSceneryIwato(sc){
@@ -2183,8 +2195,8 @@ function drawSceneryIwato(sc){
   const SP=IWATO_SPAN, bcol=Cv.brazier||['rgba(255,196,120,0.85)','rgba(255,140,70,0.25)','rgba(255,140,70,0)'];
   const list=_iwatoBraziers.map(e=>({ p:1-((((e.worldY-sc)%SP)+SP)%SP)/SP, e })).sort((A,B)=>A.p-B.p);
   for(const o of list){ const p=o.p, e=o.e; if(p<=0.02) continue; const a=Math.min(1,p*3)*Math.min(1,(1.05-p)*7)*(1-L*0.8); if(a<=0.01) continue;
-    const s=0.25+Math.pow(p,1.6)*1.7, y=HOR+(PF_H+40-HOR)*Math.pow(p,1.5), x=cx+e.lat*(24+Math.pow(p,1.4)*PF_W*0.5);
-    const fl=0.5+0.5*Math.sin(T*e.spd+e.ph); drawIwatoBrazier(x,y,s*e.w,a,fl,bcol); }
+    const s=0.25+Math.pow(p,1.6)*1.7, y=HOR+(PF_H+40-HOR)*Math.pow(p,1.5), x=cx+e.lat*(24+Math.pow(p,1.4)*PF_W*0.5)*1.9;   // COMBO D: stronger lateral parallax (latGain 1.9) → reads as a calm drifting distant glow, not a fired bullet
+    const fl=0.5+0.5*Math.sin(T*e.spd*0.35+e.ph); drawIwatoBrazier(x,y,s*e.w,a,fl,bcol); }   // COMBO D: slow flicker (×0.35) so it doesn't pulse at bullet cadence
   // 5) a faint dark FOG veil over the cave floor (keep the play band DARK so the glowing lamps/seeds pop)
   { const fog=Cv.fog||['rgba(54,46,80,0.16)','rgba(54,46,80,0)']; const fv=ctx.createLinearGradient(0,HOR,0,PF_H); fv.addColorStop(0,fog[0]); fv.addColorStop(1,fog[1]); ctx.fillStyle=fv; ctx.fillRect(0,HOR,PF_W,PF_H-HOR); }
   // 6) at the climax, GOD-RAYS fan from the door mouth (additive, ramped by L). The 0.36 play dim sits on top, so the
@@ -2791,7 +2803,7 @@ const THEMES = {
     petal:['#352c4a','#5e5080','#a892c8'], petalEdge:'#cdbce8', petalAlpha:0.5, petalShape:'ember',   // drifting ash / cold dust-motes in the dark (petalShape:'ember' → bakePetals bakes a soft speck, not a sakura petal)
     cave:{ rock:'#060509', rockEdge:'#181030',
            slit:['rgba(255,234,184,0.55)','rgba(255,176,84,0.12)','rgba(255,176,84,0)'],
-           brazier:['rgba(255,196,120,0.85)','rgba(255,140,70,0.25)','rgba(255,140,70,0)'],
+           brazier:['rgba(255,120,50,0.85)','rgba(210,60,24,0.25)','rgba(210,60,24,0)'],   // COMBO C: ember-red (far in hue from the gold 種火 bullets ~48 AND the cold lamps/orbs ~200) so a brazier never reads as a bullet
            fog:['rgba(54,46,80,0.16)','rgba(54,46,80,0)'] },
     dawn:{ top:'#2a1c40', mid:'#8a4a58', bot:'#f0a85c',
            glow:['rgba(255,246,214,0.62)','rgba(255,206,138,0.22)','rgba(255,206,138,0)'],
@@ -2883,12 +2895,13 @@ const SEED_HUE = 44, SEED_CHILD_HUE = 48;
 // 種火: a breeder that periodically births a ring of PLAIN straight bullets. Children carry no update/custom → they can
 // never breed → bounded to ONE generation (total = n×births) → the pool can't balloon (the only real engine risk; verified headless).
 function _updSeed(b,dt){ b.x+=b.vx*dt; b.y+=b.vy*dt; b._breedCd-=dt;
-  if(b._breedCd<=0 && b._birthsLeft>0){ b._breedCd+=b._breedEvery; b._birthsLeft--; const step=TAU/b._breedN, base=b._breedPhase; b._breedPhase+=b._breedTwist;
+  if(b._breedCd<=0 && b._birthsLeft>0){ b._breedCd+=b._breedEvery; b._birthsLeft--;
+    const aim=b._breedAim, base=aim?(angleToPlayer(b.x,b.y)-b._breedSpread*0.5):b._breedPhase, step=aim?(b._breedN>1?b._breedSpread/(b._breedN-1):0):(TAU/b._breedN); if(!aim) b._breedPhase+=b._breedTwist;   // aim=自機狙い: re-aim a tight fan at the player's CURRENT position each breed (stay still → fans from sweeping seeds overlap your spot = no escape; move → they head at where you WERE). off (default)=the old radial ring → byte-identical for every non-aim seed.
     for(let i=0;i<b._breedN;i++) spawnPolar(b,base+step*i,b._breedSpeed,{hue:b._breedHue,style:b._breedStyle,r:b._breedR,av:0}); }
   if(b._birthsLeft<=0 || (T-b.born)>b._life) b.alive=false;                                                                          /* self-remove after its births (a placed seed never leaves the box) */
 }
 function spawnSeed(o){ const b=spawnBullet({ x:o.x, y:o.y, vx:(o.vx||0), vy:(o.vy!=null?o.vy:40), r:o.r||7, style:o.style||'ember', hue:(o.hue!=null)?o.hue:190, dir:HALFPI, speed:0, custom:true, update:_updSeed }); if(!b) return null;
-  b._breedEvery=o.every||0.5; b._breedCd=(o.delay!=null)?o.delay:b._breedEvery; b._birthsLeft=o.births||4; b._breedN=o.n||8; b._breedSpeed=o.childSpeed||90; b._breedHue=(o.childHue!=null)?o.childHue:b.hue; b._breedStyle=o.childStyle||'pellet'; b._breedR=o.childR||4; b._breedPhase=o.phase0||0; b._breedTwist=(o.twist!=null)?o.twist:0.5; b._life=o.life||8;
+  b._breedEvery=o.every||0.5; b._breedCd=(o.delay!=null)?o.delay:b._breedEvery; b._birthsLeft=o.births||4; b._breedN=o.n||8; b._breedSpeed=o.childSpeed||90; b._breedHue=(o.childHue!=null)?o.childHue:b.hue; b._breedStyle=o.childStyle||'pellet'; b._breedR=o.childR||4; b._breedPhase=o.phase0||0; b._breedTwist=(o.twist!=null)?o.twist:0.5; b._life=o.life||8; b._breedAim=!!o.childAim; b._breedSpread=(o.childSpread!=null)?o.childSpread:0.5;   // childAim=自機狙い fan (default off=radial ring, byte-identical)
   return b; }
 
 const pat={};
@@ -3728,7 +3741,7 @@ const FINALBOSS_SPEC = { name:'Flower King', design:'mandala', hue:300, enterFro
       { kind:'nonspell', hp:1600, body:'raw', raw:function*(b){ let a=0; Director.fork(function*(){ while(true){ yield* moveTo(b,PF_W*0.3,140,1.4,EASE.inOut); yield* moveTo(b,PF_W*0.7,140,1.4,EASE.inOut); } },b); while(true){ spiral(b,{angle:a,arms:4,speed:135,hue:(300+T*40)%360,style:'small'}); a+=0.4; yield* waitT(0.045); } } },
       { kind:'spell', name:'Night Sign "Lunar Rain"', hp:2240, drops:['power','point','point','point'], body:'raw', raw:function*(b){ while(true){ for(let k=0;k<3;k++){ ring(b,{count:32,speed:70,accel:90,hue:(220+k*30)%360,style:'orb'}); yield* waitT(0.18); } wall(b,{n:13,speed:210,hue:0,style:'dart'}); yield* waitT(1.3); } } },
       { kind:'spell', name:'Time Sign "Spiral Mandala"', hp:2560, drops:['power','point','point','point'], body:'raw', raw:function*(b){ let a=0; Director.fork(function*(){ while(true){ ring(b,{count:18,speed:105,hue:(280+T*15)%360,style:'mid',rot:T*0.4}); yield* waitT(0.9); } },b); while(true){ spiral(b,{angle:a,arms:5,speed:145,hue:(0+T*50)%360,style:'small'}); spiral(b,{angle:-a*1.6,arms:5,speed:145,hue:(180+T*50)%360,style:'small'}); a+=0.23; yield* waitT(0.04); } } },
-      { kind:'spell', name:'"Eternal Spring — Last Word"', survival:FB_SURVIVAL_TIME, drops:[], body:'raw', raw:function*(b){ let a=0,wave=0; const t0=T, RAMP=Math.max(1,FB_SURVIVAL_TIME-5); /* ramp easy→current over (survival−5)s — full intensity only in the last 5s, matching Boss 4's last-word onset */ Director.fork(function*(){ while(true){ const k=clamp((T-t0)/RAMP,0,1); rain(b,{across:PF_W,count:Math.round(lerp(5,10,k)),speed:60,gravity:42.5,hue:(330+T*30)%360,style:'petal'}); yield* waitT(lerp(0.5,0.3,k)); } },b); Director.fork(function*(){ while(true){ const k=clamp((T-t0)/RAMP,0,1); burst(b,{count:Math.round(lerp(16,40,k)),speed:130,hue:(T*60)%360,style:'orb'}); yield* waitT(lerp(3.0,2.2,k)); } },b); while(true){ const k=clamp((T-t0)/RAMP,0,1), sp=lerp(95,140,k)+wave*4; spiral(b,{angle:a,arms:6,speed:sp,hue:(T*70)%360,style:'small'}); spiral(b,{angle:-a*1.4,arms:6,speed:sp,hue:(120+T*70)%360,style:'small'}); a+=lerp(0.10,0.21,k); wave+=0.05; yield* waitT(0.035); } } }
+      { kind:'spell', name:'"Eternal Spring — Last Word"', survival:FB_SURVIVAL_TIME, drops:[], body:'raw', raw:function*(b){ let a=0,wave=0; const t0=T, RAMP=Math.max(1,FB_SURVIVAL_TIME-5); /* ramp easy→current over (survival−5)s — full intensity only in the last 5s, matching Boss 4's last-word onset */ Director.fork(function*(){ while(true){ const k=clamp((T-t0)/RAMP,0,1); rain(b,{across:PF_W,count:Math.round(lerp(3,10,k)),speed:60,gravity:42.5,hue:(330+T*30)%360,style:'petal'}); yield* waitT(lerp(0.7,0.3,k)); } },b); Director.fork(function*(){ while(true){ const k=clamp((T-t0)/RAMP,0,1); burst(b,{count:Math.round(lerp(10,40,k)),speed:130,hue:(T*60)%360,style:'orb'}); yield* waitT(lerp(3.8,2.2,k)); } },b); while(true){ const k=clamp((T-t0)/RAMP,0,1), sp=lerp(95,140,k)+wave*4; spiral(b,{angle:a,arms:Math.round(lerp(4,6,k)),speed:sp,hue:(T*70)%360,style:'small'}); spiral(b,{angle:-a*1.4,arms:Math.round(lerp(4,6,k)),speed:sp,hue:(120+T*70)%360,style:'small'}); a+=lerp(0.10,0.21,k); wave+=0.05; yield* waitT(0.035); } } }
     ] };
 
 // ---- STAGE 2 boss "Tasokare", the twilight 蛟 (water-serpent) — appears TWICE: an early retreating
@@ -3769,7 +3782,7 @@ const TASOKARE_SPEC = { name:'Tasokare', design:'mizuchi', hue:190, enterFrom:{x
           off+=0.42; yield* waitT(1.3); } } },
       { kind:'nonspell', hp:1400, body:'raw', raw:function*(b){ let a=0; Director.fork(function*(){ while(true){ burst(b,{count:22,speed:120,hue:(195+T*40)%360,style:'orb'}); yield* waitT(1.9); } },b); while(true){ spiral(b,{angle:a,arms:3,speed:128,hue:(210+T*50)%360,style:'small'}); spiral(b,{angle:-a*1.3,arms:3,speed:128,hue:(258+T*50)%360,style:'small'}); a+=0.32; yield* waitT(0.05); } }, onEnter:wander(PF_W*0.5,140,90,40,1.5) },
       { kind:'spell', name:'Twilight Sign "Hitodama Drift"', hp:1736, drops:['power','point','point','point'], body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:10,speed:55,gravity:40,hue:(200+T*30)%360,style:'orb'}); yield* waitT(0.5); } },b); while(true){ pat.randomScatter(b,{count:18,baseAngle:HALFPI,spread:Math.PI*1.25,speedMin:70,speedMax:150,jitterHue:30,hue:215,style:'pellet'}); yield* waitT(0.7); ring(b,{count:16,speed:100,accel:70,hue:280,style:'orb'}); yield* waitT(0.7); } } },
-      { kind:'spell', name:'"Twilight Hour — Last Word"', survival:26, drops:[], body:'raw', raw:function*(b){ let a=0,wave=0; const t0=T, RAMP=Math.max(1,26-5); /* ramp easy→current over (survival−5)s — full intensity only in the last 5s */ Director.fork(function*(){ while(true){ const k=clamp((T-t0)/RAMP,0,1); pat.delayedTurn(b,{count:Math.round(lerp(8,16,k)),spread:TAU,baseAngle:a*2,speed:80,delay:0.8,turnAim:true,speed2:160,hue:205,style:'orb'}); yield* waitT(lerp(2.4,1.7,k)); } },b); Director.fork(function*(){ while(true){ const k=clamp((T-t0)/RAMP,0,1); rain(b,{across:PF_W,count:Math.round(lerp(4,9,k)),speed:60,gravity:42,hue:(195+T*40)%360,style:'orb'}); yield* waitT(lerp(0.6,0.36,k)); } },b); while(true){ const k=clamp((T-t0)/RAMP,0,1), sp=lerp(88,135,k)+wave*3; spiral(b,{angle:a,arms:5,speed:sp,hue:(210+T*60)%360,style:'small'}); spiral(b,{angle:-a*1.4,arms:5,speed:sp,hue:(258+T*60)%360,style:'small'}); a+=lerp(0.11,0.22,k); wave+=0.04; yield* waitT(0.04); } } }
+      { kind:'spell', name:'"Twilight Hour — Last Word"', survival:26, drops:[], body:'raw', raw:function*(b){ let a=0,wave=0; const t0=T, RAMP=Math.max(1,26-5); /* ramp easy→current over (survival−5)s — full intensity only in the last 5s */ Director.fork(function*(){ while(true){ const k=clamp((T-t0)/RAMP,0,1); pat.delayedTurn(b,{count:Math.round(lerp(5,16,k)),spread:TAU,baseAngle:a*2,speed:80,delay:0.8,turnAim:true,speed2:160,hue:205,style:'orb'}); yield* waitT(lerp(3.2,1.7,k)); } },b); Director.fork(function*(){ while(true){ const k=clamp((T-t0)/RAMP,0,1); rain(b,{across:PF_W,count:Math.round(lerp(2,9,k)),speed:60,gravity:42,hue:(195+T*40)%360,style:'orb'}); yield* waitT(lerp(0.85,0.36,k)); } },b); while(true){ const k=clamp((T-t0)/RAMP,0,1), sp=lerp(88,135,k)+wave*3; spiral(b,{angle:a,arms:Math.round(lerp(3,5,k)),speed:sp,hue:(210+T*60)%360,style:'small'}); spiral(b,{angle:-a*1.4,arms:Math.round(lerp(3,5,k)),speed:sp,hue:(258+T*60)%360,style:'small'}); a+=lerp(0.11,0.22,k); wave+=0.04; yield* waitT(0.04); } } }
     ] };
 
 // ---- STAGE 3 BOSS: the twin sisters 宵 & 暁 — 2体同時出現 (体力共有). 宵 (Yoi, indigo, the primary/left)
@@ -3814,8 +3827,8 @@ const TWINS_SPEC = { name:'宵 & 暁', design:'twinYoi', hue:265, enterFrom:{x:P
         onEnter:_twinSway(PF_W*0.24,PF_W*0.46,128,1.7) },
       // 5 — survival Last Word: the sisters hold the flanks, the grove fills with woven indigo+amber until dawn
       { kind:'spell', name:'"Until Dawn — Last Word"', survival:28, drops:[], cutinHue:265, body:'raw', raw:function*(b){ const tw=b._twin; let a=0,wave=0; const t0=T, RAMP=Math.max(1,28-5); /* ramp easy→current over (survival−5)s — full intensity only in the last 5s; one k drives both sisters symmetrically */
-          Director.fork(function*(){ while(true){ const k=clamp((T-t0)/RAMP,0,1); rain(b,{across:PF_W,count:Math.round(lerp(6,11,k)),speed:58,gravity:42,hue:(255+T*30)%360,style:'orb'}); yield* waitT(lerp(0.6,0.34,k)); } },b);
-          while(true){ const k=clamp((T-t0)/RAMP,0,1), sp=lerp(86,132,k)+wave*3; spiral(b,{angle:a,arms:4,speed:sp,hue:(258+T*40)%360,style:'small'}); if(tw) spiral(tw,{angle:-a,arms:4,speed:sp,hue:(30+T*40)%360,style:'small'});
+          Director.fork(function*(){ while(true){ const k=clamp((T-t0)/RAMP,0,1); rain(b,{across:PF_W,count:Math.round(lerp(3,11,k)),speed:58,gravity:42,hue:(255+T*30)%360,style:'orb'}); yield* waitT(lerp(1.05,0.34,k)); } },b);   // 開始を緩め終端は据置(難度カーブを急に): rain 開始 count 4→3 / 間隔 0.85→1.05、終端(k=1)は不変
+          while(true){ const k=clamp((T-t0)/RAMP,0,1), sp=lerp(80,132,k)+wave*3; spiral(b,{angle:a,arms:Math.round(lerp(2,4,k)),speed:sp,hue:(258+T*40)%360,style:'small'}); if(tw) spiral(tw,{angle:-a,arms:Math.round(lerp(2,4,k)),speed:sp,hue:(30+T*40)%360,style:'small'});   // 開始を緩め終端は据置: spiral 開始 arms 3→2 / speed 86→80、終端 arms4/speed132 不変
             a+=lerp(0.10,0.2,k); wave+=0.04; yield* waitT(0.04); } },
         onEnter:_twinSway(PF_W*0.28,PF_W*0.28,120,3.0) }
     ] };
@@ -3878,9 +3891,9 @@ const YATAGARASU_SPEC = { name:'Yatagarasu', design:'yatagarasu', hue:44, enterF
       // P2 spell「光芒の梯子」— a static fan of beams emanating from the crow; every 3rd slot is a SAFE LANE, and the
       // gap rotates each cycle (the ladder you climb between). Laser初出 (static, readable).
       { kind:'spell', name:'Radiance Sign "Ladder of Light"', hp:1850, drops:['power','point','point','point'], cutinHue:46, body:'raw', raw:function*(b){ let off=0;
-          while(true){ const N=10, span=Math.PI*0.92, base=HALFPI-span/2;
+          while(true){ const N=12, span=Math.PI*1.0, base=HALFPI-span/2;   // 強化: 拡充の梯子 — more rungs (10→12) over a wider fan (0.92π→π), so the lit slots between the rotating safe lanes are denser
             for(let i=0;i<N;i++){ if(((i+off)%3)===0) continue; const ang=base+span*(i/(N-1)); fireBeam({x:b.x,y:b.y,ang:ang,halfW:8,hue:46,warn:0.95,fire:0.85,fade:0.3,len:PF_H*1.6,follow:b}); }
-            off=(off+1)%3; yield* waitT(0.55); aimedShot(b,{n:5,spread:0.5,speed:120,hue:38,style:'pellet'}); yield* waitT(1.55); } },
+            off=(off+1)%3; yield* waitT(0.55); aimedShot(b,{n:7,spread:0.6,speed:120,hue:38,style:'pellet'}); yield* waitT(1.25); } },
         onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,130,1.0,EASE.out); },b); } },
       // P3 nonspell — feather rings + ONE 日輪 rises from the ridgeline (the giant-bullet顔見せ)
       { kind:'nonspell', hp:1650, body:'raw', raw:function*(b){
@@ -3890,7 +3903,7 @@ const YATAGARASU_SPEC = { name:'Yatagarasu', design:'yatagarasu', hue:44, enterF
       // P4 spell「日輪」— multiple 日輪 cross slowly from alternating sides; pellet rings fill the gaps; weave between
       // the solar cores (small hitR) and the rings. 巨大弾が主役.
       { kind:'spell', name:'Solar Sign "Nichirin"', hp:2050, drops:['power','point','point','point'], cutinHue:46, body:'raw', raw:function*(b){
-          Director.fork(function*(){ let s=0; while(true){ const L=(s%2===0); const ly=clamp(140+(s%4)*110+rng.range(-20,30),120,500); spawnSun({x:L?-56:PF_W+56,y:ly,r:46,hitR:12,hue:46,vx:L?80:-80,vy:rng.range(2,16)}); s++; yield* waitT(2.0); } },b);   // spawn band cycles top→bottom (y 140/250/360/470) AND every 日輪 drifts DOWN (vy 2..16) so the lowest band + the downward sweep reach the very bottom — the bottom is no longer a safe camp. vx ±80 (was ±42): the 主役 日輪 now crosses to screen-centre in ~3.4s (was ~6.5s) so a centre-camp 撃ち込み kill can't end the phase before the star sun ever arrives.
+          Director.fork(function*(){ let s=0; while(true){ const L=(s%2===0); const ly=clamp(140+(s%4)*110+rng.range(-20,30),120,500); spawnSun({x:L?-56:PF_W+56,y:ly,r:46,hitR:12,hue:46,vx:L?80:-80,vy:rng.range(2,16)}); if(s%3===2){ const ly2=clamp(180+((s+2)%4)*110+rng.range(-20,30),120,500); spawnSun({x:L?PF_W+56:-56,y:ly2,r:42,hitR:11,hue:50,vx:L?-80:80,vy:rng.range(2,16)}); } s++; yield* waitT(1.5); } },b);   // 強化: 巨大弾主役の拡充 — faster cadence (2.0→1.5s) + every 3rd beat a CROSSING companion 日輪 from the OPPOSITE side (≈2× the suns weaving the field) (more suns weaving the field). spawn band cycles top→bottom (y 140/250/360/470) AND every 日輪 drifts DOWN (vy 2..16) so the lowest band + the downward sweep reach the very bottom — the bottom is no longer a safe camp. vx ±80 (was ±42): the 主役 日輪 now crosses to screen-centre in ~3.4s (was ~6.5s) so a centre-camp 撃ち込み kill can't end the phase before the star sun ever arrives.
           while(true){ ring(b,{count:20,speed:95,hue:40,style:'pellet',rot:T*0.3}); yield* waitT(1.15); ring(b,{count:16,speed:78,accel:42,hue:50,style:'pellet',rot:-T*0.3}); yield* waitT(1.15); } },
         onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,130,1.0,EASE.out); },b); } },
       // P5 nonspell — counter-rotating reversed double-spiral feathers + periodic feather bursts (中盤の圧)
@@ -3901,17 +3914,18 @@ const YATAGARASU_SPEC = { name:'Yatagarasu', design:'yatagarasu', hue:44, enterF
       // P6 spell「御来光」— 2 opposed beams sweep CONTINUOUSLY, then BLINK off for a ~1.1s gap. That
       // hole-in-the-traffic is the window the player times a dash through (跨ぎ — like crossing a highway); it's a
       // forgiving-but-not-leisurely window. Beams persist (fire:9999, reaped at phase end) and only flip to a short
-      // warn for the gap. Rotation stays modest; spiral-feather density unchanged. Distinct from P7's open orbit.
+      // warn for the gap. Beams START HORIZONTAL and rotation is DOUBLED (0.52 rad/s) so the sweep crosses the field
+      // toward the player quickly (no more centre-camp DPS kill before the wall arrives); spiral-feather density unchanged.
       { kind:'spell', name:'Sign "First Light"', hp:2300, drops:['power','point','point','point'], cutinHue:48, body:'raw', raw:function*(b){
-          Director.fork(function*(){ let base=HALFPI, sweep=0; const beams=[];
+          Director.fork(function*(){ let base=0, sweep=0; const beams=[];   // 強化: beams START HORIZONTAL (base 0 → beam0 points right, beam1 points left = one horizontal line) so the sweep crosses the field toward the player from the off; rotation doubled (below)
               for(let k=0;k<2;k++){ const L=fireBeam({x:b.x,y:b.y,ang:base+k*Math.PI,halfW:11,hue:48,warn:0.7,fire:9999,fade:0.2,len:PF_H*1.8,follow:b}); if(L) beams.push(L); }
               const setAngs=()=>{ for(let k=0;k<beams.length;k++){ const L=beams[k]; if(L&&L.alive) L.ang=base+k*Math.PI+sweep; } };
               while(true){
-                let t0=T; while(T-t0 < 2.4){ sweep+=0.26*STEP; setAngs(); yield; }                                  // ~2.4s of lethal sweep (the moving wall of cars)
+                let t0=T; while(T-t0 < 2.4){ sweep+=0.52*STEP; setAngs(); yield; }                                  // ~2.4s of lethal sweep (the moving wall of cars) — rotation DOUBLED (0.26→0.52 rad/s) so the wall reaches the player before a centre-camp DPS kill
                 for(const L of beams) if(L&&L.alive){ L.state='warn'; L.t=0; L.warnDur=1.1; }                        // BLINK to a telegraph = the gap — dash NOW (1.1s, was 0.55s: a wider, more forgiving crossing window)
-                t0=T; while(T-t0 < 1.12){ sweep+=0.26*STEP; setAngs(); yield; }                                       // ~1.1s non-lethal, then integrateLasers auto-refires the beams
+                t0=T; while(T-t0 < 1.12){ sweep+=0.52*STEP; setAngs(); yield; }                                       // ~1.1s non-lethal (sweep keeps rotating at the doubled rate), then integrateLasers auto-refires the beams
               } },b);
-          let a=0,k2=0; while(true){ if(k2%5===0){ spiral(b,{angle:a,arms:3,speed:120,hue:(40+T*40)%360,style:'rice'}); a+=0.8; } k2++; yield; } },
+          let a=0,k2=0; while(true){ if(k2%6===0){ spiral(b,{angle:a,arms:3,speed:120,hue:(40+T*40)%360,style:'rice'}); a-=0.8; } k2++; yield; } },   // 微弱化(弾幕のみ・レーザー不変): feathers REVERSED (a-=0.8, spinning opposite the laser sweep so the gaps line up) + thinned (3 arms, every 6 ticks, aimed cut removed) → the laser-gap dash slips through easily
         onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,130,1.0,EASE.out); },b); } },
       // P7 survival「曙光」— the boss SITS AT SCREEN CENTRE and 3 御来光 beams radiate + sweep, so the player ORBITS
       // the centre in the wide gaps. The spray is deliberately SPARSE (a single slow spiral, easily slipped through)
@@ -3983,7 +3997,8 @@ const SUSANOO_SPEC = { name:'Susanoo', design:'susanoo', hue:212, enterFrom:{x:P
           const w1=placeWell({ x:PF_W*0.34, y:PF_H*0.58, R:66, strength:6400, swirl:11500, coreR:0, warn:1.0, active:99999, fade:0.5, hue:187 });   // two SMALL counter-vortices drifting LOW (lemniscate) in the player's band — the boss's straight rings/sprays descend and visibly thread + curl between them right in front of the player
           const w2=placeWell({ x:PF_W*0.66, y:PF_H*0.58, R:66, strength:6400, swirl:-11500, coreR:0, warn:1.0, active:99999, fade:0.5, hue:193 });
           Director.fork(function*(){ const t0=T; while(true){ const e=T-t0; if(w1&&w1.alive){ w1.x=PF_W*0.5+Math.cos(e*0.6)*PF_W*0.22; w1.y=PF_H*0.58+Math.sin(e*1.2)*40; } if(w2&&w2.alive){ w2.x=PF_W*0.5-Math.cos(e*0.6)*PF_W*0.22; w2.y=PF_H*0.58-Math.sin(e*1.2)*40; } yield; } },b);
-          while(true){ ring(b,{count:20,speed:88,hue:(206+18*Math.sin(T*0.5)),style:'orb'}); yield* waitT(1.0); aimedShot(b,{n:5,spread:0.5,speed:132,hue:210,style:'pellet'}); yield* waitT(0.7); } },
+          Director.fork(function*(){ let a=0; while(true){ spiral(b,{angle:a,arms:2,speed:104,hue:(212+16*Math.sin(T*0.5)),style:'small'}); a+=0.30; yield* waitT(0.16); } },b);   // 強化: a SPARSE continuous straight spiral now feeds the twin swirl so the lemniscate river is always woven (no dead air between the rings) — caught & curled by the two counter-vortices
+          while(true){ ring(b,{count:24,speed:88,hue:(206+18*Math.sin(T*0.5)),style:'orb'}); yield* waitT(0.9); aimedShot(b,{n:7,spread:0.6,speed:132,hue:210,style:'pellet'}); yield* waitT(0.6); } },
         onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,128,1.0,EASE.out); },b); } },
       // P5 nonspell「十拳剣の薙ぎ」— the relief局面 (well 休み): TWO diverging sword-slashes that sweep OUTWARD from a central
       // lane. Both walls are biased ±GAP off vertical so their inner darts never cross the centre column (the old version
@@ -4001,19 +4016,21 @@ const SUSANOO_SPEC = { name:'Susanoo', design:'susanoo', hue:212, enterFrom:{x:P
           const NW=4, cx=PF_W*0.5, cy=PF_H*0.50, rad=104, ws=[];
           for(let i=0;i<NW;i++){ const a0=i/NW*TAU; const w=placeWell({ x:cx+Math.cos(a0)*rad, y:cy+Math.sin(a0)*0.72*rad, R:66, strength:5600, swirl:((i%2)?-1:1)*10800, coreR:0, warn:1.0, active:99999, fade:0.5, hue:186+i*4 }); if(w) ws.push(w); }   // 4 SMALL bright vortices (was big overlapping fields) rotating around the lowered centre — they read as four discrete gravity sources, and the lower pair reach into the player's band
           Director.fork(function*(){ const t0=T; while(true){ const el=T-t0, spin=el*(0.16+Math.min(0.34,el*0.011)); for(let i=0;i<ws.length;i++){ const w=ws[i]; if(w&&w.alive){ const a=i/ws.length*TAU+spin; w.x=cx+Math.cos(a)*rad; w.y=cy+Math.sin(a)*0.72*rad; } } yield; } },b);
-          let a=0; while(true){ spiral(b,{angle:a,arms:4,speed:96,hue:(206+20*Math.sin(T*0.45)),style:'small'}); a+=0.16; yield* waitT(0.07); } },
+          let a=0; while(true){ spiral(b,{angle:a,arms:4,speed:96,hue:(206+20*Math.sin(T*0.45)),style:'small'}); spiral(b,{angle:-a*1.25,arms:3,speed:108,hue:(230+16*Math.sin(T*0.45)),style:'small'}); a+=0.16; yield* waitT(0.07); } },   // 強化: a counter-rotating 双 rainband (3-arm, opposite spin) winds INTO the same 4-vortex mandala — denser turning galaxy without adding wells (count stays capped at 4 for perf/fairness)
         onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,PF_H*0.44,1.2,EASE.out); },b); } },
       // P7 survival「天叢雲」— drifting vortices roam the whole field, winding a SPARSE omni-spiral into an orbiting
-      // river. The OPENING stays gentle (the spell IS the orbit, trivially dodgeable — the original feel); a
-      // latter-half ramp (kOf: 0 through the first ~13s, then climbing across the back half) escalates it — denser
-      // arms, a counter-rotating second spiral fading in, periodic rings caught into the swirl, and livelier wells —
-      // so the LAST WORD genuinely BITES toward the end without a hard opening. Wells stay HARMLESS (coreR:0):
+      // river. 強化: the OPENING is no longer a safe graze-farm (the old tidy single-direction orbit let you sit and
+      // milk graze) — the counter-rotating 双 spiral now runs FROM THE START (crossing the primary orbit) and an
+      // opening-only aimed-scatter + ring disruptor forces real dodging; both phase out as the latter-half ramp (kOf:
+      // 0 through the first ~13s, then climbing across the back half) takes over, which stays BYTE-IDENTICAL — denser
+      // arms, the counter-spiral, periodic rings caught into the swirl, livelier wells. Wells stay HARMLESS (coreR:0):
       // escalation only adds (swirl-caught) danmaku, never a death-clump. ramp constants: full intensity by ~e27.6s.
       { kind:'spell', name:'"Amenomurakumo — Last Word"', survival:30, drops:[], cutinHue:212, body:'raw', raw:function*(b){
           const ws=[]; for(let i=0;i<3;i++){ const w=placeWell({ x:PF_W*(0.3+i*0.2), y:PF_H*0.5, R:62, strength:5400, swirl:((i%2)?-1:1)*11000, coreR:0, warn:1.1, active:99999, fade:0.5, hue:186+i*5 }); if(w) ws.push(w); }   // 3 small roaming vortices over a wider, LOWER band so the orbit-dodge happens near the player (the spell IS the orbit)
           const t0=T; const kOf=function(){ return clamp((T-t0-12.6)/15,0,1); };   // 0 for the first ~13s (initial = original spell), then ramps to full over the back half
+          Director.fork(function*(){ while(kOf()<=0){ pat.aimedSpread(b,{count:5,spread:0.6,speed:148,hue:206,style:'pellet'}); yield* waitT(0.85); if(kOf()>0) break; ring(b,{count:18,speed:96,hue:(212+18*Math.sin(T*0.5)),style:'orb'}); yield* waitT(0.95); } },b);   // 強化(opening-only): aimed scatter (forces movement) + a swirl-caught ring (clutters the safe graze pockets); self-terminates once the latter-half ramp (kOf>0) takes over → back half 据え置き
           Director.fork(function*(){ while(true){ const e=T-t0, sp=1+0.55*kOf(); for(let i=0;i<ws.length;i++){ const w=ws[i]; if(w&&w.alive){ w.x=PF_W*0.5+Math.sin(e*(0.32+i*0.12)*sp+i*2.1)*PF_W*0.30; w.y=PF_H*(0.46+0.18*Math.sin(e*(0.5+i*0.1)*sp+i)); } } yield; } },b);   // wells roam a touch faster as the storm builds
-          Director.fork(function*(){ let a=0; while(true){ const k=kOf(); if(k>0){ spiral(b,{angle:a,arms:Math.round(lerp(2,4,k)),speed:90+34*k,hue:(230+18*Math.sin(T*0.45)),style:'small'}); a-=lerp(0.36,0.5,k); } yield* waitT(lerp(0.14,0.07,k)); } },b);   // latter-half: a counter-rotating second spiral fades in (the 双 rainband)
+          Director.fork(function*(){ let a=0; while(true){ const k=kOf(); spiral(b,{angle:a,arms:Math.round(lerp(2,4,k)),speed:90+34*k,hue:(230+18*Math.sin(T*0.45)),style:'small'}); a-=lerp(0.36,0.5,k); yield* waitT(lerp(0.14,0.07,k)); } },b);   // 強化(opening): the if(k>0) gate is REMOVED so the counter-rotating 双 spiral runs from the start too (k>0 byte-identical — its lerps already evaluate to the same values; only the k===0 opening gains it, crossing the primary orbit so the tidy swirl can't be safe-grazed)
           Director.fork(function*(){ while(true){ const k=kOf(); yield* waitT(lerp(3.2,1.6,k)); if(k>0.12) ring(b,{count:Math.round(lerp(10,20,k)),speed:78+26*k,hue:(200+20*Math.sin(T*0.6)),style:'orb'}); } },b);   // latter-half: periodic rings, themselves caught into the swirl
           let a=0,wave=0,k2=0; while(true){ const k=kOf(); if(k2%2===0){ spiral(b,{angle:a,arms:Math.round(lerp(3,4,k)),speed:96+wave*3+22*k,hue:(208+18*Math.sin(T*0.5)),style:'small'}); a+=lerp(0.42,0.32,k); wave+=0.03; } k2++; yield; } },
         onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,PF_H*0.42,1.3,EASE.out); },b); } }
@@ -4057,55 +4074,60 @@ const TOKOYO_SPEC = { name:'Tokoyo', design:'tokoyo', hue:252, enterFrom:{x:PF_W
     phases:[
       // P1 nonspell「宵闇の置き火」— intro: a sweeping row of placed lamps + aimed + a slow ring (the 置き弾幕 read, sparse)
       { kind:'nonspell', hp:1700, body:'raw', raw:function*(b){
-          Director.fork(function*(){ while(true){ aimedShot(b,{n:3,spread:0.28,speed:148,hue:196,style:'mid'}); yield* waitT(0.92); } },b);
-          Director.fork(function*(){ while(true){ ring(b,{count:16,speed:86,hue:208,style:'orb'}); yield* waitT(1.9); } },b);
-          while(true){ const base=angleToPlayer(b.x,b.y); for(let k=-1;k<=1;k++) spawnLinger({ x:b.x, y:b.y, dir:base+k*0.34, speed:188, decel:0.5, hold:1.5, hue:206, r:7 }); yield* waitT(1.35); } },
+          Director.fork(function*(){ while(true){ aimedShot(b,{n:4,spread:0.4,speed:148,hue:196,style:'mid'}); yield* waitT(0.85); } },b);
+          Director.fork(function*(){ while(true){ ring(b,{count:18,speed:90,hue:208,style:'orb'}); yield* waitT(1.6); } },b);
+          while(true){ const base=angleToPlayer(b.x,b.y); for(let k=-2;k<=2;k++) spawnLinger({ x:b.x, y:b.y, dir:base+k*0.30, speed:188, decel:0.5, hold:1.7, hue:206, r:7 }); yield* waitT(1.15); } },   // 強化: wider/denser lamp arc (3→5 placed) + faster aimed/ring
         onEnter:_sway(PF_W*0.38,PF_W*0.62,140,2.6) },
       // P2 spell「常夜の燭台」看板1 (置き弾幕) — a 3×5 LATTICE of lamps fills the mid field with a SHIFTING gap column the player
       // must align to, while a downward rain pressures. Read the grid + the safe column as it ignites, refreshed every beat.
       { kind:'spell', name:'Night Sign "Lampstand of Eternal Night"', hp:2100, drops:['power','point','point','point'], dropSpread:240, cutinHue:206, body:'raw', raw:function*(b){
-          Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:6,speed:92,gravity:18,hue:200,style:'rice'}); yield* waitT(0.95); } },b);
-          let g=0; while(true){ const base=angleToPlayer(b.x,b.y), N=11, off=Math.sin(g*0.8)*0.5; for(let i=0;i<N;i++) spawnLinger({ x:b.x, y:b.y, dir:base+off-0.95+1.9*(i/(N-1)), speed:200, decel:0.5, hold:2.0, hue:204, r:7 }); g++; yield* waitT(1.4); } },
-        onEnter:_sway(PF_W*0.30,PF_W*0.70,116,2.6) },
+          Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:11,speed:98,gravity:20,hue:200,style:'rice'}); yield* waitT(0.68); } },b);   // 強化: heavier/faster rain (count 9→11, 0.8→0.68s)
+          let g=0; while(true){ const base=angleToPlayer(b.x,b.y), N=18, off=Math.sin(g*0.8)*0.5; for(let i=0;i<N;i++) spawnLinger({ x:b.x, y:b.y, dir:base+off-1.05+2.1*(i/(N-1)), speed:200, decel:0.5, hold:2.0, hue:204, r:7 }); g++; yield* waitT(1.0); } },   // 強化: denser lamp lattice (14→18 rungs over a wider 2.1rad arc) refreshed faster (1.2→1.0); hue204 cold-light
+        onEnter:_sway(PF_W*0.36,PF_W*0.64,116,4.2) },   // 撃ち込み易化: boss の横移動を中央寄り(0.30-0.70→0.36-0.64)＆ゆっくり(2.6→4.2s)に → 自機弾を当てやすい
       // P3 nonspell「禍の苗」— SEED intro: drifting low-breed seeds + a gentle double-aimed over a slow omni-spiral (弾を生む弾, sparse)
       { kind:'nonspell', hp:1850, body:'raw', raw:function*(b){
-          Director.fork(function*(){ while(true){ aimedShot(b,{n:5,spread:0.5,speed:138,hue:196,style:'mid'}); yield* waitT(1.1); } },b);
-          Director.fork(function*(){ while(true){ for(let k=0;k<2;k++) spawnSeed({ x:PF_W*(0.3+k*0.4), y:118, vy:30, hue:SEED_HUE, n:7, births:3, every:0.7, childSpeed:76, childStyle:'pellet', childHue:SEED_CHILD_HUE, childR:4, life:6 }); yield* waitT(3.0); } },b);
-          let a=0; while(true){ spiral(b,{angle:a,arms:3,speed:92,hue:(200+18*Math.sin(T*0.5)),style:'small'}); a+=0.2; yield* waitT(0.08); } },
+          Director.fork(function*(){ while(true){ aimedShot(b,{n:6,spread:0.55,speed:138,hue:196,style:'mid'}); yield* waitT(1.0); } },b);
+          Director.fork(function*(){ while(true){ for(let k=0;k<3;k++) spawnSeed({ x:PF_W*(0.22+k*0.28), y:118, vy:30, hue:SEED_HUE, n:8, births:3, every:0.7, childSpeed:76, childStyle:'pellet', childHue:SEED_CHILD_HUE, childR:4, life:6 }); yield* waitT(2.6); } },b);   // 強化: 2→3 breeding seeds per beat, faster
+          let a=0; while(true){ spiral(b,{angle:a,arms:4,speed:92,hue:(200+18*Math.sin(T*0.5)),style:'small'}); a+=0.2; yield* waitT(0.08); } },
         onEnter:figure8(PF_W*0.5,140,140,40,7.0) },
       // P4 spell「禍津の苗代」看板 (弾を生む弾) — a SEEDBED: 4 drifting seeds per beat breed interleaved rings of plain straight
       // pellets (the breeding IS the spell), over light aimed pressure. Boss raised so the seed-field fills the player's band.
       { kind:'spell', name:'Calamity Sign "Seedbed of Calamity"', hp:2250, drops:['power','point','point','point'], cutinHue:288, body:'raw', raw:function*(b){
-          Director.fork(function*(){ while(true){ aimedShot(b,{n:3,spread:0.3,speed:120,hue:196,style:'mid'}); yield* waitT(1.3); } },b);
-          let w=0; while(true){ const cols=4; for(let k=0;k<cols;k++){ const sx=(k+0.5)/cols*PF_W; spawnSeed({ x:sx, y:84, vy:24, hue:SEED_HUE, n:8, births:3, every:0.62, childSpeed:72, childStyle:'pellet', childHue:(SEED_CHILD_HUE+k*4), childR:4, life:7, phase0:w*0.5+k*0.4, twist:0.6 }); } w++; yield* waitT(2.7); } },
+          Director.fork(function*(){ while(true){ aimedShot(b,{n:7,spread:0.45,speed:128,hue:196,style:'mid'}); yield* waitT(0.85); } },b);   // 強化: 5→7-way aimed, faster (1.0→0.85)
+          Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:7,speed:96,gravity:14,hue:204,style:'rice'}); yield* waitT(1.1); } },b);   // 強化: a downward 種田 rain over the seedbed (an extra dodge axis); hue 204 = cold-light, safe on the violet cave
+          let w=0; while(true){ const cols=6; for(let k=0;k<cols;k++){ const sx=(k+0.5)/cols*PF_W; spawnSeed({ x:sx, y:84, vy:24, hue:SEED_HUE, n:11, births:3, every:0.52, childSpeed:78, childStyle:'pellet', childHue:(SEED_CHILD_HUE+k*4), childR:4, life:7, phase0:w*0.5+k*0.4, twist:0.6 }); } w++; yield* waitT(1.95); } },   // 強化: seedbed 5→6 columns, n 10→11, faster breed (0.56→0.52) + waves closer (2.15→1.95)
         onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,PF_H*0.30,1.1,EASE.out); },b); } },
       // P5 nonspell「常闇の帳」— the two gimmicks COMBINED: a shifting lamp lattice whose lamps BLOOM into rings on expiry +
       // a drifting seed + aimed. The placed read and the breed read stacked, the boss weaving.
       { kind:'nonspell', hp:1950, body:'raw', raw:function*(b){
-          Director.fork(function*(){ while(true){ aimedShot(b,{n:3,spread:0.34,speed:150,hue:196,style:'mid'}); yield* waitT(0.95); } },b);
-          Director.fork(function*(){ while(true){ spawnSeed({ x:PF_W*0.5+Math.sin(T*0.7)*PF_W*0.3, y:110, vy:34, hue:SEED_HUE, n:8, births:3, every:0.6, childSpeed:80, childStyle:'pellet', childHue:SEED_CHILD_HUE, childR:4, life:6 }); yield* waitT(2.4); } },b);
-          while(true){ const N=9, base=angleToPlayer(b.x,b.y); for(let i=0;i<N;i++) spawnLinger({ x:b.x, y:b.y, dir:base-0.7+1.4*(i/(N-1)), speed:185, decel:0.5, hold:1.3, resume:118, hue:204, r:7 }); yield* waitT(1.7); } },
-        onEnter:_sway(PF_W*0.30,PF_W*0.70,130,2.2) },
+          Director.fork(function*(){ while(true){ aimedShot(b,{n:4,spread:0.38,speed:150,hue:196,style:'mid'}); yield* waitT(0.85); } },b);
+          Director.fork(function*(){ while(true){ spawnSeed({ x:PF_W*0.5+Math.sin(T*0.7)*PF_W*0.3, y:110, vy:34, hue:SEED_HUE, n:8, births:3, every:0.6, childSpeed:80, childStyle:'pellet', childHue:SEED_CHILD_HUE, childR:4, life:6 }); spawnSeed({ x:PF_W*0.5-Math.sin(T*0.7)*PF_W*0.3, y:110, vy:34, hue:SEED_HUE, n:7, births:3, every:0.6, childSpeed:80, childStyle:'pellet', childHue:SEED_CHILD_HUE, childR:4, life:6 }); yield* waitT(2.3); } },b);   // 強化: a MIRRORED second drifting seed (both gimmicks now breed from both sides)
+          while(true){ const N=11, base=angleToPlayer(b.x,b.y); for(let i=0;i<N;i++) spawnLinger({ x:b.x, y:b.y, dir:base-0.7+1.4*(i/(N-1)), speed:185, decel:0.5, hold:1.5, resume:118, hue:204, r:7 }); yield* waitT(1.5); } },
+        onEnter:_sway(PF_W*0.42,PF_W*0.58,130,4.0) },   // 微弱化(撃ち込み易化): 弾幕密度はそのまま、boss の移動を中央寄り(0.30-0.70→0.42-0.58)＆ゆっくり(2.2→4.0s)に → 撃ち込みやすい
       // P6 spell「常夜の檻」看板・ACT I 山場 (置き弾幕 × 弾を生む弾 fused) — a rotating CAGE of blooming lamps around the boss while
       // seeds breed INSIDE it. Boss DEAD-CENTRE (rotation-spell理不尽回避 — S4/S5 lesson). The hardest dark spell.
       { kind:'spell', name:'Night Sign "Cage of Eternal Night"', hp:2500, drops:['power','point','point','point'], cutinHue:252, body:'raw', raw:function*(b){
-          const cx=PF_W*0.5, cy=PF_H*0.42;
-          Director.fork(function*(){ while(true){ spawnSeed({ x:cx, y:cy+18, vy:0, hue:SEED_HUE, n:10, births:4, every:0.7, childSpeed:70, childStyle:'pellet', childHue:SEED_CHILD_HUE, childR:4, life:5, twist:0.5 }); yield* waitT(2.2); } },b);
-          let ringN=0; while(true){ const base=angleToPlayer(b.x,b.y), NC=16; for(let i=0;i<NC;i++) spawnLinger({ x:b.x, y:b.y, dir:base-1.35+2.7*(i/(NC-1)), speed:215, decel:0.55, hold:2.0, hue:206, r:7 }); ringN++; yield* waitT(1.6); } },
+          const cx=PF_W*0.5, cy=PF_H*0.42; const enrOf=function(){ return clamp(1-b.hp/(b.maxHp||1),0,1); };   // 強化(発狂モード): 0 at full HP → 1 near death; both the seed breed and the cage densify as remaining HP falls
+          Director.fork(function*(){ while(true){ const e=enrOf(); spawnSeed({ x:cx, y:cy+18, vy:0, hue:SEED_HUE, n:Math.round(lerp(13,17,e)), births:4, every:lerp(0.58,0.46,e), childSpeed:74, childStyle:'pellet', childHue:SEED_CHILD_HUE, childR:4, life:5, twist:0.5 }); yield* waitT(lerp(1.8,1.4,e)); } },b);   // 強化: denser inner breed (11→13..15→17 pellets, faster breed/refresh)
+          Director.fork(function*(){ while(true){ const e=enrOf(), base=angleToPlayer(b.x,b.y), NC=Math.round(lerp(14,16,e)); for(let i=0;i<NC;i++) spawnLinger({ x:b.x, y:b.y, dir:base+1.05-2.1*(i/(NC-1)), speed:188, decel:0.55, hold:1.7, hue:200, r:7 }); yield* waitT(lerp(1.7,1.3,e)); } },b);   // 強化: a COUNTER cage (opposite sweep, slower/cooler lamps hue 200) interleaves with the main cage → tighter cells
+          let ringN=0; while(true){ const e=enrOf(), base=angleToPlayer(b.x,b.y), NC=Math.round(lerp(20,26,e)); for(let i=0;i<NC;i++) spawnLinger({ x:b.x, y:b.y, dir:base-1.35+2.7*(i/(NC-1)), speed:215, decel:0.55, hold:2.0, hue:206, r:7 }); ringN++; yield* waitT(lerp(1.35,1.0,e)); } },   // 強化: wider main cage (18→20..24→26 bars) refreshed faster (1.45/1.05 → 1.35/1.0)
         onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,PF_H*0.42,1.2,EASE.out); },b); } },
       // P7 survival「夜明け前」— the darkest, ~28s. Drifting seeds + a shifting lamp lattice + an omni-spiral, all RAMPING over
       // the back half (kOf) — the deep dark builds toward the breaking. Ends → P8 transformation. Stays in full night (L=0).
       { kind:'spell', name:'"Before the Dawn"', survival:28, drops:[], cutinHue:252, body:'raw', raw:function*(b){
           const t0=T, kOf=function(){ return clamp((T-t0-11)/15,0,1); };
-          Director.fork(function*(){ while(true){ const k=kOf(); spawnSeed({ x:PF_W*(0.18+0.64*(((T-t0)*0.13)%1)), y:96, vy:lerp(26,40,k), hue:SEED_HUE, n:Math.round(lerp(7,10,k)), births:3, every:0.6, childSpeed:lerp(70,86,k), childStyle:'pellet', childHue:SEED_CHILD_HUE, childR:4, life:6 }); yield* waitT(lerp(2.2,1.2,k)); } },b);
-          Director.fork(function*(){ let g=0; while(true){ const k=kOf(), base=angleToPlayer(b.x,b.y), N=Math.round(lerp(8,13,k)); for(let i=0;i<N;i++) spawnLinger({ x:b.x, y:b.y, dir:base-1.0+2.0*(i/(N-1)), speed:lerp(190,220,k), decel:0.5, hold:lerp(1.5,1.0,k), hue:204, r:7 }); g++; yield* waitT(lerp(2.2,1.4,k)); } },b);
-          let a=0; while(true){ const k=kOf(); spiral(b,{angle:a,arms:Math.round(lerp(2,4,k)),speed:lerp(84,104,k),hue:(200+18*Math.sin(T*0.5)),style:'small'}); a+=lerp(0.22,0.16,k); yield* waitT(lerp(0.12,0.07,k)); } },
+          Director.fork(function*(){ while(true){ const k=kOf(); spawnSeed({ x:PF_W*(0.18+0.64*(((T-t0)*0.13)%1)), y:96, vy:lerp(26,42,k), hue:SEED_HUE, n:Math.round(lerp(8,12,k)), births:Math.round(lerp(3,4,k)), every:0.5, childSpeed:lerp(62,82,k), childStyle:'pellet', childHue:SEED_CHILD_HUE, childR:4, life:7, childAim:true, childSpread:lerp(0.95,0.6,k) }); yield* waitT(lerp(1.5,0.8,k)); } },b);   // 強化(自機狙い罠): 弾を生む弾を自機狙いの遅い長寿命弾へ。childSpeed 62→82 は低速で長く滞空(長寿命)しつつ全フィールド横断(長射程)、childAim で各 breed が現在の自機へ再照準、spread 0.95→0.6 と締まる。掃引する複数の苗の扇が重なり「同じ場所に留まると逃げ場が消える」(動けば旧位置狙いで隙)
+          Director.fork(function*(){ let g=0; while(true){ const k=kOf(), base=angleToPlayer(b.x,b.y), N=Math.round(lerp(13,24,k)); for(let i=0;i<N;i++) spawnLinger({ x:b.x, y:b.y, dir:base-1.0+2.0*(i/(N-1)), speed:lerp(196,230,k), decel:0.5, hold:lerp(1.6,1.05,k), hue:204, r:7 }); g++; yield* waitT(lerp(1.6,0.95,k)); } },b);   // 強化2: 頂点 lamp fan N 21→24
+          Director.fork(function*(){ let a=0; while(true){ const k=kOf(); if(k>0.04){ spiral(b,{angle:-a,arms:Math.round(lerp(3,6,k)),speed:lerp(92,114,k),hue:(202+4*Math.sin(T*0.5)),hueSpread:16,style:'small'}); a+=lerp(0.16,0.24,k); } yield* waitT(lerp(0.13,0.065,k)); } },b);   // 強化2: 頂点 counter-spiral arms 5→6 (hue 据置 198..206 hueSpread16=安全)
+          let a=0; while(true){ const k=kOf(); spiral(b,{angle:a,arms:Math.round(lerp(5,7,k)),speed:lerp(98,120,k),hue:(202+4*Math.sin(T*0.4)),hueSpread:16,style:'small'}); a+=lerp(0.22,0.15,k); yield* waitT(lerp(0.095,0.046,k)); } },   // 強化2: 頂点 primary arms 6→7 + 頂点 cadence 0.05→0.046 (hue 据置 安全)
         onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,PF_H*0.40,1.3,EASE.out); },b); } },
       // P8 TRUE FINAL「天岩戸開」(暗→光) — the climax. A forked ramp drives _iwatoLight 0→1 over 5s: the rock door opens, dawn
       // floods, the black sun is eclipsed by light. The danmaku turns to RADIANT lightpetals (Stage-1 桜 callback), now
       // LIT and readable — a beautiful, fair last spell. On defeat → 常夜 shatters → {stageClear} → ALL CLEAR (light returns).
       { kind:'spell', name:'"The Cave Opens — Amaterasu Returns"', hp:2300, drops:['bigpower','power','point','point','point'], dropSpread:240, cutinHue:44, body:'raw', raw:function*(b){
           Director.fork(function*(){ const t0=T; while(_iwatoLight<1){ _iwatoLight=clamp((T-t0)/5.0,0,1); yield; } _iwatoLight=1; },b);
+          Director.fork(function*(){ while(_iwatoLight<0.85) yield; Audio.queueMusic('boss6dawn',4); },b);   // 転調=明転連動かつ自然(採択="Big phrase"): 扉がほぼ開いた(明転後, _iwatoLight≥0.85≈4.5s)時点で queueMusic→次の【4小節フレーズ】頭でクロスフェードなしにクリーンカットで A-major dawn へ。ACT I(boss6) は P1–P7 をループ。bar1 より大きい楽節単位の方が転調が自然(ユーザ採択)
+
           Director.fork(function*(){ while(true){ aimedShot(b,{n:3,spread:0.3,speed:150,hue:52,style:'mid'}); yield* waitT(1.0); } },b);
           // 陽光の花びら lifted into a tight bright GOLD→YELLOW band (hueSpread narrowed): the old (40±20)±20arm spread dipped petals
           // into deep RED/ORANGE that melted into the dawn's own azuki/orange sky (the "小豆色 溶け込む" report). Now they stay
