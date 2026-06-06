@@ -17,6 +17,7 @@ const SCALES = {
   Charm: [0,2,3,5,7,8,11],   // C harmonic minor: C D Eb F G Ab B
   Dharm: [1,2,4,5,7,9,10],   // D harmonic minor: D E F G A Bb C#   (Stage 2)
   Fharm: [0,1,4,5,7,8,10],   // F harmonic minor: F G Ab Bb C Db E   (Stage 2 boss climax lift)
+  Daeo:  [0,2,4,5,7,9,10],   // D natural minor (aeolian): D E F G A Bb C   (Stage 2 boss "Tidal Surge / 潮の奔流")
   Ehira: [0,4,6,7,11],       // E hirajoshi: E F# G B C   (Stage 3 road "Take-no-Komichi" — 和 pentatonic)
   Ein:   [0,4,5,9,11],       // E In / 都節 (Miyako-bushi): E F A B C   (Stage 3 boss "Mirror of Two Moons")
   Amaj:  [1,2,4,6,8,9,11],   // A major / D Lydian collection (3 sharps): A B C# D E F# G#   (Stage 4 road + boss — bright dawn)
@@ -380,51 +381,48 @@ const STAGE2 = {
 };
 
 // ================================================================ STAGE 2 BOSS
-// "Tasokare's Lament" — D harmonic minor, key-lift to F harmonic minor, 164 BPM. An INDEPENDENT theme
-// (not the Stage-1 boss reshaped): where that boss is warm and tuneful-stepwise, this hook is angular —
-// wide 4th/5th leaps and the augmented-2nd — over a recurring descending lament cadence. Menacing, not pretty.
+// "Tidal Surge / 潮の奔流" — D natural minor, 146 BPM. An INDEPENDENT aquatic boss theme (NOT the old
+// "Tasokare's Lament" reshaped, and NOT the Stage-1 boss): a rolling, lilting MOMENTUM — fast arps =
+// rushing water, a driving walk/pump bass = undertow — under a melody that rises and crests like a swell.
+// The 蛟/Mizuchi (water-serpent) racing the player: water IN MOTION. Adopted from the 2026-06 audition.
 const B2_HOOK = [
-  [0,74],[2,81],[4,82],[8,85],[10,82],[12,79],[14,77],   // D↑A Bb (leap) → C#6 Bb G F  — wide leaps, then fall
-  [16,76],[18,74],[20,81],[24,82],[26,77],[28,76],[30,74], // E D A(leap) Bb F E D  — angular
+  [0,69],[2,72],[3,74],[4,72],[6,69],[8,67],[12,69],[14,65],
+  [16,67],[18,69],[19,70],[20,72],[22,74],[24,77],[28,74],[30,72],
+  [32,74],[34,72],[36,70],[38,69],[40,67],[44,69],[48,65],[52,67],
+  [56,69],[58,72],[60,74],[62,72],
 ];
-const B2_CLOSE = [ [0,82],[4,81],[8,79],[12,77],[16,76],[20,74],[24,73],[28,74] ]; // descending lament: Bb A G F E D C# D
-const B2_B = [ // dramatic lift, D harmonic minor
-  [0,86],[6,82],[10,85],[16,81],[24,77],
-  [32,79],[40,82],[48,85],[56,86],
-  [64,85],[72,82],[80,79],[88,77],
-  [96,81],[104,85],[112,82],[120,86],
+const B2_HOOK2 = [ // answer phrase: the swell crests up the octave then sinks to the tonic
+  [0,69],[2,72],[3,74],[4,72],[6,69],[8,67],[12,69],[14,65],
+  [16,72],[20,74],[24,76],[28,77],[32,74],[36,72],[40,69],[44,67],
+  [48,72],[52,69],[56,65],[60,62],
 ];
-const B2_BRIDGE = [ // sinking lament to A, then a leading-tone climb back
-  [0,81],[8,77],[16,74],[24,70],
-  [32,69],[40,73],[48,74],[56,77],
-  [64,79],[72,82],[80,85],[88,82],
-  [96,81],[104,77],[112,74],[120,73],
+const B2_B = [ // 8-bar lift — the wave gathering and breaking high
+  [0,77],[4,76],[8,74],[12,72],[16,74],[24,77],
+  [32,79],[40,77],[48,76],[56,74],
+  [64,72],[68,74],[72,76],[76,77],[80,79],[88,81],
+  [96,77],[100,76],[104,74],[108,72],[112,74],[120,69],
 ];
-const B2_OUTRO = [ [0,74],[2,81],[6,85],[12,82],[16,79],[24,77],[32,74],[48,74] ];
+const B2_OUTRO = [ [0,81],[4,79],[8,77],[12,76],[16,74],[20,72],[24,69],[32,72],[48,69] ];
 const BOSS2 = {
-  title: "Tasokare's Lament", keyName: 'D harmonic minor → F', bpm: 164, gain: 0.62,
-  // DISTINCT timbre from the Stage 1 boss (which is warm triangle-led): a cold saw+hollow-square lead,
-  // a sharp chiptune-ghost square arp, and a grittier bass. With a galloping bass + midGallop groove +
-  // the faster tempo it reads as a relentless ghost-chase, not the Stage-1 boss's tuneful warm drive.
+  title: 'Tidal Surge / 潮の奔流', keyName: 'D minor — rolling current', bpm: 146, gain: 0.6,
+  // Watery-but-driving timbre: a triangle-led lead (round, not harsh) with a filtered saw 3rd layer for
+  // body, a square counter that answers in the rests, a plucky arp = the rushing surface, and a walking/
+  // pumping saw bass = the undertow. midGroove→bossDrive across the arrangement keeps the boss momentum.
   voices: {
-    lead: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:0.9, filter:'lowpass', filterFreq:2600 }, { type:'square', octave:0, detune:8, gain:0.55, filter:'lowpass', filterFreq:2200 }, { type:'sawtooth', octave:1, detune:0, gain:0.2 } ], atk:0.004, dec:0.05, sus:0.45, rel:0.12, maxGate:6 },
-    harm: { layers:[ { type:'sawtooth', octave:0, detune:-6, gain:1.0 } ], atk:0.006, dec:0.05, sus:0.42, rel:0.13, filter:'lowpass', filterFreq:2400, maxGate:6 },
-    counter: { layers:[ { type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:1800 } ], atk:0.005, dec:0.05, sus:0.38, rel:0.11, maxGate:5 },
-    arp: { layers:[ { type:'square', octave:0, detune:9, gain:1.0 } ], atk:0.002, dec:0.022, sus:0.13, rel:0.05, filter:'lowpass', filterFreq:3600, maxGate:1 },
-    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.004, dec:0.05, sus:0.58, rel:0.08, filter:'lowpass', filterFreq:1050, maxGate:3 },
-    pad: { octave:0, voices:3, detune:12, type:'sawtooth', atk:0.07, dec:0.12, sus:0.66, rel:0.4, filter:'lowpass', filterFreq:1300 } },
-  gains: { lead:0.14, harm:0.075, counter:0.085, arp:0.065, bass:0.17, sub:0.14, pad:0.055, kick:1.1, snare:1.05, crash:1.05 },
+    lead: { layers:[ { type:'triangle', octave:0, detune:0, gain:1.0 }, { type:'triangle', octave:0, detune:7, gain:0.45 }, { type:'sawtooth', octave:0, detune:0, gain:0.26, filter:'lowpass', filterFreq:2400 } ], atk:0.006, dec:0.06, sus:0.5, rel:0.13, filter:'lowpass', filterFreq:2600, maxGate:5 },
+    counter: { layers:[ { type:'square', octave:0, detune:0, gain:1.0, filter:'lowpass', filterFreq:2000 } ], atk:0.006, dec:0.05, sus:0.4, rel:0.12, maxGate:4 },
+    arp: { layers:[ { type:'triangle', octave:0, detune:6, gain:1.0 } ], atk:0.002, dec:0.028, sus:0.18, rel:0.06, filter:'lowpass', filterFreq:3000, maxGate:1 },
+    bass: { layers:[ { type:'sawtooth', octave:0, detune:0, gain:1.0 } ], atk:0.005, dec:0.05, sus:0.58, rel:0.08, filter:'lowpass', filterFreq:820, maxGate:3 },
+    pad: { octave:1, voices:2, detune:10, type:'sawtooth', atk:0.09, dec:0.14, sus:0.68, rel:0.4, filter:'lowpass', filterFreq:1700 } },
+  gains: { lead:0.135, harm:0.07, counter:0.082, arp:0.062, bass:0.165, sub:0.12, pad:0.05 },
   sections: {
-    intro:  makeSection({ bars:8, scale:'Dharm', chords:['Dm','Dm','A7','A7','Gm','Gm','A7','A7'], lead:cat(B2_HOOK, off(64,B2_HOOK)), harm:true, bassStyle:'half', arpRate:2, groove:'fourLite', sub:true, crash:true }),
-    A1:     makeSection({ bars:8, scale:'Dharm', chords:['Dm','Bb','F','A7','Dm','Bb','Gm','A7'], lead:cat(B2_HOOK, off(32,B2_HOOK), off(64,B2_HOOK), off(96,B2_CLOSE)), bassStyle:'gallop', arpRate:1, groove:'midGallop', sub:true, crash:true }),
-    A2:     makeSection({ bars:8, scale:'Dharm', chords:['Dm','Bb','F','A7','Dm','Gm','A7','Dm'], lead:cat(B2_HOOK, off(32,B2_HOOK), off(64,B2_HOOK), off(96,B2_CLOSE)), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'midGallop', sub:true, crash:true }),
-    B:      makeSection({ bars:8, scale:'Dharm', chords:['Bb','F','Gm','Dm','Bb','F','A7','Dm'], lead:B2_B, harm:true, counter:true, bassStyle:'pump8', arpRate:1, groove:'midGallop', sub:true, crash:true }),
-    bridge: makeSection({ bars:8, scale:'Dharm', chords:['Gm','Gm','Dm','A7','Bb','Bb','A7','A7'], lead:B2_BRIDGE, bassStyle:'half', arpRate:2, groove:'bossBridge', sub:true }),
-    climax: makeSection({ bars:8, scale:'Fharm', chords:['Fm','Db','Ab','C7','Fm','Db','Bbm','C7'], lead:cat(transpose(B2_HOOK,3), off(32,transpose(B2_HOOK,3)), off(64,transpose(B2_HOOK,3)), off(96,transpose(B2_CLOSE,3))), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
-    A3:     makeSection({ bars:8, scale:'Dharm', chords:['Dm','Bb','F','A7','Dm','Gm','A7','Dm'], lead:cat(B2_HOOK, off(32,B2_HOOK), off(64,B2_HOOK), off(96,B2_CLOSE)), harm:true, counter:true, bassStyle:'gallop', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
-    outro:  makeSection({ bars:4, scale:'Dharm', chords:['Gm','A7','Dm','D'], lead:B2_OUTRO, bassStyle:'half', arpRate:2, groove:'midGallop', sub:true, crash:true }),
+    intro:  makeSection({ bars:4, scale:'Daeo', chords:['Dm','Dm','Bb','C'], bassStyle:'pumpQ', arpRate:2, groove:'introTick', sub:true, crash:true }),
+    A:      makeSection({ bars:8, scale:'Daeo', chords:['Dm','Bb','F','C','Dm','Gm','C','Dm'], lead:cat(B2_HOOK, off(64,B2_HOOK2)), bassStyle:'walk8', arpRate:2, groove:'midGroove', sub:true }),
+    B:      makeSection({ bars:8, scale:'Daeo', chords:['Bb','F','Gm','Dm','Bb','C','A','A'], lead:B2_B, counter:true, bassStyle:'pump8', arpRate:1, groove:'four', sub:true, crash:true }),
+    A2:     makeSection({ bars:8, scale:'Daeo', chords:['Dm','Bb','F','C','Dm','Gm','C','Dm'], lead:cat(B2_HOOK, off(64,B2_HOOK2)), harm:true, counter:true, bassStyle:'walk8', arpRate:1, groove:'bossDrive', sub:true, crash:true }),
+    outro:  makeSection({ bars:4, scale:'Daeo', chords:['Gm','C','Dm','Dm'], lead:B2_OUTRO, bassStyle:'pump8', arpRate:1, groove:'midGroove', sub:true, crash:true }),
   },
-  arrangement: ['intro','A1','A2','B','bridge','climax','A3','outro'],
+  arrangement: ['intro','A','B','A2','A','outro'],
 };
 
 // ================================================================ STAGE 3
