@@ -138,14 +138,6 @@ const STATE = { TITLE:0, PLAYING:1, PAUSED:2, GAMEOVER:3, STAGECLEAR:4,
 const GAMEOVER_AUTORET = 11.6, GAMEOVER_FADE = 0.7;
 const GAME_KEYS = new Set(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','ShiftLeft','ShiftRight','KeyZ','KeyX','Escape','KeyP','Enter','KeyM']);
 
-// ---- spell-practice / tuning knob (DEV-ONLY; inert in the shipped game) ----
-// BULLET_SPEED_K is a 1-D difficulty dial used by spell-practice mode (?practice=…) to hunt the right
-// last-word difficulty live. 1.0 = ship default: BOTH the spawnBullet speed-scale (engine core) and the
-// waitT fire-rate-scale (wait primitives) guard on `!==1`, so the shipped & golden paths are byte-identical.
-// Only ?knob=/practice keys ([ ]) ever move it. It scales enemy bullet SPEED and emitter FIRE-RATE together
-// → one perceived "intensity" axis. Values found here get FOLDED into source numbers in the real rebalance.
-let BULLET_SPEED_K = 1;
-
 const TAU = Math.PI*2, HALFPI = Math.PI/2, DEG = Math.PI/180;
 const DEFAULT_R = 4.5;
 
@@ -227,7 +219,6 @@ function spawnBullet(o){
   b.update=o.update||null; b.custom=!!o.custom;
   b.delay=o.delay||0; b.bounces=o.bounces||0; b.turn=o.turn||0; b.turnAbs=!!o.turnAbs;
   b.speed2=(o.speed2!=null)?o.speed2:null; b.fired=false; b.phase=o.phase||0;
-  if(BULLET_SPEED_K!==1){ b.vx*=BULLET_SPEED_K; b.vy*=BULLET_SPEED_K; b.speed*=BULLET_SPEED_K; }   // practice difficulty knob: scale enemy-bullet speed. ==1 in ship/golden → skipped → byte-identical
   b._spr=getBulletSprite(b.style,b.hue);
   return b;
 }
@@ -2701,13 +2692,6 @@ function drawSurvivalBar(boss){
 // ---- overlays (title/pause/gameover/clear) ----
 function dimPlayfield(a){ ctx.save(); ctx.beginPath(); ctx.rect(PF_X,PF_Y,PF_W,PF_H); ctx.clip(); ctx.fillStyle='rgba(8,3,16,'+a+')'; ctx.fillRect(PF_X,PF_Y,PF_W,PF_H); ctx.restore(); }
 function ctext(s,x,y,font,col,align){ ctx.font=font; ctx.fillStyle=col; ctx.textAlign=align||'center'; ctx.fillText(s,x,y); ctx.textAlign='left'; }
-// spell-practice readout (dev-only): boss + starting phase + the live difficulty knob, bottom-left of the field.
-function drawPracticeHud(){ ctx.setTransform(dpr,0,0,dpr,0,0); const x=8, y=PF_H-32;
-  ctx.save(); ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(x-4,y-13,212,32);
-  ctext('▶ PRACTICE  '+(PRACTICE.spec.name||PRACTICE.bossKey)+'  P'+(PRACTICE.phase+1)+'→', x, y, 'bold 11px "Trebuchet MS",sans-serif', '#9fe0ff','left');
-  const k=BULLET_SPEED_K, kc=(k>1.001)?'#ff9d6b':(k<0.999?'#8affb0':'#ffe9fb');
-  ctext('KNOB ×'+k.toFixed(2)+'   [ − / + ]   \\ reset', x, y+14, 'bold 12px "Trebuchet MS",monospace', kc,'left');
-  ctx.restore(); }
 function drawOverlays(){ ctx.setTransform(dpr,0,0,dpr,0,0); const cx=PF_W/2; if(game.state===STATE.TITLE){ dimPlayfield(0.5); ctx.save(); ctx.beginPath(); ctx.rect(PF_X,PF_Y,PF_W,PF_H); ctx.clip(); const grd=ctx.createLinearGradient(0,120,0,200); grd.addColorStop(0,'#ffd9ec'); grd.addColorStop(1,'#ff8ec5'); ctext('桜花弾幕',cx,170,'bold 52px "Trebuchet MS",sans-serif','#ff8ec5'); ctx.save(); ctx.shadowColor='rgba(255,120,200,0.8)'; ctx.shadowBlur=18; ctext('桜花弾幕',cx,170,'bold 52px "Trebuchet MS",sans-serif','#ffe3f2'); ctx.restore(); ctext('S A K U R A   D A N M A K U',cx,200,'13px "Trebuchet MS",sans-serif','#cfa8e8'); ctext('Stage 1 — Vernal Petal Lane',cx,232,'14px "Trebuchet MS",sans-serif','#e9d4ff'); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext(inputMode==='touch'?'▶  TAP  TO  START':'▶  PRESS  Z  /  ENTER  TO  START',cx,330,'bold 16px "Trebuchet MS",sans-serif','#ffe08a'); if(inputMode==='touch'){ ctext('Drag in field to move   ·   tap SHOT / FOCUS to toggle',cx,392,'12px "Trebuchet MS",sans-serif','#b69fd6'); ctext('BOMB & PAUSE buttons   ·   gamepad also supported',cx,412,'12px "Trebuchet MS",sans-serif','#b69fd6'); } else { ctext('Arrows / WASD move   ·   Shift focus   ·   gamepad supported',cx,392,'12px "Trebuchet MS",sans-serif','#b69fd6'); ctext('Z shoot   ·   X bomb   ·   P pause   ·   M mute',cx,412,'12px "Trebuchet MS",sans-serif','#b69fd6'); } ctext('graze bullets for score · collect P power & • points',cx,440,'11px "Trebuchet MS",sans-serif','#9d83c0'); ctext('Hi-Score  '+pad(game.hi||0,9),cx,500,'12px "Trebuchet MS",monospace','#ffd45e'); ctx.restore(); } else if(game.state===STATE.PAUSED){ dimPlayfield(0.55); ctext('PAUSED',cx,PF_H/2-10,'bold 34px "Trebuchet MS",sans-serif','#ffe9fb'); ctext(inputMode==='touch'?'Tap to resume':'Press P / Esc to resume',cx,PF_H/2+24,'13px "Trebuchet MS",sans-serif','#b69fd6'); } else if(game.state===STATE.GAMEOVER){ dimPlayfield(0.62); ctext('GAME OVER',cx,PF_H/2-30,'bold 40px "Trebuchet MS",sans-serif','#ff5d8f'); ctext('Score  '+pad(game.score||0,9),cx,PF_H/2+10,'16px "Trebuchet MS",monospace','#ffe9fb'); ctext('Hi-Score  '+pad(game.hi||0,9),cx,PF_H/2+34,'13px "Trebuchet MS",monospace','#ffd45e'); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext(inputMode==='touch'?'Tap to continue':'Press Enter',cx,PF_H/2+78,'14px "Trebuchet MS",sans-serif','#cfa8e8'); } else if(game.state===STATE.STAGECLEAR){ const allClear=(run&&run.stage===STAGES.length-1); dimPlayfield(allClear?0.32:0.5);   /* the FINAL stage's clear = ALL CLEAR (game complete); the dawn cave shows brighter behind it */
     if(allClear){ ctext('ALL CLEAR',cx,PF_H/2-46,'bold 40px "Trebuchet MS",sans-serif','#ffe6a0'); ctext('陽 が 還 っ た',cx,PF_H/2-14,'15px "Trebuchet MS",sans-serif','#ffd9b0'); ctext('Score  '+pad(game.score||0,9),cx,PF_H/2+20,'16px "Trebuchet MS",monospace','#fff4e0'); ctext('Graze  '+(game.grazeCount||0),cx,PF_H/2+44,'13px "Trebuchet MS",monospace','#ffe6a0'); ctext('thank you for playing',cx,PF_H/2+72,'12px "Trebuchet MS",sans-serif','#f0c890'); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext(inputMode==='touch'?'Tap to continue':'Press Enter',cx,PF_H/2+102,'14px "Trebuchet MS",sans-serif','#ffe6a0'); }
     else { ctext('STAGE CLEAR',cx,PF_H/2-30,'bold 38px "Trebuchet MS",sans-serif','#b9ff6a'); ctext('Score  '+pad(game.score||0,9),cx,PF_H/2+12,'16px "Trebuchet MS",monospace','#ffe9fb'); ctext('Graze  '+(game.grazeCount||0),cx,PF_H/2+38,'13px "Trebuchet MS",monospace','#b9ff6a'); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext(inputMode==='touch'?'Tap to continue':'Press Enter',cx,PF_H/2+82,'14px "Trebuchet MS",sans-serif','#cfa8e8'); } } }
@@ -2727,7 +2711,7 @@ function RenderFrame(now,alpha){ const dt=_lastNow?Math.min(0.05,(now-_lastNow)/
   ctx.save(); ctx.translate(PF_X+cam.shakeX,PF_Y+cam.shakeY); drawWells(T); drawEnemyLasers(T); drawGrazeLaser(T); drawItems(T); drawPlayerShots(alpha); if(game.boss&&!game.boss.dead){ drawBoss(game.boss,T); const _tw=game.boss._twin; if(_tw&&!_tw.dead) drawBoss(_tw,T); } drawEnemies(ctx,T,alpha); drawParticles(); drawLaserBulletContrast(alpha); drawEnemyBullets(alpha); drawPlayer(T); drawWaves(dt); ctx.restore();  // laser drawn first (back-most) so enemy bullets & items stay visible on top; contrast backing keeps on-beam bullets readable
   ctx.save(); ctx.translate(PF_X,PF_Y); drawBanner(paused?0:dt); drawFlash(); drawVignette(T); ctx.restore();
   ctx.restore();
-  ctx.setTransform(dpr,0,0,dpr,0,0); drawHUD(); drawTouchControls(); drawOverlays(); if(PRACTICE) drawPracticeHud();
+  ctx.setTransform(dpr,0,0,dpr,0,0); drawHUD(); drawTouchControls(); drawOverlays();
 }
 const Render={ timeScale:1, init:RenderInit, resize:RenderResize, frame:RenderFrame, flash:reqFlash, shake:reqShake, cancelWave:reqCancelWave, slowmo:reqSlowmo, banner:triggerBanner, cutin:triggerCutin };
 
@@ -3068,7 +3052,7 @@ function initGameSystems(){ game=makeGame(); player=makePlayer(); loadHiScore();
 function updateGameSystems(dt){ game.stateT+=dt;
   switch(game.state){
     case STATE.TITLE: updateTitle(dt); break;
-    case STATE.PLAYING: playerUpdate(dt); updateItems(dt); applyBossDot(dt); if(game.scoreMul>1) game.scoreMul=Math.max(1,game.scoreMul-SCORE_MUL_DECAY*dt); if(PRACTICE) tickPracticeKnob(); break;
+    case STATE.PLAYING: playerUpdate(dt); updateItems(dt); applyBossDot(dt); if(game.scoreMul>1) game.scoreMul=Math.max(1,game.scoreMul-SCORE_MUL_DECAY*dt); break;
     case STATE.PAUSED: break;
     case STATE.GAMEOVER:
       if(!game._goFade && game.stateT>GAMEOVER_AUTORET-GAMEOVER_FADE){ game._goFade=true; Audio.fadeOutMusic(GAMEOVER_FADE); }   // begin the gentle tail fade so silence lands right at the auto-return
@@ -3112,16 +3096,17 @@ function enterStage(i){
 // started Stage N+1 coro. Setting a flag and entering the stage at a safe point avoids that.
 function advanceStage(){ if(run && run.stage < STAGES.length-1){ run._advanceTo=run.stage+1; } else onStageClear(); }
 function startGame(){ startRun('normal', 0); }
-// ---- SPELL PRACTICE (dev-only; armed by ?practice=<boss>[.<phase>] in boot, inert in ship/golden) ----
+// ---- SPELL PRACTICE (dev-only; armed by ?practice=<stage>.<枠>[.<phase>] in boot, inert in ship/golden) ----
 // Jump straight into ANY boss at ANY 1-indexed phase and LOOP that phase→end forever for tuning. Generous
 // loadout (full power, 99 lives/bombs) so practice is gated by skill, not resources. Sets the boss's home
-// stage THEME so the backdrop/visibility reads exactly as in campaign. BULLET_SPEED_K (see its declaration)
-// is the live difficulty knob — ?knob= seeds it, [ / ] nudge it in play, \ resets to 1.0.
+// stage THEME so the backdrop/visibility reads exactly as in campaign. Query is numeric: <stage 1-6>.<枠
+// 1=midboss 2=boss>[.<phase>] — e.g. 5.2.7 = Stage-5 final boss phase 7; 5.1 = Stage-5 midboss phase 1.
 let PRACTICE = null;
 function stageOfBoss(key){ for(const st of STAGES){ let found=false,last=null; for(const e of st.timeline){ if(e.boss!=null){ last=e.boss; if(e.boss===key) found=true; } } if(found) return { st, isFinal:(last===key) }; } return null; }
-function startPractice(bossKey, phase1, diff, knob){
+// resolve a numeric (stage 1-6, 枠 1=midboss 2=final) coordinate to a BOSSES key via the stage's timeline order.
+function bossKeyAt(stage1, slot1){ const st=STAGES[(stage1|0)-1]; if(!st) return null; const keys=[]; for(const e of st.timeline){ if(e.boss!=null) keys.push(e.boss); } return keys[clamp((slot1|0)-1,0,keys.length-1)]||null; }
+function startPractice(bossKey, phase1, diff){
   const spec=BOSSES[bossKey]; if(!spec){ console.warn('practice: unknown boss "'+bossKey+'". valid: '+Object.keys(BOSSES).join(', ')); return false; }
-  BULLET_SPEED_K = (knob>0?knob:1);
   const info=stageOfBoss(bossKey);
   run = { difficulty:(diff||'normal'), stage:(info?STAGES.indexOf(info.st):0), continuesUsed:0, practice:true };
   _cutin.active=false; game.score=0; game.grazeCount=0; game.pointTotal=0; game.scoreMul=1; game.extendsTaken=0; game.fullpower=true; game.boss=null; game.spellIntensity=0; game.grazePowerThreshold=GRAZE_POWER_FIRST; game.grazePowerInterval=GRAZE_POWER_FIRST;
@@ -3143,11 +3128,6 @@ function* runPractice(){
     if(player){ player.lives=99; player.bombs=99; }                    // top the loadout back up between loops
     yield* waitT(1.2);
   }
-}
-function tickPracticeKnob(){
-  if(keyEdge('BracketRight')||keyEdge('Equal')) BULLET_SPEED_K=clamp(Math.round((BULLET_SPEED_K+0.05)*100)/100,0.4,2.5);
-  else if(keyEdge('BracketLeft')||keyEdge('Minus')) BULLET_SPEED_K=clamp(Math.round((BULLET_SPEED_K-0.05)*100)/100,0.4,2.5);
-  else if(keyEdge('Backslash')) BULLET_SPEED_K=1;
 }
 function togglePause(){ if(game.state===STATE.PLAYING) setState(STATE.PAUSED); else if(game.state===STATE.PAUSED) setState(STATE.PLAYING); }
 function onStageClear(){ setState(STATE.STAGECLEAR); }
@@ -3335,7 +3315,7 @@ function startStage(){ Director.start(()=>runStage(STAGES[run.stage])); }
 function abortStage(){ if(typeof Director!=='undefined') Director.clear(); }
 
 // ---- wait primitives ----
-function* waitT(sec){ yield (BULLET_SPEED_K!==1 ? sec/BULLET_SPEED_K : sec); }   // practice difficulty knob: a higher K shortens emitter sleeps → denser fire. ==1 in ship/golden → byte-identical
+function* waitT(sec){ yield sec; }
 function* waitUntil(pred){ while(!pred()) yield; }
 function* waitClear(opts){ const minHp=(opts&&opts.minHp)||0; while(true){ let live=0; for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(!e.dead&&!e.boss&&e.hp>minHp) live++; } if(live===0) return; yield; } }
 function* parallel(){ const gens=Array.prototype.slice.call(arguments).map(g=>({g,done:false})); while(gens.some(o=>!o.done)){ for(const o of gens) if(!o.done&&o.g.next().done) o.done=true; yield; } }
@@ -4452,17 +4432,17 @@ function* runStage(stage){
   attachTouch(cv);
   setState(STATE.TITLE);
   // debug entry points (inert under ?golden — the headless harness owns the clock below). Two flavours:
-  //  ?practice=<boss>[.<phase>]  → SPELL PRACTICE: jump into any boss at any 1-indexed phase and loop it
-  //        forever for last-word tuning. <boss> = a BOSSES key (flowerKing, tasokare, twins, yatagarasu,
-  //        susanoo, tokoyo, tsuchigumo, fujin, …). Optional ?knob=<0.4..2.5> seeds the live difficulty dial
-  //        ([ / ] nudge it, \ resets). e.g. ?practice=tokoyo.8 , ?practice=tsuchigumo.3&knob=1.3
+  //  ?practice=<stage>.<枠>[.<phase>] → SPELL PRACTICE: jump into any boss at any 1-indexed phase and loop
+  //        it forever for last-word tuning. <stage>=1-6, <枠>=1 (midboss) | 2 (final boss), <phase>=1-indexed
+  //        (default 1). e.g. ?practice=6.2.8 = Stage-6 final boss P8 ; ?practice=5.1 = Stage-5 midboss.
   //  ?stage=N (1-indexed) [+ ?diff=] → start the whole campaign mid-way at that stage, full power.
   // Both honour ?diff=easy|normal|hard|lunatic (default normal). practice takes precedence over stage.
   if(typeof location!=='undefined' && !/[?&]golden=1/.test(location.search)){
     const dm=location.search.match(/[?&]diff=(easy|normal|hard|lunatic)/), d=dm?dm[1]:'normal';
-    const km=location.search.match(/[?&]knob=([0-9.]+)/), knob=km?parseFloat(km[1]):1;
-    const pm=location.search.match(/[?&]practice=([a-zA-Z]+)(?:[.:]([0-9]+))?/);
-    if(pm){ startPractice(pm[1], pm[2]?parseInt(pm[2],10):1, d, knob); }
+    const pm=location.search.match(/[?&]practice=(\d+)(?:[.:](\d+))?(?:[.:](\d+))?/);
+    if(pm){ const bk=bossKeyAt(parseInt(pm[1],10), pm[2]?parseInt(pm[2],10):2);
+      if(bk) startPractice(bk, pm[3]?parseInt(pm[3],10):1, d);
+      else console.warn('practice: no boss at stage '+pm[1]+' 枠 '+(pm[2]||2)+' (stage 1-6, 枠 1=midboss 2=final)'); }
     else { const sm=location.search.match(/[?&]stage=(\d+)/);
       if(sm){ const n=(parseInt(sm[1],10)||1)-1;
         if(n>=0 && n<STAGES.length){ startRun(d,n); addPower(MAXPOWER); } } }   // debug mid-campaign start → begin at full power (skip the natural stage-1 power ramp you'd otherwise have built up)
