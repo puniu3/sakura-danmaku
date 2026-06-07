@@ -2745,6 +2745,7 @@ function drawHUD(){ ctx.save(); ctx.translate(PF_W,0); ctx.fillStyle=PALETTE.hud
   const lives=player?player.lives:0, bombs=player?player.bombs:0, pw=player?player.power:0;
   label('HiScore'); val(pad(game.hi||0,9),PALETTE.uiGold); y+=22; label('Score'); val(pad(game.score||0,9),PALETTE.uiText); y+=16;
   { // score multiplier readout (dim at x1.0, heats toward the cap) + extend fill meter (progress to the next 1M -> 1UP)
+    if(run&&run.loop>=1){ ctx.fillStyle=PALETTE.uiGold; ctx.font='bold 11px "Trebuchet MS",sans-serif'; ctx.textAlign='left'; ctx.fillText('LOOP II',lx,y); }   // 2周目 badge (left slot of the multiplier row — the right-aligned x-mult shares the line, no collision)
     const mul=Math.min(SCORE_MUL_MAX_APPLY,game.scoreMul), t=Math.max(0,(mul-1)/(SCORE_MUL_MAX_APPLY-1));
     ctx.fillStyle=(t<0.01)?PALETTE.uiDim:'hsl('+(48-t*40)+',100%,'+(60+t*10)+'%)'; ctx.font='bold 12px "Trebuchet MS",sans-serif'; ctx.textAlign='right'; ctx.fillText('x'+mul.toFixed(1),HUD_W-22,y); ctx.textAlign='left';
     const emw=HUD_W-44, eh=4, my=y+5, ef=(game.score%EXTEND_INTERVAL)/EXTEND_INTERVAL; ctx.fillStyle=PALETTE.powerBg; roundRect(lx,my,emw,eh,2); ctx.fill(); ctx.fillStyle=PALETTE.uiGold; roundRect(lx,my,emw*ef,eh,2); ctx.fill();
@@ -3008,7 +3009,7 @@ function drawControlsGuide(cx){
   ctx.restore();
 }
 function drawOverlays(){ ctx.setTransform(dpr,0,0,dpr,0,0); const cx=PF_W/2; if(game.state===STATE.TITLE){ dimPlayfield(0.5); ctx.save(); ctx.beginPath(); ctx.rect(PF_X,PF_Y,PF_W,PF_H); ctx.clip(); drawTitleLogo(ctx,PF_W,PF_H,game.stateT); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext(inputMode==='touch'?'TAP  TO  START':'PRESS  Z  ·  ENTER',cx,260,'bold 15px "Trebuchet MS",sans-serif','#ffe08a'); drawControlsGuide(cx); ctext('Graze to power up   ·   rise to the top to gather items',cx,470,'10px "Trebuchet MS",sans-serif','rgba(255,240,222,0.4)'); ctx.restore(); } else if(game.state===STATE.PAUSED){ dimPlayfield(0.55); ctext('PAUSED',cx,PF_H/2-10,'bold 34px "Trebuchet MS",sans-serif','#ffe9fb'); ctext(inputMode==='touch'?'Tap to resume   ·   RESTART →':inputMode==='pad'?'START  resume      X  restart':'P / Esc  resume      R  restart',cx,PF_H/2+24,'13px "Trebuchet MS",sans-serif','#b69fd6'); } else if(game.state===STATE.GAMEOVER){ dimPlayfield(0.62); ctext('GAME OVER',cx,PF_H/2-30,'bold 40px "Trebuchet MS",sans-serif','#ff5d8f'); ctext('Score  '+pad(game.score||0,9),cx,PF_H/2+10,'16px "Trebuchet MS",monospace','#ffe9fb'); ctext('Hi-Score  '+pad(game.hi||0,9),cx,PF_H/2+34,'13px "Trebuchet MS",monospace','#ffd45e'); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext(inputMode==='touch'?'Tap to continue':'Press Enter',cx,PF_H/2+78,'14px "Trebuchet MS",sans-serif','#cfa8e8'); } else if(game.state===STATE.STAGECLEAR){ const allClear=(run&&run.stage===STAGES.length-1); dimPlayfield(allClear?0.32:0.5);   /* the FINAL stage's clear = ALL CLEAR (game complete); the dawn cave shows brighter behind it */
-    if(allClear){ ctext('ALL CLEAR',cx,PF_H/2-34,'bold 40px "Trebuchet MS",sans-serif','#ffe6a0'); ctext('Score  '+pad(game.score||0,9),cx,PF_H/2+10,'16px "Trebuchet MS",monospace','#fff4e0'); ctext('thank you for playing',cx,PF_H/2+40,'12px "Trebuchet MS",sans-serif','#f0c890'); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext(inputMode==='touch'?'Tap to continue':'Press Enter',cx,PF_H/2+72,'14px "Trebuchet MS",sans-serif','#ffe6a0'); }
+    if(allClear){ const pf=!!(run&&run.perfect); ctext('ALL CLEAR',cx,PF_H/2-34,'bold 40px "Trebuchet MS",sans-serif','#ffe6a0'); ctext('Score  '+pad(game.score||0,9),cx,PF_H/2+10,'16px "Trebuchet MS",monospace','#fff4e0'); if(pf) ctext('✦   NO MISS  ·  NO BOMB   ✦',cx,PF_H/2+38,'bold 12px "Trebuchet MS",sans-serif','#fff0a0'); ctext('thank you for playing',cx,PF_H/2+(pf?60:40),'12px "Trebuchet MS",sans-serif','#f0c890'); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext(inputMode==='touch'?'Tap to continue':'Press Enter',cx,PF_H/2+(pf?88:72),'14px "Trebuchet MS",sans-serif','#ffe6a0'); }
     else { ctext('STAGE CLEAR',cx,PF_H/2-30,'bold 38px "Trebuchet MS",sans-serif','#b9ff6a'); ctext('Score  '+pad(game.score||0,9),cx,PF_H/2+12,'16px "Trebuchet MS",monospace','#ffe9fb'); ctext('Graze  '+(game.grazeCount||0),cx,PF_H/2+38,'13px "Trebuchet MS",monospace','#b9ff6a'); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext(inputMode==='touch'?'Tap to continue':'Press Enter',cx,PF_H/2+82,'14px "Trebuchet MS",sans-serif','#cfa8e8'); } } }
 
 // ---- dev profiling HUD (?dev=1) — read-only entity counts + whole-frame/1s-peak ms + substeps; never drawn under ship/golden (DEV_HUD false) ----
@@ -3207,25 +3208,40 @@ function spawnSeed(o){ let vx=(o.vx||0), vy=(o.vy!=null?o.vy:40);
   b._breedEvery=o.every||0.5; b._breedCd=(o.delay!=null)?o.delay:b._breedEvery; b._birthsLeft=o.births||4; b._breedN=o.n||8; b._breedSpeed=o.childSpeed||90; b._breedHue=(o.childHue!=null)?o.childHue:b.hue; b._breedStyle=o.childStyle||'pellet'; b._breedR=o.childR||4; b._breedPhase=o.phase0||0; b._breedTwist=(o.twist!=null)?o.twist:0.5; b._life=o.life||8; b._breedAim=!!o.childAim; b._breedFan=!!o.childFan; b._breedCarry=(o.fanCarry!=null)?o.fanCarry:0.35; b._breedSeq=0; b._untilOff=!!o.untilOff; b._breedSpread=(o.childSpread!=null)?o.childSpread:0.5;   // childAim / childFan default off=radial ring, byte-identical; fanCarry=childFan の親velocity継承率 (控えめ既定); _breedSeq=childFan ジッターの breed カウンタ
   return b; }
 
+// 2周目 (run.loop>=1) density: EVERY danmaku pattern fires ×BALANCE.loop.bulletMul more bullets — the loop's
+// difficulty is "more bullets", not tougher HP (see BALANCE.loop). Applied at the LEAF pat.* primitives (the
+// count/arms spawn-loops below), so BOTH the bare adapters AND the many boss/midboss spells that call pat.*
+// DIRECTLY (pat.nWaySpread / pat.aimedSpread / pat.delayedTurn / …) get scaled exactly ONCE. The delegators
+// (aimedSpread→nWaySpread, flower→roseCurve, ringOfRings→nWaySpread, and the bare adapters) pass their count
+// THROUGH to a scaled leaf and must NOT scale themselves (double-scale guard). loop 0 → returns n UNCHANGED →
+// golden byte-identical. Bullet SPEED is never touched (核②). (loopN is hoisted; BALANCE/run read at call time.)
+// A few patterns read as GIANT BULLETS / WALLS (a homing ring, a fan-wall, a rotating-feather spoke, a vertical
+// stalk-file): packing more bullets INTO them doesn't change how you dodge — the formation is avoided as a unit.
+// Those escalate the loop by adding more FORMATIONS (rings/fans/walls/lanes) and wrap their base emit in noLoop()
+// so the per-formation count stays at its authored density (not ×bulletMul). Emits are synchronous (pat.* spawn in
+// a for-loop, no yield) so this stack-discipline depth flag is safe. loop 0 → loopN is identity regardless of _loopOff.
+let _loopOff=0;
+function loopN(n){ return (_loopOff===0 && run&&run.loop>=1)? Math.max(1,Math.round(n*BALANCE.loop.bulletMul)) : n; }
+function noLoop(fn){ _loopOff++; try{ return fn(); } finally{ _loopOff--; } }
 const pat={};
-pat.aimedShot=function(o,p){ let a=angleToPlayer(o.x,o.y); if(p.jitter) a+=(rng()-0.5)*p.jitter; spawnPolar(o,a,p.speed,{hue:p.hue,style:p.style||'rice',r:p.r}); };
-pat.nWaySpread=function(o,p){ const n=p.count, half=(p.spread||0)*0.5, step=n>1?(p.spread||0)/(n-1):0; for(let i=0;i<n;i++){ const a=p.baseAngle-half+step*i; const hue=(p.hueSpread!=null)?layerHue(p.hue,i,n,p.hueSpread):p.hue; spawnPolar(o,a,p.speed,{hue,style:p.style||'orb',r:p.r}); } };
-pat.aimedSpread=function(o,p){ const q=Object.assign({},p); q.baseAngle=angleToPlayer(o.x,o.y); pat.nWaySpread(o,q); };
-pat.ring=function(o,p){ const n=p.count, step=TAU/n, base=p.baseAngle||0; for(let i=0;i<n;i++){ const a=base+step*i; const hue=(p.hueSpread!=null)?layerHue(p.hue,i,n,p.hueSpread):p.hue; spawnPolar(o,a,p.speed,{hue,style:p.style||'orb',r:p.r}); } };
-pat.doubleRing=function(o,p){ const n=p.count, step=TAU/n, base=p.baseAngle||0, off=p.innerOffset!=null?p.innerOffset:step*0.5; const hueA=p.hue, hueB=hueShift(p.hue,p.hueLayer!=null?p.hueLayer:HUE_SPAN_LAYER); for(let i=0;i<n;i++){ spawnPolar(o,base+step*i,p.speed,{hue:hueA,style:p.style||'orb',r:p.r}); spawnPolar(o,base+step*i+off,p.speed2!=null?p.speed2:p.speed*0.7,{hue:hueB,style:p.style2||p.style||'pellet',r:p.r2!=null?p.r2:p.r}); } };
-pat.spiral=function(o,p){ const arms=p.arms||1, armStep=TAU/arms, base=(p.baseAngle||0)+(p.phase||0); for(let k=0;k<arms;k++){ const a=base+armStep*k; const hue=layerHue(p.hue,k,arms,p.hueArmSpan!=null?p.hueArmSpan:HUE_SPAN_RING); spawnPolar(o,a,p.speed,{hue,style:p.style||'rice',r:p.r}); } };
-pat.expandingRing=function(o,p){ const n=p.count, step=TAU/n, base=p.baseAngle||0, accel=p.accel!=null?p.accel:120; for(let i=0;i<n;i++){ const a=base+step*i, v=polarVel(a,p.speed), ac=polarVel(a,accel); spawnBullet({x:o.x,y:o.y,vx:v.vx,vy:v.vy,ax:ac.vx,ay:ac.vy,hue:(p.hueSpread!=null)?layerHue(p.hue,i,n,p.hueSpread):p.hue,style:p.style||'orb',r:p.r,dir:a,speed:p.speed}); } };
-pat.contractingRing=function(o,p){ const n=p.count, step=TAU/n, base=p.baseAngle||0, decel=p.decel!=null?p.decel:200; for(let i=0;i<n;i++){ const a=base+step*i, v=polarVel(a,p.speed), ac=polarVel(a,-decel); spawnBullet({x:o.x,y:o.y,vx:v.vx,vy:v.vy,ax:ac.vx,ay:ac.vy,hue:(p.hueSpread!=null)?layerHue(p.hue,i,n,p.hueSpread):p.hue,style:p.style||'pellet',r:p.r,dir:a,speed:p.speed}); } };
-pat.randomScatter=function(o,p){ const n=p.count, base=p.baseAngle!=null?p.baseAngle:0, spread=p.spread!=null?p.spread:TAU; for(let i=0;i<n;i++){ const a=base+(rng()-0.5)*spread, sp=p.speedMin+rng()*(p.speedMax-p.speedMin); const hue=p.jitterHue?hueShift(p.hue,(rng()-0.5)*p.jitterHue):p.hue; spawnPolar(o,a,sp,{hue,style:p.style||'pellet',r:p.r}); } };
-pat.roseCurve=function(o,p){ const n=p.count, k=p.k||4, step=TAU/n, phase=p.phase||0, sMin=p.speedMin!=null?p.speedMin:p.speed*0.35, sMax=p.speed; for(let i=0;i<n;i++){ const theta=phase+step*i, rr=Math.abs(Math.cos(k*theta)), sp=sMin+(sMax-sMin)*rr; const hue=hueShift(p.hue,rr*(p.hueSpan!=null?p.hueSpan:HUE_SPAN_RING)); spawnPolar(o,theta,sp,{hue,style:p.style||'star',r:p.r}); } };
-pat.flower=function(o,p){ const layers=p.layers||3; for(let L=0;L<layers;L++){ pat.roseCurve(o,{count:p.count,k:p.k||5,speed:p.speed*(0.6+0.4*(L/layers)),phase:(p.phase||0)+L*(Math.PI/(p.k||5))*0.5,hue:hueShift(p.hue,L*(p.hueLayer!=null?p.hueLayer:28)),style:p.style||'star',r:p.r}); } };
-pat.acceleratingRain=function(o,p){ const n=p.count, span=p.xSpread!=null?p.xSpread:PF_W*0.9, x0=(o.x!=null?o.x:PF_W*0.5)-span*0.5, g=p.gravity!=null?p.gravity:240, s0=p.speed0!=null?p.speed0:30; for(let i=0;i<n;i++){ const x=x0+(n>1?span*(i/(n-1)):0)+(p.jitterX?(rng()-0.5)*p.jitterX:0); spawnBullet({x,y:o.y!=null?o.y:-8,vx:(p.driftX||0),vy:s0,ax:0,ay:g,hue:(p.hueSpread!=null)?layerHue(p.hue,i,n,p.hueSpread):p.hue,style:p.style||'rice',r:p.r}); } };
-pat.bouncingBullets=function(o,p){ const n=p.count, half=(p.spread||0)*0.5, step=n>1?(p.spread||0)/(n-1):0; for(let i=0;i<n;i++){ const a=(p.baseAngle||0)-half+step*i, v=polarVel(a,p.speed); spawnBullet({x:o.x,y:o.y,vx:v.vx,vy:v.vy,hue:(p.hueSpread!=null)?layerHue(p.hue,i,n,p.hueSpread):p.hue,style:p.style||'kite',r:p.r,dir:a,speed:p.speed,bounces:p.bounces!=null?p.bounces:MAX_BOUNCES_DEFAULT,custom:true,update:_updBounce}); } };
-pat.delayedTurn=function(o,p){ const n=p.count, half=(p.spread||0)*0.5, step=n>1?(p.spread||0)/(n-1):0; for(let i=0;i<n;i++){ const a=(p.baseAngle||0)-half+step*i, v=polarVel(a,p.speed); spawnBullet({x:o.x,y:o.y,vx:v.vx,vy:v.vy,hue:(p.hueSpread!=null)?layerHue(p.hue,i,n,p.hueSpread):p.hue,style:p.style||'orb',r:p.r,dir:a,speed:p.speed,delay:p.delay!=null?p.delay:0.8,turn:(p.turnTo!=null?p.turnTo:(p.turnAim?'aim':(p.turn||Math.PI))),turnAbs:!!p.turnAbs,speed2:p.speed2,custom:true,update:_updGhost}); } };
-pat.lineOfBullets=function(o,p){ const n=p.count, ca=Math.cos(p.angle), sa=Math.sin(p.angle), v=polarVel(p.angle,p.speed!=null?p.speed:0); for(let i=0;i<n;i++){ const d=(p.startGap||0)+p.gap*i; spawnBullet({x:o.x+ca*d,y:o.y+sa*d,vx:v.vx,vy:v.vy,hue:(p.hueSpread!=null)?layerHue(p.hue,i,n,p.hueSpread):p.hue,style:p.style||'arrow',r:p.r,dir:p.angle,speed:p.speed||0}); } };
-pat.ringOfRings=function(o,p){ const C=p.clusters||8, step=TAU/C, base=p.baseAngle||0; for(let c=0;c<C;c++){ const a=base+step*c, rad=p.clusterRadius!=null?p.clusterRadius:14, sub={x:o.x+Math.cos(a)*rad,y:o.y+Math.sin(a)*rad}, hue=layerHue(p.hue,c,C,p.hueSpread!=null?p.hueSpread:HUE_SPAN_RING); pat.nWaySpread(sub,{count:p.perCluster||5,speed:p.burstSpeed!=null?p.burstSpeed:110,baseAngle:a,spread:p.burstSpread!=null?p.burstSpread:0.9,hue,style:p.style||'pellet',r:p.r}); spawnPolar(sub,a,p.clusterSpeed!=null?p.clusterSpeed:70,{hue,style:'big',r:p.rLead!=null?p.rLead:6}); } };
+pat.aimedShot=function(o,p){ let a=angleToPlayer(o.x,o.y); if(p.jitter) a+=(rng()-0.5)*p.jitter; spawnPolar(o,a,p.speed,{hue:p.hue,style:p.style||'rice',r:p.r}); };   // single shot, no count → not scaled (a 1-shot stays a 1-shot on the loop)
+pat.nWaySpread=function(o,p){ const n=loopN(p.count), half=(p.spread||0)*0.5, step=n>1?(p.spread||0)/(n-1):0; for(let i=0;i<n;i++){ const a=p.baseAngle-half+step*i; const hue=(p.hueSpread!=null)?layerHue(p.hue,i,n,p.hueSpread):p.hue; spawnPolar(o,a,p.speed,{hue,style:p.style||'orb',r:p.r}); } };
+pat.aimedSpread=function(o,p){ const q=Object.assign({},p); q.baseAngle=angleToPlayer(o.x,o.y); pat.nWaySpread(o,q); };   // delegates to nWaySpread (scaled there) → must NOT scale here
+pat.ring=function(o,p){ const n=loopN(p.count), step=TAU/n, base=p.baseAngle||0; for(let i=0;i<n;i++){ const a=base+step*i; const hue=(p.hueSpread!=null)?layerHue(p.hue,i,n,p.hueSpread):p.hue; spawnPolar(o,a,p.speed,{hue,style:p.style||'orb',r:p.r}); } };
+pat.doubleRing=function(o,p){ const n=loopN(p.count), step=TAU/n, base=p.baseAngle||0, off=p.innerOffset!=null?p.innerOffset:step*0.5; const hueA=p.hue, hueB=hueShift(p.hue,p.hueLayer!=null?p.hueLayer:HUE_SPAN_LAYER); for(let i=0;i<n;i++){ spawnPolar(o,base+step*i,p.speed,{hue:hueA,style:p.style||'orb',r:p.r}); spawnPolar(o,base+step*i+off,p.speed2!=null?p.speed2:p.speed*0.7,{hue:hueB,style:p.style2||p.style||'pellet',r:p.r2!=null?p.r2:p.r}); } };
+pat.spiral=function(o,p){ const arms=loopN(p.arms||1), armStep=TAU/arms, base=(p.baseAngle||0)+(p.phase||0); for(let k=0;k<arms;k++){ const a=base+armStep*k; const hue=layerHue(p.hue,k,arms,p.hueArmSpan!=null?p.hueArmSpan:HUE_SPAN_RING); spawnPolar(o,a,p.speed,{hue,style:p.style||'rice',r:p.r}); } };
+pat.expandingRing=function(o,p){ const n=loopN(p.count), step=TAU/n, base=p.baseAngle||0, accel=p.accel!=null?p.accel:120; for(let i=0;i<n;i++){ const a=base+step*i, v=polarVel(a,p.speed), ac=polarVel(a,accel); spawnBullet({x:o.x,y:o.y,vx:v.vx,vy:v.vy,ax:ac.vx,ay:ac.vy,hue:(p.hueSpread!=null)?layerHue(p.hue,i,n,p.hueSpread):p.hue,style:p.style||'orb',r:p.r,dir:a,speed:p.speed}); } };
+pat.contractingRing=function(o,p){ const n=loopN(p.count), step=TAU/n, base=p.baseAngle||0, decel=p.decel!=null?p.decel:200; for(let i=0;i<n;i++){ const a=base+step*i, v=polarVel(a,p.speed), ac=polarVel(a,-decel); spawnBullet({x:o.x,y:o.y,vx:v.vx,vy:v.vy,ax:ac.vx,ay:ac.vy,hue:(p.hueSpread!=null)?layerHue(p.hue,i,n,p.hueSpread):p.hue,style:p.style||'pellet',r:p.r,dir:a,speed:p.speed}); } };
+pat.randomScatter=function(o,p){ const n=loopN(p.count), base=p.baseAngle!=null?p.baseAngle:0, spread=p.spread!=null?p.spread:TAU; for(let i=0;i<n;i++){ const a=base+(rng()-0.5)*spread, sp=p.speedMin+rng()*(p.speedMax-p.speedMin); const hue=p.jitterHue?hueShift(p.hue,(rng()-0.5)*p.jitterHue):p.hue; spawnPolar(o,a,sp,{hue,style:p.style||'pellet',r:p.r}); } };
+pat.roseCurve=function(o,p){ const n=loopN(p.count), k=p.k||4, step=TAU/n, phase=p.phase||0, sMin=p.speedMin!=null?p.speedMin:p.speed*0.35, sMax=p.speed; for(let i=0;i<n;i++){ const theta=phase+step*i, rr=Math.abs(Math.cos(k*theta)), sp=sMin+(sMax-sMin)*rr; const hue=hueShift(p.hue,rr*(p.hueSpan!=null?p.hueSpan:HUE_SPAN_RING)); spawnPolar(o,theta,sp,{hue,style:p.style||'star',r:p.r}); } };
+pat.flower=function(o,p){ const layers=p.layers||3; for(let L=0;L<layers;L++){ pat.roseCurve(o,{count:p.count,k:p.k||5,speed:p.speed*(0.6+0.4*(L/layers)),phase:(p.phase||0)+L*(Math.PI/(p.k||5))*0.5,hue:hueShift(p.hue,L*(p.hueLayer!=null?p.hueLayer:28)),style:p.style||'star',r:p.r}); } };   // delegates per-layer to roseCurve (scaled) → must NOT scale here
+pat.acceleratingRain=function(o,p){ const n=loopN(p.count), span=p.xSpread!=null?p.xSpread:PF_W*0.9, x0=(o.x!=null?o.x:PF_W*0.5)-span*0.5, g=p.gravity!=null?p.gravity:240, s0=p.speed0!=null?p.speed0:30; for(let i=0;i<n;i++){ const x=x0+(n>1?span*(i/(n-1)):0)+(p.jitterX?(rng()-0.5)*p.jitterX:0); spawnBullet({x,y:o.y!=null?o.y:-8,vx:(p.driftX||0),vy:s0,ax:0,ay:g,hue:(p.hueSpread!=null)?layerHue(p.hue,i,n,p.hueSpread):p.hue,style:p.style||'rice',r:p.r}); } };
+pat.bouncingBullets=function(o,p){ const n=loopN(p.count), half=(p.spread||0)*0.5, step=n>1?(p.spread||0)/(n-1):0; for(let i=0;i<n;i++){ const a=(p.baseAngle||0)-half+step*i, v=polarVel(a,p.speed); spawnBullet({x:o.x,y:o.y,vx:v.vx,vy:v.vy,hue:(p.hueSpread!=null)?layerHue(p.hue,i,n,p.hueSpread):p.hue,style:p.style||'kite',r:p.r,dir:a,speed:p.speed,bounces:p.bounces!=null?p.bounces:MAX_BOUNCES_DEFAULT,custom:true,update:_updBounce}); } };
+pat.delayedTurn=function(o,p){ const n=loopN(p.count), half=(p.spread||0)*0.5, step=n>1?(p.spread||0)/(n-1):0; for(let i=0;i<n;i++){ const a=(p.baseAngle||0)-half+step*i, v=polarVel(a,p.speed); spawnBullet({x:o.x,y:o.y,vx:v.vx,vy:v.vy,hue:(p.hueSpread!=null)?layerHue(p.hue,i,n,p.hueSpread):p.hue,style:p.style||'orb',r:p.r,dir:a,speed:p.speed,delay:p.delay!=null?p.delay:0.8,turn:(p.turnTo!=null?p.turnTo:(p.turnAim?'aim':(p.turn||Math.PI))),turnAbs:!!p.turnAbs,speed2:p.speed2,custom:true,update:_updGhost}); } };
+pat.lineOfBullets=function(o,p){ const n=loopN(p.count), ca=Math.cos(p.angle), sa=Math.sin(p.angle), v=polarVel(p.angle,p.speed!=null?p.speed:0); for(let i=0;i<n;i++){ const d=(p.startGap||0)+p.gap*i; spawnBullet({x:o.x+ca*d,y:o.y+sa*d,vx:v.vx,vy:v.vy,hue:(p.hueSpread!=null)?layerHue(p.hue,i,n,p.hueSpread):p.hue,style:p.style||'arrow',r:p.r,dir:p.angle,speed:p.speed||0}); } };
+pat.ringOfRings=function(o,p){ const C=p.clusters||8, step=TAU/C, base=p.baseAngle||0; for(let c=0;c<C;c++){ const a=base+step*c, rad=p.clusterRadius!=null?p.clusterRadius:14, sub={x:o.x+Math.cos(a)*rad,y:o.y+Math.sin(a)*rad}, hue=layerHue(p.hue,c,C,p.hueSpread!=null?p.hueSpread:HUE_SPAN_RING); pat.nWaySpread(sub,{count:p.perCluster||5,speed:p.burstSpeed!=null?p.burstSpeed:110,baseAngle:a,spread:p.burstSpread!=null?p.burstSpread:0.9,hue,style:p.style||'pellet',r:p.r}); spawnPolar(sub,a,p.clusterSpeed!=null?p.clusterSpeed:70,{hue,style:'big',r:p.rLead!=null?p.rLead:6}); } };   // per-cluster spread delegates to nWaySpread (scaled) → cluster COUNT (C) stays; must NOT scale here
 
-// ---- stage-vocabulary adapters (map bare names -> pat.*) ----
+// ---- stage-vocabulary adapters (map bare names -> pat.*) — counts pass THROUGH to the scaled pat.* leaves (no loopN here, or it would double-scale) ----
 function mapStyle(s){ return ({mid:'orb',small:'pellet',dart:'arrow',petal:'rice',orb:'orb',big:'big'})[s] || s; }
 function aimedShot(src,o){ o=o||{}; if((o.n||1)>1) pat.aimedSpread(src,{count:o.n,spread:o.spread||0.3,speed:o.speed||150,hue:o.hue,style:mapStyle(o.style),hueSpread:o.hueSpread,r:o.r}); else pat.aimedShot(src,{speed:o.speed||150,hue:o.hue,style:mapStyle(o.style)||'rice',r:o.r,jitter:o.jitter}); }
 function ring(src,o){ o=o||{}; const base=(typeof o.aim==='number'?o.aim:0)+(o.rot||0); if(o.accel) pat.expandingRing(src,{count:o.count||16,speed:o.speed||100,accel:o.accel,baseAngle:base,hue:o.hue,hueSpread:o.hueSpread,style:mapStyle(o.style),r:o.r}); else pat.ring(src,{count:o.count||16,speed:o.speed||120,baseAngle:base,hue:o.hue,hueSpread:o.hueSpread,style:mapStyle(o.style),r:o.r}); }
@@ -3262,6 +3278,13 @@ const BALANCE = {
     hard:   { countMul:1.2, hpMul:1.15, lives:3, bombs:2 },
     lunatic:{ countMul:1.4, hpMul:1.3,  lives:2, bombs:2 },
   },
+  // 2周目 (New Game+, run.loop>=1): the loop's difficulty is "MORE BULLETS", NOT 固さ (playtest decision:
+  // boss-HP inflation isn't fun). bulletMul = every danmaku pattern fires ×bulletMul more bullets, applied at the
+  // pat.* leaves (see loopN) so bosses, MIDBOSSES (which often call pat.* directly), AND road all scale. HP is 据え置き everywhere and bullet
+  // SPEED is untouched (核②). The ONE exception: 2周目1面の雑魚 HP ×s1EnemyHpMul (so they survive the carried
+  // full-power firepower long enough to actually fire). Difficulty (BALANCE.difficulties) scales enemy COUNT on
+  // a separate axis. Primary 2周目 playtest knobs — tune by play (?stage=N&loop=1, +?god=1 to survive).
+  loop: { bulletMul:1.4, s1EnemyHpMul:2.2 },
 };
 /*END:CONTENT*/
 
@@ -3269,6 +3292,9 @@ const BALANCE = {
 // Difficulty resolution: scale a wave's count / a boss's phase HP by the selected difficulty.
 // At normal the multipliers are 1.0 so both return the ORIGINAL object unchanged (identity) — the
 // default playthrough is byte-for-byte unaffected. (runStage itself lives in STAGE/ENEMIES.)
+// NOTE: the 2周目 (run.loop) escalation is intentionally NOT here. By playtest decision the loop adds
+// BULLETS, not 固さ — boss/road HP stay 据え置き; density comes from loopN() at the pattern adapters, and
+// only Stage-1 zako HP scales (_enemyHpMul). So these stay pure difficulty resolvers.
 function resolveWave(opts, diff){ const D=BALANCE.difficulties[diff]||BALANCE.difficulties.normal; if(D.countMul===1) return opts;
   const o=Object.assign({},opts); if(o.n!=null) o.n=Math.max(1,Math.round(o.n*D.countMul)); if(o.half!=null) o.half=Math.max(1,Math.round(o.half*D.countMul)); return o; }
 function resolveBoss(spec, diff){ const D=BALANCE.difficulties[diff]||BALANCE.difficulties.normal; if(D.hpMul===1) return spec;
@@ -3362,6 +3388,7 @@ function attachTouch(el){
 
 let player=null, game=null, run=null;
 let _musicRestart=false;   // one-shot: set by restartGame so enterStage's playMusic FORCE-restarts the stage BGM from the top (kill whatever's playing — even if it's already the stage track), instead of the no-op-when-same default. Consumed in enterStage.
+let _god=false, _melt=false;   // debug witness flags (?god / ?melt, boot-parsed in the !golden block): god = player never dies (onPlayerHit no-ops) so you can SURVIVE any stage/loop to feel density & reach the clear/ending sequences "突破できなくても"; melt = player shots one-shot non-invuln enemies/bosses (rush to the clears — survivals are boss-invuln so they still run timed). Both default false ⇒ ship/golden byte-identical.
 // difficulty knobs now live in BALANCE.difficulties (CONTENT DATA); resolveWave/resolveBoss apply them.
 function makePlayer(){ return { x:PLAYER_START.x, y:PLAYER_START.y, r:PLAYER_R, focus:false, state:'alive', dead:false, invuln:0, blink:false, fireCd:0, power:START_POWER, bombs:START_BOMBS, lives:START_LIVES, itemR:14, bombActive:0, bossDot:0, pendingDeath:0, respawnT:0, options:[], mvx:0, mvy:0, grazePowerT:0 }; }
 function makeGame(){ return { state:STATE.TITLE, score:0, hi:0, grazeCount:0, pointTotal:0, scoreMul:1, extendsTaken:0, stateT:0, fullpower:false, paused:false, boss:null, spellIntensity:0, powerMax:MAXPOWER, grazePowerThreshold:GRAZE_POWER_FIRST, grazePowerInterval:GRAZE_POWER_FIRST }; }
@@ -3394,8 +3421,8 @@ function setState(s){ const prev=game.state; game.state=s; game.stateT=0;
 // enterStage does the per-stage spawn reset and CARRIES the run loadout; advanceStage steps the
 // campaign. With one stage, the last stage's clear is terminal — identical to today. (Phase 10+
 // wires STAGE_INTERMISSION / RESULTS / CONTINUE around these seams.)
-function startRun(diff, fromStage){
-  run = { difficulty:(diff||'normal'), stage:(fromStage||0), continuesUsed:0, practice:false };
+function startRun(diff, fromStage, loop){
+  run = { difficulty:(diff||'normal'), stage:(fromStage||0), loop:(loop||0), perfect:true, continuesUsed:0, practice:false };   // loop: 0=1周目, 1=2周目 (cave系の2周固定; the optional arg lets the ?stage&loop debug start set it BEFORE enterStage so the Stage-1 zako-HP boost applies — campaign loopback never goes through startRun). perfect: no-miss/no-bomb, tracked 1-2周通算 → NOT reset on loopback (only startRun makes it true)
   const D = BALANCE.difficulties[run.difficulty] || BALANCE.difficulties.normal;
   _cutin.active=false; game.score=0; game.grazeCount=0; game.pointTotal=0; game.scoreMul=1; game.extendsTaken=0; game.fullpower=false; game.boss=null; game.spellIntensity=0; game.grazePowerThreshold=GRAZE_POWER_FIRST; game.grazePowerInterval=GRAZE_POWER_FIRST;
   player=makePlayer(); player.lives=D.lives; player.bombs=D.bombs;
@@ -3403,6 +3430,8 @@ function startRun(diff, fromStage){
 }
 function enterStage(i){
   run.stage=i; game.boss=null; if(player) endGrazePower();
+  _enemyHpMul = (run && run.loop>=1 && i===0) ? BALANCE.loop.s1EnemyHpMul : 1;   // 2周目1面の雑魚だけ HP↑ (他面/1周目=1=byte-identical). 弾は loopN で全面増える(HPは据え置き)＝playtest決定
+
   game.grazeCount=0; game.grazePowerThreshold=GRAZE_POWER_FIRST; game.grazePowerInterval=GRAZE_POWER_FIRST;   // each stage restarts the graze→power-up milestone ladder, so the grown threshold doesn't starve later stages of power-ups (no-op on the fresh-run first entry; startRun already set these)
   layoutOptions(); items.length=0; enemyBullets.clear(); playerShots.clear(); particles.clear(); lasers.clear(); wells.clear(); enemies.length=0;
   const st=STAGES[i], sm=(st&&st.music&&st.music.stage)||'stage';
@@ -3428,7 +3457,7 @@ function bossKeyAt(stage1, slot1){ const st=STAGES[(stage1|0)-1]; if(!st) return
 function startPractice(bossKey, phase1, diff){
   const spec=BOSSES[bossKey]; if(!spec){ console.warn('practice: unknown boss "'+bossKey+'". valid: '+Object.keys(BOSSES).join(', ')); return false; }
   const info=stageOfBoss(bossKey);
-  run = { difficulty:(diff||'normal'), stage:(info?STAGES.indexOf(info.st):0), continuesUsed:0, practice:true };
+  run = { difficulty:(diff||'normal'), stage:(info?STAGES.indexOf(info.st):0), loop:0, perfect:true, continuesUsed:0, practice:true };
   _cutin.active=false; game.score=0; game.grazeCount=0; game.pointTotal=0; game.scoreMul=1; game.extendsTaken=0; game.fullpower=true; game.boss=null; game.spellIntensity=0; game.grazePowerThreshold=GRAZE_POWER_FIRST; game.grazePowerInterval=GRAZE_POWER_FIRST;
   player=makePlayer(); player.lives=99; player.bombs=99;
   setTheme((info&&info.st.theme)||'spring');
@@ -3450,7 +3479,15 @@ function* runPractice(){
   }
 }
 function togglePause(){ if(game.state===STATE.PLAYING) setState(STATE.PAUSED); else if(game.state===STATE.PAUSED) setState(STATE.PLAYING); }
-function onStageClear(){ setState(STATE.STAGECLEAR); }
+// Final-stage clear handoff. 1周目 (loop 0) → flip to a harder 2周目 carrying the whole loadout (score/lives/
+// bombs/power): set run.loop=1 and loop back to stage 0 via the SAME deferred-enterStage seam mid-campaign uses
+// (calling enterStage from inside the running stage coro would clobber the coro array). 2周目 (loop 1) → the
+// true ALL CLEAR ending. perfect (no-miss/no-bomb across BOTH loops) is recorded into the save for the ending.
+function onStageClear(){
+  if(run && run.loop===0){ run.loop=1; run._advanceTo=0; return; }
+  if(run){ if(!save) save=loadSave(); const d=run.difficulty||'normal'; save.loopClears[d]=(save.loopClears[d]||0)+1; if(run.perfect) save.perfectClears[d]=(save.perfectClears[d]||0)+1; }
+  setState(STATE.STAGECLEAR);   // saveHiScore() inside persists `save` (incl. the loop/perfect clear just recorded)
+}
 
 function playerUpdate(dt){
   player.focus=focusHeld();
@@ -3524,11 +3561,11 @@ function grazeLaserDamage(dt){ const px=player.x, py=player.y, halfW=GRAZE_LASER
     if(pierceable&&(rng()<0.25)) spawnParticle(e.x+(rng()-0.5)*e.r,e.y+(rng()-0.5)*e.r,(rng()-0.5)*60,(rng()-0.5)*60,{life:0.25,kind:'sparkle',hue:GRAZE_HUE,r:2.4}); } }
 
 function tryBomb(){ if(player.state!=='alive'||player.bombs<=0) return false; doBomb(false); return true; }
-function doBomb(isDeathbomb){ player.bombs--; player.invuln=Math.max(player.invuln,BOMB_INVULN); player.bombActive=BOMB_INVULN; player.bossDot=BOMB_DOT_TIME; Render.flash(BOMB_FLASH,55); Render.shake(0.6); Render.cancelWave(player.x,player.y,55,1.2); clearBulletsToSparkles(player.x,player.y,1e9); lasers.forEachLive(L=>{ if(L.alive&&L.state==='fire'){ L.state='warn'; L.t=0; } }); wells.forEachLive(w=>{ if(w.alive&&w.state==='active'){ w.state='warn'; w.t=0; } }); for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(e&&!e.boss&&!e.dead&&!e.invuln) damageEnemy(e,99999,true); } sfx.bomb&&sfx.bomb(); }   // a bomb RE-TELEGRAPHS active 御来光 beams (flip FIRE→WARN, restart their warn) so the panic window honours the bomb contract — without deleting the boss's beams (which would trivialise the laser spells; they re-fire after the warn)
+function doBomb(isDeathbomb){ if(run) run.perfect=false; player.bombs--; player.invuln=Math.max(player.invuln,BOMB_INVULN); player.bombActive=BOMB_INVULN; player.bossDot=BOMB_DOT_TIME; Render.flash(BOMB_FLASH,55); Render.shake(0.6); Render.cancelWave(player.x,player.y,55,1.2); clearBulletsToSparkles(player.x,player.y,1e9); lasers.forEachLive(L=>{ if(L.alive&&L.state==='fire'){ L.state='warn'; L.t=0; } }); wells.forEachLive(w=>{ if(w.alive&&w.state==='active'){ w.state='warn'; w.t=0; } }); for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(e&&!e.boss&&!e.dead&&!e.invuln) damageEnemy(e,99999,true); } sfx.bomb&&sfx.bomb(); }   // a bomb RE-TELEGRAPHS active 御来光 beams (flip FIRE→WARN, restart their warn) so the panic window honours the bomb contract — without deleting the boss's beams (which would trivialise the laser spells; they re-fire after the warn)
 function applyBossDot(dt){ if(player.bossDot>0){ player.bossDot-=dt; for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(e&&!e.dead&&!e._shareHpWith&&!e.invuln) damageEnemy(e,BOMB_BOSS_DPS*dt,true); } } }   // skip twin-boss secondary bodies: the DoT must hit a shared HP pool only ONCE per frame (the primary carries it; the redirect would otherwise double-count)
 function clearBulletsToSparkles(cx,cy,radius){ const r2=radius*radius; enemyBullets.forEachLive(b=>{ if(!b.alive) return; const d=(b.x-cx)*(b.x-cx)+(b.y-cy)*(b.y-cy); if(d<=r2){ b.alive=false; addScore(10); spawnParticle(b.x,b.y,(rng()-0.5)*60,(rng()-0.5)*60,{life:0.3,kind:'sparkle',hue:b.hue||55,r:2.6}); } }); }
 
-function onPlayerHit(srcBullet,enemy){ if(player.state!=='alive'||player.invuln>0) return;
+function onPlayerHit(srcBullet,enemy){ if(_god) return; if(player.state!=='alive'||player.invuln>0) return;   // _god (?god debug): immune to death — but invuln stays unpinned so the loop-2 last-word freeze (gated on player.invuln) is unaffected; graze still accrues
   if(player.grazePowerT>0){ // a hit during power-up does NOT release it and grants NO i-frames — it only trims the remaining time (no miss). The bullet is consumed so one distinct bullet = one -1s (no per-frame re-hit).
     player.grazePowerT=Math.max(0,player.grazePowerT-GRAZE_HIT_PENALTY); if(srcBullet) srcBullet.alive=false;
     sfx.grazeHit&&sfx.grazeHit(); Render.flash(0.22,GRAZE_HUE); Render.shake(0.22);
@@ -3536,7 +3573,7 @@ function onPlayerHit(srcBullet,enemy){ if(player.state!=='alive'||player.invuln>
     if(player.grazePowerT<=0) endGrazePower();   // a hit that drains it to 0 ends the power-up → clean up trailing shots
     return; }
   player.state='pendingdeath'; player.pendingDeath=DEATHBOMB_TIME; if(srcBullet) srcBullet.alive=false; }
-function finalizeDeath(){ player.state='dead'; player.dead=true; endGrazePower(); game.scoreMul=1; player.lives--; player.bombs=START_BOMBS; player.respawnT=0.55; sfx.death&&sfx.death(); Render.shake(0.7); Render.slowmo(0.4,0.5); clearBulletsToSparkles(player.x,player.y,DEATH_CLEAR_R); for(let i=0;i<26;i++){ const a=rng()*TAU, s=60+rng()*160; spawnParticle(player.x,player.y,Math.cos(a)*s,Math.sin(a)*s,{life:0.5,kind:'death',hue:330,r:3}); } player.power=Math.max(0,player.power-Math.floor(player.power*0.25)-15); game.fullpower=(player.power>=MAXPOWER); dropItems('power',DEATH_POWER_DROP,player.x,player.y-10,80); if(player.lives<0){ player.state='gameover'; setState(STATE.GAMEOVER); } }
+function finalizeDeath(){ if(run) run.perfect=false; player.state='dead'; player.dead=true; endGrazePower(); game.scoreMul=1; player.lives--; player.bombs=START_BOMBS; player.respawnT=0.55; sfx.death&&sfx.death(); Render.shake(0.7); Render.slowmo(0.4,0.5); clearBulletsToSparkles(player.x,player.y,DEATH_CLEAR_R); for(let i=0;i<26;i++){ const a=rng()*TAU, s=60+rng()*160; spawnParticle(player.x,player.y,Math.cos(a)*s,Math.sin(a)*s,{life:0.5,kind:'death',hue:330,r:3}); } player.power=Math.max(0,player.power-Math.floor(player.power*0.25)-15); game.fullpower=(player.power>=MAXPOWER); dropItems('power',DEATH_POWER_DROP,player.x,player.y-10,80); if(player.lives<0){ player.state='gameover'; setState(STATE.GAMEOVER); } }
 
 function addScore(n){ game.score+=n; while(game.extendsTaken<Math.floor(game.score/EXTEND_INTERVAL)){ game.extendsTaken++; spawnExtendItem(); } if(game.score>game.hi) game.hi=game.score; }
 // score-extend no longer adds a life directly — it drops a 1UP at the screen top, straight above the player,
@@ -3559,6 +3596,7 @@ function migrateSave(old){ const s=(old&&typeof old==='object')?old:{}; s.ver=2;
   if(!s.hiByDiff||typeof s.hiByDiff!=='object') s.hiByDiff={};
   for(const k of ['easy','normal','hard','lunatic']) if(typeof s.hiByDiff[k]!=='number') s.hiByDiff[k]=0;
   if(!s.furthestStage) s.furthestStage={}; if(!s.clears) s.clears={}; if(typeof s.lastName!=='string') s.lastName='';
+  if(!s.loopClears) s.loopClears={}; if(!s.perfectClears) s.perfectClears={};   // per-difficulty 2周目-clear / no-miss-no-bomb-clear tallies (recorded by onStageClear on the true ending)
   try{ const v1=localStorage.getItem(HISCORE_KEY); if(v1!=null){ const n=parseInt(v1,10)||0; if(n>s.hiByDiff.normal) s.hiByDiff.normal=n; } }catch(e){}
   return s; }
 function loadSave(){ let s=null; try{ const raw=localStorage.getItem(SAVE_KEY); if(raw) s=JSON.parse(raw); }catch(e){ s=null; } return migrateSave(s); }
@@ -3592,7 +3630,7 @@ function updateItems(dt){ const pAlive=(player.state==='alive'||player.state==='
 function pointItemValue(yAtCollect){ const top=POC_LINE_Y, bot=PF_H; const y=yAtCollect<top?top:yAtCollect; let t=(y-top)/(bot-top); t=t>1?1:t; return Math.round(POINT_BASE-t*(POINT_BASE-POINT_MIN)); }   // height bonus CAPPED at the auto-collect (POC) line: clamp y to ≥top so collecting ANYWHERE above POC_LINE_Y scores exactly the at-line value (POINT_BASE); below the line decays toward POINT_MIN. (Output identical to the prior `t<0?0` clamp — this just states the cap explicitly in y.)
 function takePoint(it){ game.pointTotal++; const score=Math.round(pointItemValue(it.y)*Math.min(SCORE_MUL_MAX_APPLY,game.scoreMul)); addScore(score); if(it.kind==='point') game.scoreMul=Math.min(SCORE_MUL_CAP,game.scoreMul+SCORE_MUL_GAIN); return pitchInfoFor(score); }   // score FIRST at current (capped) mult, THEN bump; returns the score-pitched pickup note (audio-only)
 function collectItem(it){ let midi; switch(it.kind){ case 'power': game.fullpower?(midi=takePoint(it)):addPower(POWER_PER_ITEM); break; case 'bigpower': game.fullpower?(midi=takePoint(it)):addPower(POWER_PER_BIG); break; case 'full': game.fullpower?(midi=takePoint(it)):addPower(MAXPOWER); break; case 'oneup': grantExtend('item'); break; case 'bomb': player.bombs=Math.min(MAX_BOMBS,player.bombs+1); break; case 'point': midi=takePoint(it); break; } if(it.kind!=='oneup') sfx.item&&sfx.item(it.kind, midi); spawnParticle(it.x,it.y,0,-40,{life:0.25,kind:'pickup',hue:it.hue,r:3}); }
-function onEnemyHit(e,shot){ damageEnemy(e,shot.dmg,shot.pierceSpell?GRAZE_PIERCE:null); }
+function onEnemyHit(e,shot){ damageEnemy(e,_melt?1e9:shot.dmg,shot.pierceSpell?GRAZE_PIERCE:null); }   // _melt (?melt debug): one-shot any non-invuln enemy/boss-phase to rush to the clear/ending screens
 
 // ============================ STAGE / ENEMIES =======================
 const SPAWN_MARGIN=40, OFFSCREEN_PAD=32;
@@ -3643,7 +3681,9 @@ function* spawnWave(gen){ yield* gen; }
 function* delayed(sec,gen){ yield* waitT(sec); yield* gen; }   // stagger a wave inside parallel(): wait, then run the (lazily-iterated) generator
 
 // ---- enemy ----
-function spawnEnemy(spec){ const _hp=(spec.hp||1); const e={ x:spec.x, y:spec.y, vx:0, vy:0, hp:_hp, maxHp:_hp, r:spec.r||R_POP_MED, hue:spec.hue!=null?spec.hue:200, boss:!!spec.boss, bodyDamage:!!spec.bodyDamage, score:spec.score||1000, drops:spec.drops||[], dead:false, invuln:false, born:T, _spec:spec, _steered:false }; enemies.push(e); if(spec.coro) Director.fork(()=>spec.coro(e),e); return e; }
+let _enemyHpMul=1;   // 2周目1面の雑魚 HP ブースト (enterStage が run.loop & stage で設定; loop0 or 非1面 ⇒ 1). bosses は除外 (HP は phase が管理するので spec.hp=1 は無意味)。full power carry に雑魚が即蒸発するのを防ぐ。
+// hp は ×(boss?1:_enemyHpMul) のみ — ROUND しない: 元 spec.hp は非整数あり (HP_POP_HEAVY=33.6 等) で、x*1 は IEEE754 で bit-exact ⇒ loop0/非1面 は元値そのまま = byte-identical (round すると 33.6→34 で道中の撃破ヒット数が 1周目でもズレる)。
+function spawnEnemy(spec){ const _hp=(spec.hp||1)*(spec.boss?1:_enemyHpMul); const e={ x:spec.x, y:spec.y, vx:0, vy:0, hp:_hp, maxHp:_hp, r:spec.r||R_POP_MED, hue:spec.hue!=null?spec.hue:200, boss:!!spec.boss, bodyDamage:!!spec.bodyDamage, score:spec.score||1000, drops:spec.drops||[], dead:false, invuln:false, born:T, _spec:spec, _steered:false }; enemies.push(e); if(spec.coro) Director.fork(()=>spec.coro(e),e); return e; }
 function enemyIntegrate(e,dt){ if(e._steered){ e._steered=false; return; } e.x+=e.vx*dt; e.y+=e.vy*dt; }
 function damageEnemy(e,dmg,opts){ if(!e) return false; if(e._shareHpWith) e=e._shareHpWith; if(e.dead) return false;   // twin-boss body → all damage lands on the shared HP/invuln pool (the primary)
   // endurance (耐久/survival) spell: invulnerable to normal damage; only pierce-shots act, by trimming the
@@ -3713,7 +3753,9 @@ function* stalkFile(e,o){ const n=o.count||4, iv=o.interval!=null?o.interval:0.1
 // lineOfBullets dart-file as they pass. opts.cross (bool) slants alternating columns into an X.
 // Manual integrate loop sets _steered each tick (the #1 trap). Fire fork is owner-tied (auto-kill on death).
 function waveStalkColumn(opts){ return (function*(){
-  const cols=opts.cols||3, per=opts.per||5, hue=opts.hue!=null?opts.hue:140,
+  // loop 2: MORE lanes (firing points), not longer files — a stalk-file is a giant vertical bullet you dodge by
+  // switching lanes, so lengthening it leaves the screen's safe/hit ratio unchanged; adding lanes is the real squeeze.
+  const cols=loopN(opts.cols||3), per=opts.per||5, hue=opts.hue!=null?opts.hue:140,
         spd=opts.speed||90, gap=opts.gap||0.42, colGap=opts.colGap||0.0,
         cross=!!opts.cross, halveP=!!opts.halvePower, sparse=!!opts.sparse,
         x0=opts.x0!=null?opts.x0:PF_W*0.18, x1=opts.x1!=null?opts.x1:PF_W*0.82;
@@ -4031,7 +4073,7 @@ function* runPhase(boss,ph,pi){
   if(ph.onEnter) ph.onEnter(boss);
   if(survival>0){ // TIMER-driven (not wall-clock) so pierce damage that trims boss.timer actually shortens the phase
     boss.invuln=true; boss.survivalActive=true; boss.survivalTotal=survival; boss.timer=survival; let prev=T;
-    const holdOnInvuln=!!ph.holdTimerWhileInvuln;   // anti-ゴリ押し: when set, the survival countdown FREEZES while the player is bomb/respawn-invuln (you can't lives/bombs your way through a survival). prev=now is still advanced every tick so the frozen span is genuinely skipped, not deferred. The graze-powerup pierce drains boss.hp separately → 突破 stays open (graze管理の戦略性). Absent on every other phase → byte-identical there.
+    const holdOnInvuln=!!ph.holdTimerWhileInvuln || (run && run.loop>=1);   // anti-ゴリ押し: the survival countdown FREEZES while the player is bomb/respawn-invuln (you can't lives/bombs your way through a survival). 1周目 this is Tokoyo's explicit flag only; 2周目 (run.loop>=1) it applies to EVERY last-word (all survival phases) → bomb-ゴリ押し is closed on the loop. prev=now is still advanced every tick so the frozen span is genuinely skipped, not deferred. The graze-powerup pierce drains boss.hp separately → 突破 stays open (graze管理の戦略性). loop 0 = byte-identical (only Tokoyo's flag fires).
     while(boss.timer>0&&boss.hp>0){ yield; const now=T; if(!(holdOnInvuln && player.invuln>0)) boss.timer=Math.max(0,boss.timer-(now-prev)); prev=now; }   // ends on timer expiry OR pierce draining HP to 0
     boss.survivalActive=false; }
   else { boss.survivalActive=false; boss.timer=null; while(boss.hp>0) yield; }
@@ -4055,6 +4097,14 @@ function* tokoyoFinale(boss){
     screenFlash('#ffe9b0',0.5); shake(4,0.5); yield* waitT(0.55); }
   // 3) the held dawn — drifting sunlight motes fill the field for a calm beat
   for(let g=0;g<7;g++){ for(let i=0;i<7;i++) spawnParticle(rng()*PF_W,rng()*PF_H,(rng()-0.5)*24,18+rng()*34,{life:1.4+rng()*0.9,kind:'sparkle',hue:44+rng()*16,r:1.8+rng()*1.6}); yield* waitT(0.45); }
+  // 3b) HIDDEN: a no-miss/no-bomb double-loop clear earns an extra prismatic dawn (Super-Metroid-style reward).
+  // Gated to the TRUE ending: run.loop>=1 (we're finishing 2周目) AND run.perfect (untouched across both loops).
+  if(run && run.loop>=1 && run.perfect){
+    for(let w=0;w<4;w++){ spawnParticle(cx,cy,0,0,{life:1.5,kind:'ring',hue:(w*70)%360,r:24});
+      const N=30; for(let i=0;i<N;i++){ const a=i/N*TAU+w*0.4, s=150+w*55+rng()*70; spawnParticle(cx,cy,Math.cos(a)*s,Math.sin(a)*s,{life:1.0+rng()*0.6,kind:'sparkle',hue:(i*12+w*60)%360,r:2.4+rng()*1.8}); }
+      screenFlash('hsl('+((w*70)%360)+',85%,86%)',0.55); shake(5,0.55); yield* waitT(0.5); }
+    yield* waitT(0.7);
+  }
   // 4) one last bright bloom, then settle into the dawn-lit field before {stageClear} runs the ALL CLEAR handoff
   screenFlash('#fffaf0',0.85); shake(6,0.6); yield* waitT(1.4);
 }
@@ -4091,7 +4141,15 @@ const TASOKARE_INTRO_SPEC = { name:'Tasokare', design:'mizuchi', hue:190, enterF
       { kind:'nonspell', hp:1204, body:'raw', raw:function*(b){ Director.fork(function*(){ while(true){ aimedShot(b,{n:5,spread:0.6,speed:140,hue:285,style:'mid'}); yield* waitT(1.05); } },b); while(true){ ring(b,{count:18,speed:90,accel:55,hue:210,style:'orb'}); yield* waitT(1.6); } }, onEnter:diveCharge(PF_W*0.5,150,280,120,1.0,0.7,1.3) },
       // onEnter restores the home height only (x stays where the prior dive left it): this static spell would
       // otherwise fire pinned low after diveCharge's lunge.
-      { kind:'spell', name:'Tide Sign "Twilight Undertow"', hp:1540, drops:['point','point','point','power'], body:'raw', raw:function*(b){ let off=0; while(true){ pat.delayedTurn(b,{count:14,spread:TAU,baseAngle:off,speed:88,delay:0.9,turnAim:true,speed2:165,hue:205,style:'orb'}); off+=0.5; yield* waitT(1.5); pat.aimedSpread(b,{count:7,spread:0.5,speed:150,hue:280,style:'pellet'}); yield* waitT(0.9); } }, onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,b.x,150,0.9,EASE.out); },b); } }
+      // ring (delayedTurn) + fan (aimedSpread) both read as giant bullets → loop 2 throws a SECOND distinct ring/fan
+      // (radius-offset via faster speed+shorter delay, spokes aligned so the gap stays threadable), NOT a denser one.
+      { kind:'spell', name:'Tide Sign "Twilight Undertow"', hp:1540, drops:['point','point','point','power'], body:'raw', raw:function*(b){ let off=0; const L=(run&&run.loop>=1); while(true){
+          noLoop(()=>{ pat.delayedTurn(b,{count:14,spread:TAU,baseAngle:off,speed:88,delay:0.9,turnAim:true,speed2:165,hue:205,style:'orb'});
+                       if(L) pat.delayedTurn(b,{count:14,spread:TAU,baseAngle:off,speed:120,delay:0.6,turnAim:true,speed2:190,hue:198,style:'orb'}); });
+          off+=0.5; yield* waitT(1.5);
+          noLoop(()=>{ pat.aimedSpread(b,{count:7,spread:0.5,speed:150,hue:280,style:'pellet'});
+                       if(L) pat.aimedSpread(b,{count:7,spread:0.62,speed:192,hue:288,style:'pellet'}); });
+          yield* waitT(0.9); } }, onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,b.x,150,0.9,EASE.out); },b); } }
     ] };
 const TASOKARE_SPEC = { name:'Tasokare', design:'mizuchi', hue:190, enterFrom:{x:PF_W/2,y:-80}, enterTo:{x:PF_W/2,y:140}, score:600000, drops:['bigpower','power','point','point','point','point','point'],
     phases:[
@@ -4220,14 +4278,17 @@ const YATAGARASU_SPEC = { name:'Yatagarasu', design:'yatagarasu', hue:44, enterF
                 for(const L of beams) if(L&&L.alive){ L.state='warn'; L.t=0; L.warnDur=1.1; }                        // blink to a telegraph = the gap — dash now (~1.1s)
                 t0=T; while(T-t0 < 1.12){ sweep+=0.58*STEP; setAngs(); yield; }                                       // ~1.1s non-lethal, then integrateLasers auto-refires the beams
               } },b);
-          let a=0,k2=0; while(true){ if(k2%5===0){ spiral(b,{angle:a,arms:3,speed:120,hue:(40+T*40)%360,style:'rice'}); a-=0.8; } k2++; yield; } },   // feathers reversed (spin opposite the laser sweep so the gaps line up) + thinned, so the laser-gap dash slips through
+          // feathers reversed (spin opposite the laser sweep so the gaps line up) + thinned, so the laser-gap dash slips
+          // through. loop 2 keeps arms:3 (a denser spiral would seal the gap → wall) and instead adds a SECOND wall: a
+          // slower co-spinning spiral at the SAME angle, so its spokes (and gaps) sit at a smaller radius but stay aligned.
+          let a=0,k2=0; const L=(run&&run.loop>=1); while(true){ if(k2%5===0){ noLoop(()=>{ spiral(b,{angle:a,arms:3,speed:120,hue:(40+T*40)%360,style:'rice'}); if(L) spiral(b,{angle:a,arms:3,speed:80,hue:(28+T*40)%360,style:'rice'}); }); a-=0.8; } k2++; yield; } },
         onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,130,1.0,EASE.out); },b); } },
       // P7 survival — the boss sits at screen centre and 3 beams radiate + sweep, so the player orbits the centre in
       // the wide gaps. The spray is deliberately sparse (a single slow spiral) and the rotation ramps slow→fast.
       { kind:'spell', name:'"Daybreak — Last Word"', survival:28, drops:[], cutinHue:50, body:'raw', raw:function*(b){
           const beams=[]; for(let k=0;k<3;k++){ const L=fireBeam({x:b.x,y:b.y,ang:HALFPI+k*(TAU/3),halfW:9,hue:50,warn:0.9,fire:99999,fade:0.25,len:PF_H*1.8,follow:b}); if(L) beams.push(L); }
           Director.fork(function*(){ yield* waitT(9); while(true){ const L=rng.bool(); spawnSun({x:L?-56:PF_W+56,y:120+rng.range(0,260),r:42,hitR:11,hue:48,vx:L?34:-34,vy:rng.range(-4,6)}); yield* waitT(3.0); } },b);   // suns added only after ~9s, sparse
-          let a=0,sweep=0,k2=0,t0=T; while(true){ const el=T-t0, spd=0.16+Math.min(0.36,el*0.014);   // rotation ramps ~0.16 → 0.52 rad/s over ~24s
+          let a=0,sweep=0,k2=0,t0=T; while(true){ const el=T-t0, spd=0.14+Math.min(0.32,el*0.013);   // rotation ramps ~0.14 → 0.46 rad/s over ~24s — player must be able to out-orbit the sweep (a faster ramp was理不尽)
             sweep+=spd*STEP; for(let k=0;k<beams.length;k++){ const L=beams[k]; if(L&&L.alive) L.ang=HALFPI+k*(TAU/3)+sweep; }
             if(k2 % (el<13?8:6) === 0){ spiral(b,{angle:a,arms:3,speed:104,hue:(44+T*55)%360,style:'small'}); a+=0.5; } k2++; yield; } },
         onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,PF_H*0.46,1.3,EASE.out); },b); } }
@@ -4609,7 +4670,7 @@ function* runStage(stage){
     else if(e.flash)        screenFlash(e.flash.color, e.flash.i);
     else if(e.shake)        shake(e.shake.mag, e.shake.dur);
     else if(e.stageEnd)     { screenFlash('#ffffff',0.8); banner('STAGE CLEAR'); Audio.fadeOutMusic(1.4); yield* waitT(2.8); advanceStage(); return; }   // mid-campaign handoff: advance to the next stage (deferred via run._advanceTo) WITHOUT the terminal all-clear; next stage's music starts in enterStage
-    else if(e.stageClear)   { Audio.fadeOutMusic(1.6); screenFlash('#fffaf0',0.5); yield* waitT(2.2); advanceStage(); return; }   // terminal: last stage of the run -> advanceStage()->onStageClear()->STAGECLEAR. The 常夜 defeat already ran the long tokoyoFinale (岩戸開き) + the ALL CLEAR overlay carries the closing text, so NO redundant "STAGE CLEAR" banner here — just gently fade the dawn BGM and settle into the dawn-lit field.
+    else if(e.stageClear)   { Audio.fadeOutMusic(1.6); screenFlash('#fffaf0',0.5); yield* waitT(2.2); if(run&&run.loop===0){ banner('THE DREAM DEEPENS'); yield* waitT(2.0); } advanceStage(); return; }   // terminal: last stage of the run -> advanceStage()->onStageClear(). The 常夜 defeat already ran the long tokoyoFinale (岩戸開き). On 1周目 clear, onStageClear loops back into a harder 2周目 — announce it over the dawn-lit field BEFORE the loopback (run.loop is still 0 here; advanceStage flips it). On 2周目 clear → STAGECLEAR true ending (the overlay carries the closing text → no redundant banner).
   }
 }
 
@@ -4673,15 +4734,20 @@ function* runStage(stage){
   //        (default 1). e.g. ?practice=6.2.8 = Stage-6 final boss P8 ; ?practice=5.1 = Stage-5 midboss.
   //  ?stage=N (1-indexed) [+ ?diff=] → start the whole campaign mid-way at that stage, full power.
   // Both honour ?diff=easy|normal|hard|lunatic (default normal). practice takes precedence over stage.
+  // Loop/witness add-ons: ?loop=1 (with ?stage) → begin in 2周目 ; ?god=1 → never die ; ?melt=1 → one-shot
+  // enemies. To SEE the clears without 自力突破: ?stage=6&god=1&melt=1&loop=0 = 1周目クリア→ループバック ;
+  // …&loop=1 = 2周目 真END ; …&loop=1 で道中ボムを撃たなければ perfect (NO MISS·NO BOMB) 演出。
   if(typeof location!=='undefined' && !/[?&]golden=1/.test(location.search)){
     const dm=location.search.match(/[?&]diff=(easy|normal|hard|lunatic)/), d=dm?dm[1]:'normal';
+    const lm=location.search.match(/[?&]loop=(\d+)/), lp=lm?(parseInt(lm[1],10)||0):0;   // ?loop=1 → start in 2周目 (run.loop=1) to preview the New Game+ density/last-word-freeze/true-ending without a full 1周目 clear
+    _god=/[?&]god=1/.test(location.search); _melt=/[?&]melt=1/.test(location.search);   // witness flags (apply from title OR with ?stage/?practice): ?god=1 survive everything, ?melt=1 one-shot enemies to reach a clear/ending. e.g. ?stage=6&loop=1&god=1&melt=1 (+不bomb) = perfect 真END
     const pm=location.search.match(/[?&]practice=(\d+)(?:[.:](\d+))?(?:[.:](\d+))?/);
     if(pm){ const bk=bossKeyAt(parseInt(pm[1],10), pm[2]?parseInt(pm[2],10):2);
       if(bk) startPractice(bk, pm[3]?parseInt(pm[3],10):1, d);
       else console.warn('practice: no boss at stage '+pm[1]+' 枠 '+(pm[2]||2)+' (stage 1-6, 枠 1=midboss 2=final)'); }
     else { const sm=location.search.match(/[?&]stage=(\d+)/);
       if(sm){ const n=(parseInt(sm[1],10)||1)-1;
-        if(n>=0 && n<STAGES.length){ startRun(d,n); addPower(MAXPOWER); } } }   // debug mid-campaign start → begin at full power (skip the natural stage-1 power ramp you'd otherwise have built up)
+        if(n>=0 && n<STAGES.length){ startRun(d,n,lp>=1?1:0); addPower(MAXPOWER); } } }   // debug mid-campaign start → begin at full power (skip the natural stage-1 power ramp). ?loop=1 → start in 2周目 (passed INTO startRun so enterStage sees run.loop=1 and the Stage-1 zako-HP boost fires on a ?stage=1&loop=1 preview).
   }
   // ?golden=1 freezes the rAF loop so the headless structural-golden harness owns the sim clock
   // (no background petal-wrap rng consumption / state churn). Normal & ?dev=1 boots are unaffected.

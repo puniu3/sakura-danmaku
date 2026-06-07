@@ -45,7 +45,11 @@
 
 各項目を「価値 / 既存の再利用 / 真に新規な部分 / コスト / 設計上の注意」で評価。
 
-### A. 高難度2周目（New Game+）— ★ 本命・エンドゲーム
+### A. 高難度2周目（New Game+）— ★ 本命・エンドゲーム ＜コード実装 DONE 2026-06-07・残=数値プレイテスト調整＞
+
+> **実装後追記（プレイテスト反映）：** 下記プランは「countMul/hpMul を上げる」想定だったが、実プレイで
+> **ボスHP増は楽しくない**と判明 → 2周目の難度は **HP でなく弾数**（`loopN` 全アダプタ ×1.4／HP据え置き、
+> 例外＝2周目1面の雑魚 HP のみ）に再設計。詳細は §4 の項目 3。以下の原文は設計経緯として残す。
 
 - **価値（最大）：** コンテンツ完成済みの本作に「真エンディングまで遊び続ける理由」を与える唯一の項目。
   難度選択画面を**作らずに**難度カーブを提供する（＝核①ゼロフリクションを守ったまま難度の幅を出す）。
@@ -156,8 +160,20 @@
 1. ~~**C（軽い整理）＋ dev HUD**~~ — **DONE 2026-06-07**。土台＋以降の perf 計器。
 2. ~~**B-1（powerup render perf）**~~ — **DONE 2026-06-07（step 2）**。弾ごと `createRadialGradient` → bake-once スプライト化で
    powerup mode の実 FPS 犯人を解消（最悪 −33%、真因は render not sim）。詳細 §3 B。
-3. **A（2周目 + 真エンディング + ノーミス/ノーボム イースターエッグ）** — ★本命エンドゲーム・**次の作業**。perf の余力に
-   支えて density を盛る。**実装し終えたらここで仕様を凍結する**（2周目の 2× 密度＝最終 worst が確定）。
+3. ~~**A（2周目 + 真エンディング + ノーミス/ノーボム イースターエッグ）**~~ — **コード実装 DONE 2026-06-07**（master 未コミット）。
+   golden byte-identical（loop0 normal 不変）／ CI 4/4 green ／ 敵対レビュー confirmed=0（2 回：初版 8 agent ＋ 体験再設計 後）。
+   **スパイン**：`run.loop`(0/1 の2周固定)＋`run.perfect`(1-2周通算)、`onStageClear` 分岐（1周目クリア→loadout carry の
+   `enterStage(0)` ループバック／2周目クリア→真 ALL CLEAR）、2周目のみ全 last-word に `holdTimerWhileInvuln`、
+   真エンディングの perfect 隠し演出（tokoyoFinale プリズム＋ALL CLEAR の NO MISS·NO BOMB 行）、`save.loopClears/perfectClears`、
+   HUD「LOOP II」バッジ、「THE DREAM DEEPENS」ループ遷移バナー。
+   **難度＝プレイテストで再設計（HP→弾）**：「ボスHP増は楽しくない」との実プレイ判定で、2周目の難度は**固さでなく弾の多さ**に変更。
+   `resolveWave/resolveBoss` は純粋な難度リゾルバに戻し（loop は HP も spawn 数も触らない）、新 `loopN()` が全弾幕アダプタ
+   （ring/fan/spiral/wall/burst/rain/aimedShot）の弾数を `BALANCE.loop.bulletMul`(=1.4) 倍（ボスも道中も／loop0=恒等＝golden不変／弾速不変）。
+   **唯一の HP 変更**＝2周目1面の雑魚のみ `_enemyHpMul`(=`s1EnemyHpMul` 2.2) で固く（full power carry に即蒸発しない）。
+   **観戦用デバッグ**（"自力突破不可" 対応）：`?god=1`(不死)＋`?melt=1`(即死弾)。`?stage=6&god=1&melt=1&loop=0`＝1周目クリア→
+   ループバック／`&loop=1`＝2周目 真END／`&loop=1`＋道中ノーボム＝perfect 演出。
+   **残（凍結前の唯一の作業）＝ `BALANCE.loop`(bulletMul/s1EnemyHpMul) の人手プレイテスト調整**。`?stage=N&loop=1&god=1` でプレビュー。
+   **ストレッチ**：弾幕パターン自体の変奏（単なる弾数増より体験良の可能性）。**調整が済んだら仕様凍結 → B-2 perf へ。**
 4. **B-2（残りの perf：エンティティ上限の凍結＋SoA＋画面外 cull/draw batch）** — **A の後・仕様凍結後**に当てる。最終密度と
    データ構造が固まって初めて pool 固定長化／SoA が確定できる。B-1 で実 FPS は確保済みなので低優先＝A 完了後に実 worst を
    1度計測し、`drawEnemyBullets` O(n) 等が問題化したときだけ着手。
@@ -202,7 +218,7 @@
 
 | 項目 | 価値 | コスト | 主な再利用 | 真に新規 | 順 |
 | --- | --- | --- | --- | --- | --- |
-| A 2周目+真END+EE | ★最大 | 中の下 | resolve*/campaign spine/holdTimerWhileInvuln/save | run.loop(2周固定)・1面再調整・END分岐・perfect追跡・隠し演出 | 3(次) |
+| A 2周目+真END+EE | ★最大 | 中の下 | resolve*/campaign spine/holdTimerWhileInvuln/save | run.loop(2周固定)・1面再調整・END分岐・perfect追跡・隠し演出 | 3 ✓実装(残=数値調整) |
 | B-1 powerup render perf | 高 | 中 | getBulletSprite系 bake | 弾ごと createRadialGradient→bake スプライト（真因=render not sim）**DONE** | 2✓ |
 | B-2 残り perf(cap凍結/SoA/cull) | 中 | 中 | dev HUD/golden | 最終密度依存→**2周目仕様凍結後**・低優先 | 4 |
 | C 整理 + dev HUD | 低(土台) | 小〜中 | golden/captureEmitter | （境界つき1パス）**DONE** | 1✓ |
