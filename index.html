@@ -1683,33 +1683,32 @@ const BOSS6 = {
     A1:     makeSection({ bars:8, scale:'Ephryg', chords:['Em','F','C','G','Em','F','Dm','Em'], lead:cat(B6C_HOOK, off(32,B6C_HOOK), off(64,B6C_HOOK), off(96,B6C_CLOSE)), bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
     A2:     makeSection({ bars:8, scale:'Ephryg', chords:['Em','F','C','G','Em','Am','F','Em'], lead:cat(B6C_HOOK, off(32,B6C_HOOK), off(64,B6C_HOOK), off(96,B6C_CLOSE)), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
     B:      makeSection({ bars:8, scale:'Ephryg', chords:['Am','F','C','G','Am','Dm','F','Em'], lead:B6C_B, harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossDrive', sub:true, crash:true }),
-    // ---- the engine keeps turning, harmony tips upward (modulating bridge) ----
-    bridge: makeSection({ bars:8, scale:null, chords:['Em','Em','C','G','Dm','Dm','E7','E7'], lead:B6C_BRIDGE, bassStyle:'pump8', arpRate:2, groove:'bossBridge', sub:true }),
+    // ---- the engine keeps turning, harmony tips upward (modulating bridge) — boss6dawn leads with this 4-bar climb into the A-major lift ----
+    bridge: makeSection({ bars:4, scale:null, chords:['Em','Em','C','G'], lead:B6C_BRIDGE, bassStyle:'pump8', arpRate:2, groove:'bossBridge', sub:true }),
     // ---- ACT II : LIFT a perfect-fourth to A MAJOR — the chase reborn as a radiant sunrise fanfare ----
     climax: makeSection({ bars:8, scale:'Amaj', chords:['A','D','E','F#m','A','D','E7','A'], lead:cat(B6C_DAWN, off(32,B6C_DAWN), off(64,B6C_DAWN), off(96,B6C_DAWNCLOSE)), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
     A3:     makeSection({ bars:8, scale:'Amaj', chords:['A','D','E','F#m','A','D','E7','A'], lead:cat(B6C_DAWN, off(32,B6C_DAWN), off(64,B6C_DAWN), off(96,B6C_DAWNCLOSE)), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
     outro:  makeSection({ bars:4, scale:'Amaj', chords:['D','E','A','A'], lead:B6C_OUTRO, bassStyle:'drive8', arpRate:2, groove:'bossDrive', sub:true, crash:true }),
   },
-  // Split into two TRACKS so the 暗→光 modulation can be GAME-GATED to the boss's P7 突破 (the rock-door opening) rather
-  // than firing on the playback timer: 'boss6' loops ACT I (dark E Phrygian motorik) through P1–P7; the game swaps to
-  // 'boss6dawn' (below — the A-major ACT II) at P8 entry so the music's key-lift lands together with _iwatoLight's visual
-  // dawn. The 'bridge' section stays defined (a modulating climb) but is unused by either arrangement — at 160 BPM its 8
-  // bars (~12s) would outrun the 5s visual ramp and re-introduce a desync; the swap's crossfade carries the lift instead.
+  // Split into two TRACKS so the 暗→光 modulation is GAME-GATED to the boss's P7 突破 (the survival「夜明け前」cleared)
+  // rather than firing on the playback timer: 'boss6' loops ACT I (dark E Phrygian motorik) through P1–P7; the moment P7
+  // is defeated the game queues 'boss6dawn' on the next 2-bar boundary — its 4-bar modulating 'bridge' leads the climb,
+  // THEN climax直入り into the A-major sunrise (the music runs AHEAD of the visual 岩戸開き and pulls the door open).
   arrangement: ['intro','A1','A2','B'],
 };
-// ACT II as its own looping track — the A-major sunrise. Reuses BOSS6's voices/gains/sections; ONLY the arrangement
-// differs (jumps straight to the bright A-major fanfare so the brightness lands the instant the cave door opens at P8).
+// ACT II — A-major sunrise, PREFACED by the 4-bar modulating 'bridge' (a leading climb out of E Phrygian into the
+// perfect-fourth lift) so the dawn is connected/bridged rather than hard-cut. Then climax直入り (→ A3 → outro).
 const BOSS6DAWN = {
-  title: 'Motorik Dawn (ACT II — Sunrise)', keyName: 'A major', bpm: 160, gain: 0.62,
+  title: 'Motorik Dawn (ACT II — Sunrise)', keyName: 'A major (via bridge)', bpm: 160, gain: 0.62,
   voices: BOSS6.voices, gains: BOSS6.gains, sections: BOSS6.sections,
-  arrangement: ['climax','A3','outro'],
+  arrangement: ['bridge','climax','A3','outro'],
 };
 
 const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER, stage2: STAGE2, boss2: BOSS2, stage3: STAGE3, boss3: BOSS3, stage4: STAGE4, midboss4: MIDBOSS4, boss4: BOSS4, stage5: STAGE5, midboss5: MIDBOSS5, boss5: BOSS5, stage6: STAGE6, midboss6: MIDBOSS6, boss6: BOSS6, boss6dawn: BOSS6DAWN };
   /*END:BGM:GEN*/
 
   function trackOf(n){ return (TRACKS && TRACKS[n]) ? TRACKS[n] : null; }
-  function pump(){ if(!ctx) return; if(nextNoteTime<ctx.currentTime) nextNoteTime=ctx.currentTime+0.06; let trk=trackOf(curTrack); if(trk){ let C=compile(trk); while(nextNoteTime<ctx.currentTime+SCHEDULE_AHEAD){ if(pendingTrack && trackOf(pendingTrack) && (stepIndex%pendingAlign)===0){ curTrack=pendingTrack; pendingTrack=null; stepIndex=0; trk=trackOf(curTrack); C=compile(trk); } scheduleTrackStep(C, musicGain, stepIndex%C.totalSteps, nextNoteTime); stepIndex++; nextNoteTime+=C.step16; } } pumpTimer=setTimeout(pump,PUMP_MS); }   // queueMusic seam-switch: at a downbeat on the pendingAlign grid (16 steps=1 bar; boss6dawn uses 64=4-bar phrase) cleanly CUT to a queued track — no crossfade. boss6↔boss6dawn share gain(0.62) so musicGain is left untouched.
+  function pump(){ if(!ctx) return; if(nextNoteTime<ctx.currentTime) nextNoteTime=ctx.currentTime+0.06; let trk=trackOf(curTrack); if(trk){ let C=compile(trk); while(nextNoteTime<ctx.currentTime+SCHEDULE_AHEAD){ if(pendingTrack && trackOf(pendingTrack) && (stepIndex%pendingAlign)===0){ curTrack=pendingTrack; pendingTrack=null; stepIndex=0; trk=trackOf(curTrack); C=compile(trk); } scheduleTrackStep(C, musicGain, stepIndex%C.totalSteps, nextNoteTime); stepIndex++; nextNoteTime+=C.step16; } } pumpTimer=setTimeout(pump,PUMP_MS); }   // queueMusic seam-switch: at a downbeat on the pendingAlign grid (16 steps=1 bar; the dawn transition queues 32=2-bar for boss6dawn) cleanly CUT to a queued track — no crossfade. boss6↔boss6dawn share gain(0.62) so musicGain is left untouched.
 
     function startPump(){ if(pumpTimer||!ctx) return; nextNoteTime=ctx.currentTime+0.06; pump(); }
   function stopPump(){ if(pumpTimer){ clearTimeout(pumpTimer); pumpTimer=0; } }
@@ -2895,13 +2894,23 @@ const SEED_HUE = 44, SEED_CHILD_HUE = 48;
 // 種火: a breeder that periodically births a ring of PLAIN straight bullets. Children carry no update/custom → they can
 // never breed → bounded to ONE generation (total = n×births) → the pool can't balloon (the only real engine risk; verified headless).
 function _updSeed(b,dt){ b.x+=b.vx*dt; b.y+=b.vy*dt; b._breedCd-=dt;
-  if(b._breedCd<=0 && b._birthsLeft>0){ b._breedCd+=b._breedEvery; b._birthsLeft--;
-    const aim=b._breedAim, base=aim?(angleToPlayer(b.x,b.y)-b._breedSpread*0.5):b._breedPhase, step=aim?(b._breedN>1?b._breedSpread/(b._breedN-1):0):(TAU/b._breedN); if(!aim) b._breedPhase+=b._breedTwist;   // aim=自機狙い: re-aim a tight fan at the player's CURRENT position each breed (stay still → fans from sweeping seeds overlap your spot = no escape; move → they head at where you WERE). off (default)=the old radial ring → byte-identical for every non-aim seed.
-    for(let i=0;i<b._breedN;i++) spawnPolar(b,base+step*i,b._breedSpeed,{hue:b._breedHue,style:b._breedStyle,r:b._breedR,av:0}); }
-  if(b._birthsLeft<=0 || (T-b.born)>b._life) b.alive=false;                                                                          /* self-remove after its births (a placed seed never leaves the box) */
+  if(b._breedCd<=0 && (b._untilOff || b._birthsLeft>0)){ b._breedCd+=b._breedEvery; if(!b._untilOff) b._birthsLeft--;   // untilOff=寿命の最後まで子弾を生成し続ける(births 上限なし; 親の画面外 despawn / _life で停止)。非 untilOff は従来どおり births 回で打ち止め。
+    if(b._breedFan){ const pd=Math.atan2(b.vy,b.vx), lo=pd-b._breedSpread*0.5, seq=(b._breedSeq=(b._breedSeq|0)+1);   // childFan=親方向に束ねる狭い扇 (親は spawn 時に自機へ aim-lock 済→撃った瞬間の自機方向へ流れる)
+      for(let i=0;i<b._breedN;i++){ const hh=Math.sin(i*12.9898+seq*78.233)*43758.5453, j=hh-Math.floor(hh);   // sin-hash 擬似乱数 j∈[0,1) = fract(sin(x)·c)
+        const a=lo+b._breedSpread*((i+j)/b._breedN);   // 層化ジッター: スロット i + 乱数j → 角度範囲(_breedSpread)は不変だが分布が毎 breed 変わり隙が動く＝扇の中はすり抜け困難(地獄)。安地は扇の外側(分布範囲外)を回ること。
+        const cx=Math.cos(a)*b._breedSpeed+b.vx*b._breedCarry, cy=Math.sin(a)*b._breedSpeed+b.vy*b._breedCarry, cs=Math.hypot(cx,cy);   // 子に親 velocity の一部(_breedCarry<1, 控えめ)を継承＝斜行の子も前進運動量をもらい直進親の先へ出る(落伍しない)
+        spawnBullet({ x:b.x, y:b.y, vx:cx, vy:cy, dir:Math.atan2(cy,cx), speed:cs, hue:b._breedHue, style:b._breedStyle, r:b._breedR, av:0 }); } }
+    else { let base, step;
+      if(b._breedAim){ base=angleToPlayer(b.x,b.y)-b._breedSpread*0.5; step=b._breedN>1?b._breedSpread/(b._breedN-1):0; }   // childAim=自機狙い: re-aim a tight fan at the player's CURRENT position each breed.
+      else { base=b._breedPhase; step=TAU/b._breedN; b._breedPhase+=b._breedTwist; }   // default=the old radial ring → byte-identical for every non-aim/non-fan seed.
+      for(let i=0;i<b._breedN;i++) spawnPolar(b,base+step*i,b._breedSpeed,{hue:b._breedHue,style:b._breedStyle,r:b._breedR,av:0}); } }
+  if(b._untilOff){ if((T-b.born)>b._life) b.alive=false; }                                                                          /* long-lived parent: keeps flying (and breeding while births remain) after its births run out; integrateBullets culls it off-screen. _life is the runaway safety net (a near-horizontal aim could otherwise linger). */
+  else if(b._birthsLeft<=0 || (T-b.born)>b._life) b.alive=false;                                                                   /* self-remove after its births (a placed seed never leaves the box) */
 }
-function spawnSeed(o){ const b=spawnBullet({ x:o.x, y:o.y, vx:(o.vx||0), vy:(o.vy!=null?o.vy:40), r:o.r||7, style:o.style||'ember', hue:(o.hue!=null)?o.hue:190, dir:HALFPI, speed:0, custom:true, update:_updSeed }); if(!b) return null;
-  b._breedEvery=o.every||0.5; b._breedCd=(o.delay!=null)?o.delay:b._breedEvery; b._birthsLeft=o.births||4; b._breedN=o.n||8; b._breedSpeed=o.childSpeed||90; b._breedHue=(o.childHue!=null)?o.childHue:b.hue; b._breedStyle=o.childStyle||'pellet'; b._breedR=o.childR||4; b._breedPhase=o.phase0||0; b._breedTwist=(o.twist!=null)?o.twist:0.5; b._life=o.life||8; b._breedAim=!!o.childAim; b._breedSpread=(o.childSpread!=null)?o.childSpread:0.5;   // childAim=自機狙い fan (default off=radial ring, byte-identical)
+function spawnSeed(o){ let vx=(o.vx||0), vy=(o.vy!=null?o.vy:40);
+  if(o.aim){ const a=angleToPlayer(o.x,o.y), sp=(o.seedSpeed!=null)?o.seedSpeed:(Math.hypot(vx,vy)||90); vx=Math.cos(a)*sp; vy=Math.sin(a)*sp; }   // aim=親弾を生成時点で自機へ向け固定 (以後 vx/vy 不変 → 撃った瞬間の自機位置へ直進する長寿命弾)
+  const b=spawnBullet({ x:o.x, y:o.y, vx:vx, vy:vy, r:o.r||7, style:o.style||'ember', hue:(o.hue!=null)?o.hue:190, dir:(o.aim?Math.atan2(vy,vx):HALFPI), speed:0, custom:true, update:_updSeed }); if(!b) return null;
+  b._breedEvery=o.every||0.5; b._breedCd=(o.delay!=null)?o.delay:b._breedEvery; b._birthsLeft=o.births||4; b._breedN=o.n||8; b._breedSpeed=o.childSpeed||90; b._breedHue=(o.childHue!=null)?o.childHue:b.hue; b._breedStyle=o.childStyle||'pellet'; b._breedR=o.childR||4; b._breedPhase=o.phase0||0; b._breedTwist=(o.twist!=null)?o.twist:0.5; b._life=o.life||8; b._breedAim=!!o.childAim; b._breedFan=!!o.childFan; b._breedCarry=(o.fanCarry!=null)?o.fanCarry:0.35; b._breedSeq=0; b._untilOff=!!o.untilOff; b._breedSpread=(o.childSpread!=null)?o.childSpread:0.5;   // childAim / childFan default off=radial ring, byte-identical; fanCarry=childFan の親velocity継承率 (控えめ既定); _breedSeq=childFan ジッターの breed カウンタ
   return b; }
 
 const pat={};
@@ -3682,6 +3691,7 @@ function* runBoss(spec, startPi){ const boss=makeBoss(spec); hud.setBoss(boss);
   else yield* moveTo(boss,spec.enterTo.x,spec.enterTo.y,BOSS_ENTER,EASE.inOut);
   boss.invuln=false; if(twin) twin.invuln=false;
   for(let pi=(startPi||0);pi<spec.phases.length;pi++){ const ph=spec.phases[pi]; boss.phaseIndex=pi; boss.phasesLeft=spec.phases.length-pi; yield* runPhase(boss,ph,pi);
+    if(ph.onClear) ph.onClear(boss);   // 「撃破した瞬間」hook (symmetric with onEnter) — fires the instant the phase clears, BEFORE the bomb/flash/heal. Absent on every phase but TOKOYO P7 (queues the dawn BGM) → byte-identical elsewhere.
     sfx.bomb&&sfx.bomb(); cancelBullets({all:true,toItems:CANCEL_TO_ITEM}); screenFlash('#ffffff',0.35); shake(6,0.3);
     // per-phase drops: an opt-in ph.dropSpread fans them across a band centred on the boss (with matching lateral pop) so
     // they DON'T stack in the boss-centre column the NEXT phase may immediately flood (S5 須佐之男 P2→P3: dropped items fell
@@ -3721,12 +3731,37 @@ function* runPhase(boss,ph,pi){
   if(ph.onEnter) ph.onEnter(boss);
   if(survival>0){ // TIMER-driven (not wall-clock) so pierce damage that trims boss.timer actually shortens the phase
     boss.invuln=true; boss.survivalActive=true; boss.survivalTotal=survival; boss.timer=survival; let prev=T;
-    while(boss.timer>0&&boss.hp>0){ yield; const now=T; boss.timer=Math.max(0,boss.timer-(now-prev)); prev=now; }   // ends on timer expiry OR pierce draining HP to 0
+    const holdOnInvuln=!!ph.holdTimerWhileInvuln;   // anti-ゴリ押し: when set, the survival countdown FREEZES while the player is bomb/respawn-invuln (you can't lives/bombs your way through a survival). prev=now is still advanced every tick so the frozen span is genuinely skipped, not deferred. The graze-powerup pierce drains boss.hp separately → 突破 stays open (graze管理の戦略性). Absent on every other phase → byte-identical there.
+    while(boss.timer>0&&boss.hp>0){ yield; const now=T; if(!(holdOnInvuln && player.invuln>0)) boss.timer=Math.max(0,boss.timer-(now-prev)); prev=now; }   // ends on timer expiry OR pierce draining HP to 0
     boss.survivalActive=false; }
   else { boss.survivalActive=false; boss.timer=null; while(boss.hp>0) yield; }
   Director.endGroup(g); lasers.clear(); wells.clear();   // tear down the phase's emitters AND any of its lasers/wells (sweeping beams & long-lived vortices must not leak into the next phase). No-op for laser/well-free phases.
 }
-function* bossDefeat(boss,spec){ boss.invuln=true; lasers.clear(); wells.clear(); const bodies=boss._twin?[boss,boss._twin]:[boss]; slowmo(SLOWMO_DEFEAT,SLOWMO_DEFEAT_DUR); shake(10,1.4); for(let i=0;i<6;i++){ for(const bd of bodies){ cancelBullets({x:bd.x,y:bd.y,radius:60+i*60,frac:1.0,toItems:true}); spawnDeathPuff(bd.x+rng.range(-30,30),bd.y+rng.range(-20,20),(bd.hue+i*40)%360); } yield* waitT(0.12); } if(activeTheme.iwato && boss.design==='tokoyo') _iwatoLight=1; /* Stage-6 finale: snap the 暗→光 ramp to FULL (a sub-5s P8 kill would otherwise freeze it partway — the ramp fork is reaped by the phase teardown) so the completed 岩戸開き shows behind ALL CLEAR. GATED to the 常夜 final boss (design 'tokoyo') ONLY: the 土蜘蛛 midboss is ALSO bossDefeat'd, and firing the dawn there wrongly flooded the WHOLE 2nd half with light (and pre-empted P8's 暗→光 catharsis — it was already bright). No-op (byte-identical) for every other boss/stage = activeTheme.iwato falsy. */ screenFlash('#ffffff',0.9); for(let di=0;di<(spec.drops||[]).length;di++){ const bd=(boss._twin&&(di&1))?boss._twin:boss; dropItem(bd.x+rng.range(-40,40),bd.y+rng.range(-20,20),spec.drops[di]); }   /* twin (shared-HP): split the SAME total across BOTH sisters' positions → symmetric drops, no reward inflation */ if(boss._twin) boss._twin.dead=true; hud.clearBoss(); boss.dead=true; yield* waitT(1.2); }
+// EXTENDED FINALE — fires ONLY on the 常夜 final-boss defeat (= the END OF THE WHOLE GAME). The black sun is shattered and the
+// 天岩戸 stands fully open: a sustained, celebratory light-bloom that tells the player the journey is over, before the timeline's
+// {stageClear} hands off to the ALL CLEAR screen. Gated to design==='tokoyo' in bossDefeat → every other boss keeps the plain
+// 1.2s settle (golden byte-identical). The dawn BGM (boss6dawn, queued at TOKOYO P7 onClear) plays under it; {stageClear} fades it.
+function* tokoyoFinale(boss){
+  const cx=PF_W*0.5, cy=boss.y;
+  cancelBullets({all:true,toItems:true});                              // the night's last bullets dissolve to light + points
+  _iwatoLight=1;                                                       // hold the cave at full dawn behind the bloom
+  // 1) the black sun CRACKS — a held slow-motion beat, then a great radiant burst from where it stood
+  slowmo(0.4,1.0); shake(13,1.7);
+  for(let i=0;i<4;i++){ spawnParticle(cx,cy,0,0,{life:1.1,kind:'ring',hue:48,r:16+i*12});
+    for(let k=0;k<14;k++){ const a=rng()*TAU,s=60+rng()*140; spawnParticle(cx,cy,Math.cos(a)*s,Math.sin(a)*s,{life:0.7+rng()*0.5,kind:'sparkle',hue:44+rng()*18,r:2.4+rng()*2}); }
+    yield* waitT(0.1); }
+  screenFlash('#fff6d8',1.0); yield* waitT(0.8);
+  // 2) sunrise SWEEPS in — successive shockwave rings of golden light + radiating sparkle motes, gold flashes pulsing like the sun cresting
+  for(let w=0;w<5;w++){ spawnParticle(cx,cy,0,0,{life:1.4,kind:'ring',hue:46,r:26});
+    const N=22; for(let i=0;i<N;i++){ const a=i/N*TAU+w*0.35, s=130+w*42+rng()*60; spawnParticle(cx,cy,Math.cos(a)*s,Math.sin(a)*s,{life:0.9+rng()*0.5,kind:'sparkle',hue:42+rng()*18,r:2.2+rng()*1.8}); }
+    screenFlash('#ffe9b0',0.5); shake(4,0.5); yield* waitT(0.55); }
+  // 3) the held dawn — name the moment, then drifting sunlight motes fill the field for a calm beat
+  banner('岩 戸 開 き  —  The Cave Opens');
+  for(let g=0;g<7;g++){ for(let i=0;i<7;i++) spawnParticle(rng()*PF_W,rng()*PF_H,(rng()-0.5)*24,18+rng()*34,{life:1.4+rng()*0.9,kind:'sparkle',hue:44+rng()*16,r:1.8+rng()*1.6}); yield* waitT(0.45); }
+  // 4) one last bright bloom, then settle into the dawn-lit field before {stageClear} runs the ALL CLEAR handoff
+  screenFlash('#fffaf0',0.85); shake(6,0.6); yield* waitT(1.4);
+}
+function* bossDefeat(boss,spec){ boss.invuln=true; lasers.clear(); wells.clear(); const bodies=boss._twin?[boss,boss._twin]:[boss]; slowmo(SLOWMO_DEFEAT,SLOWMO_DEFEAT_DUR); shake(10,1.4); for(let i=0;i<6;i++){ for(const bd of bodies){ cancelBullets({x:bd.x,y:bd.y,radius:60+i*60,frac:1.0,toItems:true}); spawnDeathPuff(bd.x+rng.range(-30,30),bd.y+rng.range(-20,20),(bd.hue+i*40)%360); } yield* waitT(0.12); } if(activeTheme.iwato && boss.design==='tokoyo') _iwatoLight=1; /* Stage-6 finale: snap the 暗→光 ramp to FULL (a sub-5s P8 kill would otherwise freeze it partway — the ramp fork is reaped by the phase teardown) so the completed 岩戸開き shows behind ALL CLEAR. GATED to the 常夜 final boss (design 'tokoyo') ONLY: the 土蜘蛛 midboss is ALSO bossDefeat'd, and firing the dawn there wrongly flooded the WHOLE 2nd half with light (and pre-empted P8's 暗→光 catharsis — it was already bright). No-op (byte-identical) for every other boss/stage = activeTheme.iwato falsy. */ screenFlash('#ffffff',0.9); for(let di=0;di<(spec.drops||[]).length;di++){ const bd=(boss._twin&&(di&1))?boss._twin:boss; dropItem(bd.x+rng.range(-40,40),bd.y+rng.range(-20,20),spec.drops[di]); }   /* twin (shared-HP): split the SAME total across BOTH sisters' positions → symmetric drops, no reward inflation */ if(boss._twin) boss._twin.dead=true; hud.clearBoss(); boss.dead=true; if(boss.design==='tokoyo') yield* tokoyoFinale(boss); else yield* waitT(1.2); }   /* 常夜=ゲーム全体の最後 → 専用の長い演出(tokoyoFinale)。他ボスは従来どおり 1.2s で settle (golden byte-identical)。 */
 
 // ---- boss descriptors (hoisted from stageScript; read-only data, shared instance) ----
 const MIDBOSS_SPEC = { name:'Ariel', design:'wisp', hue:140, enterFrom:{x:PF_W/2,y:-60}, enterTo:{x:PF_W/2,y:150}, score:80000, drops:['bomb','bigpower','point','point','point','point','power'],
@@ -4114,19 +4149,20 @@ const TOKOYO_SPEC = { name:'Tokoyo', design:'tokoyo', hue:252, enterFrom:{x:PF_W
         onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,PF_H*0.42,1.2,EASE.out); },b); } },
       // P7 survival「夜明け前」— the darkest, ~28s. Drifting seeds + a shifting lamp lattice + an omni-spiral, all RAMPING over
       // the back half (kOf) — the deep dark builds toward the breaking. Ends → P8 transformation. Stays in full night (L=0).
-      { kind:'spell', name:'"Before the Dawn"', survival:28, drops:[], cutinHue:252, body:'raw', raw:function*(b){
+      { kind:'spell', name:'"Before the Dawn"', survival:28, holdTimerWhileInvuln:true, drops:[], cutinHue:252, body:'raw', raw:function*(b){
           const t0=T, kOf=function(){ return clamp((T-t0-11)/15,0,1); };
-          Director.fork(function*(){ while(true){ const k=kOf(); spawnSeed({ x:PF_W*(0.18+0.64*(((T-t0)*0.13)%1)), y:96, vy:lerp(26,42,k), hue:SEED_HUE, n:Math.round(lerp(8,12,k)), births:Math.round(lerp(3,4,k)), every:0.5, childSpeed:lerp(62,82,k), childStyle:'pellet', childHue:SEED_CHILD_HUE, childR:4, life:7, childAim:true, childSpread:lerp(0.95,0.6,k) }); yield* waitT(lerp(1.5,0.8,k)); } },b);   // 強化(自機狙い罠): 弾を生む弾を自機狙いの遅い長寿命弾へ。childSpeed 62→82 は低速で長く滞空(長寿命)しつつ全フィールド横断(長射程)、childAim で各 breed が現在の自機へ再照準、spread 0.95→0.6 と締まる。掃引する複数の苗の扇が重なり「同じ場所に留まると逃げ場が消える」(動けば旧位置狙いで隙)
+          Director.fork(function*(){ while(true){ const k=kOf(); spawnSeed({ x:PF_W*(0.18+0.64*(((T-t0)*0.13)%1)), y:96, aim:true, seedSpeed:lerp(46,64,k), untilOff:true, life:9, hue:SEED_HUE, n:Math.round(lerp(5,8,k)), every:lerp(0.5,0.36,k), childSpeed:lerp(78,98,k), childStyle:'pellet', childHue:SEED_CHILD_HUE, childR:4, childFan:true, childSpread:lerp(0.5,0.36,k), fanCarry:0.35 }); yield* waitT(lerp(3.0,2.1,k)); } },b);   // 修正(扇内は地獄/外周で回避): 親弾(自機狙い長寿命)を低速化(78-104→46-64)＝ゆっくり掃引、untilOff で寿命の最後まで breed し続ける。子弾は範囲(spread 0.5→0.36)はそのまま n を増やし(3-5→5-8)角度を sin-hash 層化ジッターで擬似ランダム化＝隙が毎 breed 動きすり抜け困難。「同じ場所に留まると避けられない弾が来る→動き続けを強制」=扇の中は理不尽密度、安地は分布の外側を回ること（複数の遅い扇が camp を埋める）= 扇の方が戦略性が生まれる（全方位案は却下）
           Director.fork(function*(){ let g=0; while(true){ const k=kOf(), base=angleToPlayer(b.x,b.y), N=Math.round(lerp(13,24,k)); for(let i=0;i<N;i++) spawnLinger({ x:b.x, y:b.y, dir:base-1.0+2.0*(i/(N-1)), speed:lerp(196,230,k), decel:0.5, hold:lerp(1.6,1.05,k), hue:204, r:7 }); g++; yield* waitT(lerp(1.6,0.95,k)); } },b);   // 強化2: 頂点 lamp fan N 21→24
           Director.fork(function*(){ let a=0; while(true){ const k=kOf(); if(k>0.04){ spiral(b,{angle:-a,arms:Math.round(lerp(3,6,k)),speed:lerp(92,114,k),hue:(202+4*Math.sin(T*0.5)),hueSpread:16,style:'small'}); a+=lerp(0.16,0.24,k); } yield* waitT(lerp(0.13,0.065,k)); } },b);   // 強化2: 頂点 counter-spiral arms 5→6 (hue 据置 198..206 hueSpread16=安全)
           let a=0; while(true){ const k=kOf(); spiral(b,{angle:a,arms:Math.round(lerp(5,7,k)),speed:lerp(98,120,k),hue:(202+4*Math.sin(T*0.4)),hueSpread:16,style:'small'}); a+=lerp(0.22,0.15,k); yield* waitT(lerp(0.095,0.046,k)); } },   // 強化2: 頂点 primary arms 6→7 + 頂点 cadence 0.05→0.046 (hue 据置 安全)
-        onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,PF_H*0.40,1.3,EASE.out); },b); } },
+        onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,PF_H*0.40,1.3,EASE.out); },b); },
+        onClear:function(){ Audio.queueMusic('boss6dawn',2); } },   // 「夜明け前」撃破の瞬間=ACT II 転調トリガー: 次の2小節頭で boss6dawn へ clean cut (4小節 bridge の climb → climax直入り)。明転(_iwatoLight, P8 で 0→1)より先に音楽が走り、扉開きを導く
       // P8 TRUE FINAL「天岩戸開」(暗→光) — the climax. A forked ramp drives _iwatoLight 0→1 over 5s: the rock door opens, dawn
       // floods, the black sun is eclipsed by light. The danmaku turns to RADIANT lightpetals (Stage-1 桜 callback), now
       // LIT and readable — a beautiful, fair last spell. On defeat → 常夜 shatters → {stageClear} → ALL CLEAR (light returns).
       { kind:'spell', name:'"The Cave Opens — Amaterasu Returns"', hp:2300, drops:['bigpower','power','point','point','point'], dropSpread:240, cutinHue:44, body:'raw', raw:function*(b){
           Director.fork(function*(){ const t0=T; while(_iwatoLight<1){ _iwatoLight=clamp((T-t0)/5.0,0,1); yield; } _iwatoLight=1; },b);
-          Director.fork(function*(){ while(_iwatoLight<0.85) yield; Audio.queueMusic('boss6dawn',4); },b);   // 転調=明転連動かつ自然(採択="Big phrase"): 扉がほぼ開いた(明転後, _iwatoLight≥0.85≈4.5s)時点で queueMusic→次の【4小節フレーズ】頭でクロスフェードなしにクリーンカットで A-major dawn へ。ACT I(boss6) は P1–P7 をループ。bar1 より大きい楽節単位の方が転調が自然(ユーザ採択)
+          // ACT II への転調は P7「夜明け前」撃破の瞬間 (TOKOYO P7 の onClear) に既に queue 済み — 明転(_iwatoLight)とは切り離し、音楽が先行して扉開きを導く。ここでは何も鳴らさない。
 
           Director.fork(function*(){ while(true){ aimedShot(b,{n:3,spread:0.3,speed:150,hue:52,style:'mid'}); yield* waitT(1.0); } },b);
           // 陽光の花びら lifted into a tight bright GOLD→YELLOW band (hueSpread narrowed): the old (40±20)±20arm spread dipped petals
@@ -4393,7 +4429,7 @@ function* runStage(stage){
     else if(e.flash)        screenFlash(e.flash.color, e.flash.i);
     else if(e.shake)        shake(e.shake.mag, e.shake.dur);
     else if(e.stageEnd)     { screenFlash('#ffffff',0.8); banner('STAGE CLEAR'); Audio.fadeOutMusic(1.4); yield* waitT(2.8); advanceStage(); return; }   // mid-campaign handoff: advance to the next stage (deferred via run._advanceTo) WITHOUT the terminal all-clear; next stage's music starts in enterStage
-    else if(e.stageClear)   { screenFlash('#ffffff',1.0); banner('STAGE CLEAR'); Audio.playMusic('none'); yield* waitT(3.0); advanceStage(); return; }   // terminal: last stage of the run -> advanceStage()->onStageClear()->STAGECLEAR
+    else if(e.stageClear)   { Audio.fadeOutMusic(1.6); screenFlash('#fffaf0',0.5); yield* waitT(2.2); advanceStage(); return; }   // terminal: last stage of the run -> advanceStage()->onStageClear()->STAGECLEAR. The 常夜 defeat already ran the long tokoyoFinale (岩戸開き) + the ALL CLEAR overlay carries the closing text, so NO redundant "STAGE CLEAR" banner here — just gently fade the dawn BGM and settle into the dawn-lit field.
   }
 }
 

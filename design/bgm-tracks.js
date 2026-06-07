@@ -970,26 +970,25 @@ const BOSS6 = {
     A1:     makeSection({ bars:8, scale:'Ephryg', chords:['Em','F','C','G','Em','F','Dm','Em'], lead:cat(B6C_HOOK, off(32,B6C_HOOK), off(64,B6C_HOOK), off(96,B6C_CLOSE)), bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
     A2:     makeSection({ bars:8, scale:'Ephryg', chords:['Em','F','C','G','Em','Am','F','Em'], lead:cat(B6C_HOOK, off(32,B6C_HOOK), off(64,B6C_HOOK), off(96,B6C_CLOSE)), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
     B:      makeSection({ bars:8, scale:'Ephryg', chords:['Am','F','C','G','Am','Dm','F','Em'], lead:B6C_B, harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossDrive', sub:true, crash:true }),
-    // ---- the engine keeps turning, harmony tips upward (modulating bridge) ----
-    bridge: makeSection({ bars:8, scale:null, chords:['Em','Em','C','G','Dm','Dm','E7','E7'], lead:B6C_BRIDGE, bassStyle:'pump8', arpRate:2, groove:'bossBridge', sub:true }),
+    // ---- the engine keeps turning, harmony tips upward (modulating bridge) — boss6dawn leads with this 4-bar climb into the A-major lift ----
+    bridge: makeSection({ bars:4, scale:null, chords:['Em','Em','C','G'], lead:B6C_BRIDGE, bassStyle:'pump8', arpRate:2, groove:'bossBridge', sub:true }),
     // ---- ACT II : LIFT a perfect-fourth to A MAJOR — the chase reborn as a radiant sunrise fanfare ----
     climax: makeSection({ bars:8, scale:'Amaj', chords:['A','D','E','F#m','A','D','E7','A'], lead:cat(B6C_DAWN, off(32,B6C_DAWN), off(64,B6C_DAWN), off(96,B6C_DAWNCLOSE)), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
     A3:     makeSection({ bars:8, scale:'Amaj', chords:['A','D','E','F#m','A','D','E7','A'], lead:cat(B6C_DAWN, off(32,B6C_DAWN), off(64,B6C_DAWN), off(96,B6C_DAWNCLOSE)), harm:true, counter:true, bassStyle:'drive8', arpRate:1, groove:'bossClimax', sub:true, crash:true }),
     outro:  makeSection({ bars:4, scale:'Amaj', chords:['D','E','A','A'], lead:B6C_OUTRO, bassStyle:'drive8', arpRate:2, groove:'bossDrive', sub:true, crash:true }),
   },
-  // Split into two TRACKS so the 暗→光 modulation can be GAME-GATED to the boss's P7 突破 (the rock-door opening) rather
-  // than firing on the playback timer: 'boss6' loops ACT I (dark E Phrygian motorik) through P1–P7; the game swaps to
-  // 'boss6dawn' (below — the A-major ACT II) at P8 entry so the music's key-lift lands together with _iwatoLight's visual
-  // dawn. The 'bridge' section stays defined (a modulating climb) but is unused by either arrangement — at 160 BPM its 8
-  // bars (~12s) would outrun the 5s visual ramp and re-introduce a desync; the swap's crossfade carries the lift instead.
+  // Split into two TRACKS so the 暗→光 modulation is GAME-GATED to the boss's P7 突破 (the survival「夜明け前」cleared)
+  // rather than firing on the playback timer: 'boss6' loops ACT I (dark E Phrygian motorik) through P1–P7; the moment P7
+  // is defeated the game queues 'boss6dawn' on the next 2-bar boundary — its 4-bar modulating 'bridge' leads the climb,
+  // THEN climax直入り into the A-major sunrise (the music runs AHEAD of the visual 岩戸開き and pulls the door open).
   arrangement: ['intro','A1','A2','B'],
 };
-// ACT II as its own looping track — the A-major sunrise. Reuses BOSS6's voices/gains/sections; ONLY the arrangement
-// differs (jumps straight to the bright A-major fanfare so the brightness lands the instant the cave door opens at P8).
+// ACT II — A-major sunrise, PREFACED by the 4-bar modulating 'bridge' (a leading climb out of E Phrygian into the
+// perfect-fourth lift) so the dawn is connected/bridged rather than hard-cut. Then climax直入り (→ A3 → outro).
 const BOSS6DAWN = {
-  title: 'Motorik Dawn (ACT II — Sunrise)', keyName: 'A major', bpm: 160, gain: 0.62,
+  title: 'Motorik Dawn (ACT II — Sunrise)', keyName: 'A major (via bridge)', bpm: 160, gain: 0.62,
   voices: BOSS6.voices, gains: BOSS6.gains, sections: BOSS6.sections,
-  arrangement: ['climax','A3','outro'],
+  arrangement: ['bridge','climax','A3','outro'],
 };
 
 const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER, stage2: STAGE2, boss2: BOSS2, stage3: STAGE3, boss3: BOSS3, stage4: STAGE4, midboss4: MIDBOSS4, boss4: BOSS4, stage5: STAGE5, midboss5: MIDBOSS5, boss5: BOSS5, stage6: STAGE6, midboss6: MIDBOSS6, boss6: BOSS6, boss6dawn: BOSS6DAWN };
