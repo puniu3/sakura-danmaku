@@ -87,12 +87,14 @@ const PAD_BTN_SELECT=8, PAD_BTN_START=9, PAD_BTN_DUP=12, PAD_BTN_DDOWN=13, PAD_B
 const TOUCH_DRAG_SENS=1.0, TOUCH_DRAG_SENS_FOCUS=0.55;
 // on-screen button rects in logical coords; all live in the HUD strip (x>=PF_W) so they never
 // overlap the playfield drag-zone (x<PF_W). Gameplay cluster sits in the lower-mid HUD (thumb zone);
-// PAUSE is a *system* action so it is set apart (small, muted, top of the free band) to avoid
-// accidental taps and read as a different kind of control.
+// PAUSE and MUTE are *system* actions, set apart (small, muted, paired at the top of the free band)
+// to avoid accidental taps and read as a different kind of control. Both show ONLY while playing/paused
+// — the menus are tap-to-start (a tiny mute button there is a tap-trap), and the title has no BGM to mute.
 const TOUCH_BTN={
   shoot:{x:452,y:320,w:80,h:60,label:'FIRE'},
   focus:{x:540,y:320,w:80,h:60,label:'FOCUS'},
   bomb: {x:452,y:392,w:168,h:60,label:'BOMB'},
+  mute: {x:534,y:258,w:40,h:32},
   pause:{x:582,y:258,w:40,h:32,label:'II'},
 };
 const START_POWER = 100;
@@ -2747,6 +2749,7 @@ function drawHUD(){ ctx.save(); ctx.translate(PF_W,0); ctx.fillStyle=PALETTE.hud
     // graze-power gauge: when active = remaining-time fraction (power hue); else = progress toward next milestone
     const gx=lx, gw=HUD_W-44, gy=y+8, gh=5, prevTh=game.grazePowerThreshold-game.grazePowerInterval, prog=active?clamp(player.grazePowerT/GRAZE_POWER_DURATION,0,1):clamp((game.grazeCount-prevTh)/Math.max(1,game.grazePowerInterval),0,1);
     ctx.fillStyle='rgba(120,255,140,0.14)'; roundRect(gx,gy,gw,gh,2.5); ctx.fill(); ctx.fillStyle=active?'hsl('+GRAZE_HUE+',100%,66%)':'rgba(185,255,106,0.85)'; roundRect(gx,gy,gw*prog,gh,2.5); ctx.fill(); } y+=30;
+  if(inputMode!=='touch'&&Audio&&Audio.isMuted&&Audio.isMuted()) drawSpeakerGlyph(HUD_W-24,PF_H-12,true,0.9);   // muted indicator for key/pad (M / pad Select toggles it); touch shows state on its mute button
   ctx.fillStyle=PALETTE.uiDim; ctx.font='9px monospace'; ctx.fillText('FPS '+(_fps|0),lx,PF_H-30); ctx.fillStyle='rgba(157,131,192,0.7)'; ctx.font='8px monospace'; ctx.fillText('Z or .  fire    X or /  bomb',lx,PF_H-18); ctx.fillText('Shift focus    M mute    P pause',lx,PF_H-9); ctx.restore();
   const b=game.boss; if(b&&!b.dead&&b.hpMax) drawBossHUD(b);
 }
@@ -2786,10 +2789,218 @@ function drawSurvivalBar(boss){
   ctx.fillStyle=PALETTE.uiDim; ctx.font='9px "Trebuchet MS",sans-serif'; ctx.fillText('SURVIVE',22+numW+7,34);
 }
 
+// ---- title logo (winner #6 "minimal-lockup": cream hairline frame + 「桜花弾幕」 hero + one gold rule + a single sakura blossom; strict rose/cream/gold). Drawn over the dimmed spring field; t drives a calm glow pulse only (complete at t=0). ----
+function drawTitleLogo(ctx, W, H, t){
+  ctx.save();
+  const cx = W/2;
+
+  // ===== strictly limited palette: muted rose + warm cream on dark, ONE fine gold hairline =====
+  const ROSE   = '#ff8ec5';
+  const ROSE_D = '#e0688f';
+  const CREAM  = '#fff4e0';
+  const GOLD   = '#ffd45e';
+  const cream  = (a)=>'rgba(255,244,224,'+a+')';
+  const gold   = (a)=>'rgba(255,212,94,'+a+')';
+  const rose   = (a)=>'rgba(255,142,197,'+a+')';
+
+  // breathing affects glow only — logo is fully complete & legible at t=0
+  const pulse = 0.5 + 0.5*Math.sin(t*0.85);
+
+  // centered tracked text (the letterspacing the API lacks)
+  function tracked(str, yc, font, fill, track){
+    ctx.font = font; ctx.textAlign='left'; ctx.textBaseline='middle';
+    const ws=[]; let total=0;
+    for(const ch of str){ const w=ctx.measureText(ch).width; ws.push(w); total+=w+track; }
+    total-=track;
+    let x=cx-total/2, i=0;
+    for(const ch of str){ ctx.fillStyle=fill; ctx.fillText(ch,x,yc); x+=ws[i]+track; i++; }
+    return total;
+  }
+
+  // small precise sakura blossom (5 notched petals) — the ONE ornament
+  function blossom(s, fill, withCore){
+    ctx.save(); ctx.scale(s,s);
+    function petal(){
+      ctx.beginPath();
+      ctx.moveTo(0,0);
+      ctx.bezierCurveTo(-3.2,-3.0,-2.7,-7.4,0,-8.6);
+      ctx.lineTo(-1.0,-7.0); ctx.lineTo(0,-7.9); ctx.lineTo(1.0,-7.0); ctx.lineTo(0,-8.6);
+      ctx.bezierCurveTo(2.7,-7.4,3.2,-3.0,0,0);
+      ctx.closePath();
+    }
+    for(let k=0;k<5;k++){ ctx.save(); ctx.rotate(k*Math.PI*2/5); ctx.fillStyle=fill; petal(); ctx.fill(); ctx.restore(); }
+    if(withCore){ ctx.beginPath(); ctx.arc(0,0,1.5,0,Math.PI*2); ctx.fillStyle=GOLD; ctx.fill(); }
+    ctx.restore();
+  }
+
+  // ================= LAYOUT — all art inside y 88..276, centered on cx =================
+  const fx=52, fr=W-52;
+  const fy=100, fb=242;
+
+  // ---------- 1. slim framing rectangle — CRISP cream hairline (precision = the elegance) ----------
+  ctx.save();
+  ctx.lineCap='round';
+  ctx.lineJoin='round';
+  ctx.shadowColor = rose(0.35);
+  ctx.shadowBlur = 7;
+  ctx.strokeStyle = cream(0.85);
+  ctx.lineWidth = 1.4;
+  const gap = 17;                            // centered gap in the top edge for the blossom
+  ctx.beginPath();
+  ctx.moveTo(fx, fy);     ctx.lineTo(cx-gap, fy);
+  ctx.moveTo(cx+gap, fy); ctx.lineTo(fr, fy);
+  ctx.lineTo(fr, fb);
+  ctx.lineTo(fx, fb);
+  ctx.lineTo(fx, fy);
+  ctx.stroke();
+  // inner-corner accent ticks (crisp, no shadow) — quiet jewelled precision
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = cream(0.55);
+  ctx.lineWidth = 1.2;
+  const ins=6, len=11;
+  ctx.beginPath();
+  ctx.moveTo(fx+ins, fy+ins+len); ctx.lineTo(fx+ins, fy+ins); ctx.lineTo(fx+ins+len, fy+ins);
+  ctx.moveTo(fr-ins-len, fy+ins); ctx.lineTo(fr-ins, fy+ins); ctx.lineTo(fr-ins, fy+ins+len);
+  ctx.moveTo(fx+ins, fb-ins-len); ctx.lineTo(fx+ins, fb-ins); ctx.lineTo(fx+ins+len, fb-ins);
+  ctx.moveTo(fr-ins-len, fb-ins); ctx.lineTo(fr-ins, fb-ins); ctx.lineTo(fr-ins, fb-ins-len);
+  ctx.stroke();
+  ctx.restore();
+
+  // ---------- 2. the single sakura blossom, seated in the top-edge gap ----------
+  ctx.save();
+  ctx.translate(cx, fy);
+  ctx.shadowColor = rose(0.7);
+  ctx.shadowBlur = 8 + 3*pulse;
+  blossom(1.25*(1+0.03*pulse), cream(0.92), false);
+  blossom(0.92, ROSE, true);
+  ctx.restore();
+
+  // ---------- 3. kanji 「桜花弾幕」 — MEDIUM weight, GENEROUS tracking, calm not blaring ----------
+  const kY=158;
+  const kFont='600 44px "Trebuchet MS",sans-serif';
+  ctx.save();
+  ctx.shadowColor = rose(0.5);
+  ctx.shadowBlur = 9 + 3*pulse;
+  // rose-dominant per art-direction; a slim cream highlight at the very top, deep rose at the foot
+  const kg = ctx.createLinearGradient(0, kY-24, 0, kY+22);
+  kg.addColorStop(0,    CREAM);
+  kg.addColorStop(0.22, ROSE);
+  kg.addColorStop(0.7,  ROSE);
+  kg.addColorStop(1,    ROSE_D);
+  tracked('桜花弾幕', kY, kFont, kg, 15);
+  ctx.restore();
+
+  // ---------- 4. the ONE fine gold hairline + tiny twin lozenges (under the kanji) ----------
+  const ry=192, rw=132;
+  ctx.save();
+  ctx.lineCap='round';
+  const rg = ctx.createLinearGradient(cx-rw,0,cx+rw,0);
+  rg.addColorStop(0,    gold(0));
+  rg.addColorStop(0.18, gold(0.9));
+  rg.addColorStop(0.5,  GOLD);
+  rg.addColorStop(0.82, gold(0.9));
+  rg.addColorStop(1,    gold(0));
+  ctx.strokeStyle=rg; ctx.lineWidth=1.3;
+  ctx.shadowColor=gold(0.55); ctx.shadowBlur=5;
+  ctx.beginPath();
+  ctx.moveTo(cx-rw,ry); ctx.lineTo(cx-12,ry);
+  ctx.moveTo(cx+12,ry); ctx.lineTo(cx+rw,ry);
+  ctx.stroke();
+  ctx.shadowBlur=6; ctx.fillStyle=GOLD;
+  for(const sx of [-1,1]){
+    ctx.beginPath();
+    ctx.moveTo(cx+sx*9, ry);
+    ctx.lineTo(cx+sx*4, ry-2.6);
+    ctx.lineTo(cx-sx*1, ry);
+    ctx.lineTo(cx+sx*4, ry+2.6);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+
+  // ---------- 5. romaji wordmark — quiet cream, wide tracking, sits in lower frame band ----------
+  ctx.save();
+  ctx.shadowColor=rose(0.4); ctx.shadowBlur=4;
+  tracked('SAKURA  DANMAKU', 218, '600 14px "Trebuchet MS",sans-serif', cream(0.95), 5);
+  ctx.restore();
+
+  // ---- restore clean context state ----
+  ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+  ctx.shadowBlur=0; ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over';
+  ctx.restore();
+}
 // ---- overlays (title/pause/gameover/clear) ----
 function dimPlayfield(a){ ctx.save(); ctx.beginPath(); ctx.rect(PF_X,PF_Y,PF_W,PF_H); ctx.clip(); ctx.fillStyle='rgba(8,3,16,'+a+')'; ctx.fillRect(PF_X,PF_Y,PF_W,PF_H); ctx.restore(); }
 function ctext(s,x,y,font,col,align){ ctx.font=font; ctx.fillStyle=col; ctx.textAlign=align||'center'; ctx.fillText(s,x,y); ctx.textAlign='left'; }
-function drawOverlays(){ ctx.setTransform(dpr,0,0,dpr,0,0); const cx=PF_W/2; if(game.state===STATE.TITLE){ dimPlayfield(0.5); ctx.save(); ctx.beginPath(); ctx.rect(PF_X,PF_Y,PF_W,PF_H); ctx.clip(); const grd=ctx.createLinearGradient(0,148,0,190); grd.addColorStop(0,'#ffe3f2'); grd.addColorStop(1,'#ff7ebd'); ctx.save(); ctx.shadowColor='rgba(255,120,200,0.7)'; ctx.shadowBlur=20; ctext('Sakura Danmaku',cx,184,'bold 42px "Trebuchet MS",sans-serif',grd); ctx.restore(); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext(inputMode==='touch'?'TAP  TO  START':'PRESS  Z  /  ENTER  TO  START',cx,288,'bold 16px "Trebuchet MS",sans-serif','#ffe08a'); if(inputMode==='touch'){ ctext('Drag to move   ·   tap FIRE / FOCUS / BOMB / PAUSE',cx,352,'11px "Trebuchet MS",sans-serif','#b69fd6'); ctext('Gamepad supported',cx,372,'11px "Trebuchet MS",sans-serif','#b69fd6'); } else { ctext('Move  Arrows or WASD      Focus  Shift',cx,346,'11px "Trebuchet MS",sans-serif','#b69fd6'); ctext('Fire  Z or .      Bomb  X or /      P pause   M mute',cx,366,'11px "Trebuchet MS",sans-serif','#b69fd6'); ctext('Gamepad supported',cx,386,'11px "Trebuchet MS",sans-serif','#b69fd6'); } ctext('Graze powers up   ·   top edge auto-collects   ·   1M = extra life',cx,424,'11px "Trebuchet MS",sans-serif','#9d83c0'); ctext('Hi-Score  '+pad(game.hi||0,9),cx,500,'12px "Trebuchet MS",monospace','#ffd45e'); ctx.restore(); } else if(game.state===STATE.PAUSED){ dimPlayfield(0.55); ctext('PAUSED',cx,PF_H/2-10,'bold 34px "Trebuchet MS",sans-serif','#ffe9fb'); ctext(inputMode==='touch'?'Tap to resume':'Press P / Esc to resume',cx,PF_H/2+24,'13px "Trebuchet MS",sans-serif','#b69fd6'); } else if(game.state===STATE.GAMEOVER){ dimPlayfield(0.62); ctext('GAME OVER',cx,PF_H/2-30,'bold 40px "Trebuchet MS",sans-serif','#ff5d8f'); ctext('Score  '+pad(game.score||0,9),cx,PF_H/2+10,'16px "Trebuchet MS",monospace','#ffe9fb'); ctext('Hi-Score  '+pad(game.hi||0,9),cx,PF_H/2+34,'13px "Trebuchet MS",monospace','#ffd45e'); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext(inputMode==='touch'?'Tap to continue':'Press Enter',cx,PF_H/2+78,'14px "Trebuchet MS",sans-serif','#cfa8e8'); } else if(game.state===STATE.STAGECLEAR){ const allClear=(run&&run.stage===STAGES.length-1); dimPlayfield(allClear?0.32:0.5);   /* the FINAL stage's clear = ALL CLEAR (game complete); the dawn cave shows brighter behind it */
+// ---- title controls guide: three aligned columns (touch | keyboard | gamepad) split by two thin
+// dividers. No legend, no prose — every control is labelled in place so nothing needs cross-referencing.
+// Self-evident moves carry NO label (touch=drag, keyboard arrows, gamepad d-pad/stick); only the
+// non-obvious actions get a word. WASD lives on the in-game HUD, so the title shows arrows only. The
+// goal is a 0.3-second "ah, simple" read — keep it sparse. All y-positions absolute. ----
+function drawControlsGuide(cx){
+  const C_MOVE='#86c8f0', C_FIRE='#ffce5e', C_BOMB='#ff7d9e', C_FOCUS='#9fe07a', C_SYS='#d6c8ec';
+  const DIM='rgba(255,244,224,0.34)', INK='rgba(14,6,24,0.6)', HEAD='rgba(255,244,224,0.6)', LINE='rgba(255,244,224,0.4)';
+  ctx.save(); ctx.lineJoin='round'; ctx.lineCap='round';
+  const txt=(s,x,y,font,col,al,bl)=>{ ctx.font=font; ctx.fillStyle=col; ctx.textAlign=al||'center'; ctx.textBaseline=bl||'alphabetic'; ctx.fillText(s,x,y); };
+  function cap(x,y,w,h,glyph,col,fs){            // keycap
+    ctx.fillStyle=INK; roundRect(x,y,w,h,3); ctx.fill();
+    ctx.lineWidth=1.3; ctx.strokeStyle=col; roundRect(x+0.7,y+0.7,w-1.4,h-1.4,2.6); ctx.stroke();
+    if(glyph){ ctx.fillStyle=col; ctx.font='bold '+(fs||9)+'px "Trebuchet MS",sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(glyph,x+w/2,y+h/2+0.5); }
+  }
+  function disc(x,y,r,col,glyph){                // gamepad face button
+    ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fillStyle=col; ctx.fill();
+    if(glyph){ ctx.fillStyle='rgba(14,6,24,0.85)'; ctx.font='bold '+(r+1)+'px "Trebuchet MS",sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(glyph,x,y+0.4); }
+  }
+  function keyRow(x,y,glyph,kw,col,label,fs){    // keycap + inline label to its right
+    cap(x,y,kw,16,glyph,col,fs); txt(label,x+kw+5,y+8.5,'9px "Trebuchet MS",sans-serif',col,'left','middle');
+  }
+
+  // ---- three aligned columns + two minimal dividers. Each column's CONTENT CENTROID sits on a common
+  // centreline (yMid): the touch screen, the keyboard key-grid, and the gamepad BODY all centre on yMid. ----
+  const c1=72, c2=216, c3=360, headY=312, bandT=304, bandB=432, yMid=380;
+  ctx.strokeStyle='rgba(255,244,224,0.13)'; ctx.lineWidth=1;
+  for(const dvx of [144,288]){ ctx.beginPath(); ctx.moveTo(dvx,bandT); ctx.lineTo(dvx,bandB); ctx.stroke(); }
+  txt('TOUCH',c1,headY,'bold 10px "Trebuchet MS",sans-serif',HEAD); txt('KEYBOARD',c2,headY,'bold 10px "Trebuchet MS",sans-serif',HEAD); txt('GAMEPAD',c3,headY,'bold 10px "Trebuchet MS",sans-serif',HEAD);
+
+  // col 1 — TOUCH : drag to move. The screen rect IS the panel's mass → centre it on yMid; label hangs below.
+  { const rw=34, rh=46, rx=c1-rw/2, ry=yMid-rh/2; ctx.fillStyle='rgba(14,6,24,0.5)'; roundRect(rx,ry,rw,rh,5); ctx.fill(); ctx.lineWidth=1.3; ctx.strokeStyle=DIM; roundRect(rx,ry,rw,rh,5); ctx.stroke();
+    const ax0=rx+9, ay0=ry+34, ax1=rx+25, ay1=ry+13; ctx.strokeStyle=C_MOVE; ctx.lineWidth=1.6; ctx.setLineDash([3,3]); ctx.beginPath(); ctx.moveTo(ax0,ay0); ctx.lineTo(ax1,ay1); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle=C_MOVE; ctx.beginPath(); ctx.arc(ax0,ay0,3.2,0,TAU); ctx.fill();                                  // fingertip
+    ctx.beginPath(); ctx.moveTo(ax1,ay1-4); ctx.lineTo(ax1-3.4,ay1+3); ctx.lineTo(ax1+3.4,ay1+3); ctx.closePath(); ctx.fill();   // ship at the drag end
+    txt('Drag to move',c1,ry+rh+18,'10px "Trebuchet MS",sans-serif',C_MOVE); }
+
+  // col 2 — KEYBOARD : one aligned grid (no dangling key). Left column xL = ←/Z/X (↑ centred above ←↓→);
+  // right column xR = ⇧/P/M. ⇧ Focus sits ON the ←↓→ row AND the P/M column → anchored on both axes; the
+  // movement keys (arrows + ⇧, slow-move) are the top tier, the actions (Z/X) + system (P/M) the lower 2×2.
+  { const u=15, p=17, xL=167, xR=226, r1=340, r2=357, r3=386, r4=404;   // grid bbox 340..420 → centred on yMid=380; xL/xR placed so the two key columns straddle the centreline (216) symmetrically
+    cap(xL+p,r1,u,16,'↑',C_MOVE); cap(xL,r2,u,16,'←',C_MOVE); cap(xL+p,r2,u,16,'↓',C_MOVE); cap(xL+2*p,r2,u,16,'→',C_MOVE);
+    // ⇧ Shift drawn WIDE (a wide cap is the visual signature of Shift) so it never reads as another arrow key; the
+    // ⇧ glyph is centred in the cap. Left edge stays on the xR column line (aligned with P/M below).
+    const sw=28; ctx.fillStyle=INK; roundRect(xR,r2,sw,16,3); ctx.fill(); ctx.lineWidth=1.3; ctx.strokeStyle=C_FOCUS; roundRect(xR+0.7,r2+0.7,sw-1.4,14.6,2.6); ctx.stroke();
+    ctx.fillStyle=C_FOCUS; ctx.font='bold 11px "Trebuchet MS",sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('⇧',xR+sw/2,r2+8.5);
+    txt('Focus',xR+sw+5,r2+8,'9px "Trebuchet MS",sans-serif',C_FOCUS,'left','middle');
+    keyRow(xL,r3,'Z',u,C_FIRE,'Fire'); keyRow(xL,r4,'X',u,C_BOMB,'Bomb');
+    keyRow(xR,r3,'P',u,C_SYS,'Pause'); keyRow(xR,r4,'M',u,C_SYS,'Mute'); }
+
+  // col 3 — GAMEPAD : the BODY is centred on the column axis (c3) AND on yMid; d-pad/stick = move (no label).
+  // The 5 action callouts are placed wherever there's free space around the body (Fire/Bomb spread down the
+  // right, Focus above, Pause/Mute below) — leader lines connect each to its button, none floating.
+  { const bw=80, bh=30, bx=c3-bw/2, gy=yMid, by=gy-bh/2;
+    ctx.fillStyle='rgba(14,6,24,0.5)'; roundRect(bx,by,bw,bh,15); ctx.fill(); ctx.lineWidth=1.3; ctx.strokeStyle=DIM; roundRect(bx,by,bw,bh,15); ctx.stroke();
+    ctx.fillStyle=C_FOCUS; roundRect(bx+8,by-4,16,4,2); ctx.fill(); roundRect(bx+bw-24,by-4,16,4,2); ctx.fill();                  // shoulders = focus
+    const dx=bx+16, a=3.2, b=8; ctx.fillStyle=C_MOVE; ctx.beginPath(); ctx.rect(dx-a,gy-b,2*a,2*b); ctx.rect(dx-b,gy-a,2*b,2*a); ctx.fill();   // d-pad = move
+    ctx.fillStyle='rgba(214,200,236,0.6)'; roundRect(bx+34,gy-2,6,4,2); ctx.fill(); roundRect(bx+44,gy-2,6,4,2); ctx.fill();      // start / select
+    const fcx=bx+bw-16, d=8.5; disc(fcx,gy-d,5,'rgba(150,130,170,0.5)'); disc(fcx-d,gy,5,'rgba(150,130,170,0.5)'); disc(fcx+d,gy,5,C_BOMB,'B'); disc(fcx,gy+d,5,C_FIRE,'A');
+    ctx.strokeStyle=LINE; ctx.lineWidth=1;
+    const leader=(sx,sy,ex,ey)=>{ ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(ex,ey); ctx.stroke(); };
+    txt('Focus',bx+12,by-14,'9px "Trebuchet MS",sans-serif',C_FOCUS); leader(bx+12,by-9,bx+16,by-4);                            // → left shoulder
+    txt('Bomb',fcx+14,gy-d-2,'9px "Trebuchet MS",sans-serif',C_BOMB,'left','middle'); leader(fcx+12,gy-d-2,fcx+d-1,gy-3);      // → B
+    txt('Fire',fcx+14,gy+d+8,'9px "Trebuchet MS",sans-serif',C_FIRE,'left','middle'); leader(fcx+12,gy+d+8,fcx+2,gy+d+1);      // → A
+    txt('Pause',bx+28,by+bh+17,'9px "Trebuchet MS",sans-serif',C_SYS); leader(bx+32,by+bh+12,bx+37,gy+2);                       // → start
+    txt('Mute',bx+60,by+bh+17,'9px "Trebuchet MS",sans-serif',C_SYS); leader(bx+60,by+bh+12,bx+47,gy+2); }                      // → select
+
+  ctx.restore();
+}
+function drawOverlays(){ ctx.setTransform(dpr,0,0,dpr,0,0); const cx=PF_W/2; if(game.state===STATE.TITLE){ dimPlayfield(0.5); ctx.save(); ctx.beginPath(); ctx.rect(PF_X,PF_Y,PF_W,PF_H); ctx.clip(); drawTitleLogo(ctx,PF_W,PF_H,game.stateT); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext(inputMode==='touch'?'TAP  TO  START':'PRESS  Z  ·  ENTER',cx,260,'bold 15px "Trebuchet MS",sans-serif','#ffe08a'); drawControlsGuide(cx); ctext('Hi-Score  '+pad(game.hi||0,9),cx,460,'12px "Trebuchet MS",monospace','#ffd45e'); ctx.restore(); } else if(game.state===STATE.PAUSED){ dimPlayfield(0.55); ctext('PAUSED',cx,PF_H/2-10,'bold 34px "Trebuchet MS",sans-serif','#ffe9fb'); ctext(inputMode==='touch'?'Tap to resume':'Press P / Esc to resume',cx,PF_H/2+24,'13px "Trebuchet MS",sans-serif','#b69fd6'); } else if(game.state===STATE.GAMEOVER){ dimPlayfield(0.62); ctext('GAME OVER',cx,PF_H/2-30,'bold 40px "Trebuchet MS",sans-serif','#ff5d8f'); ctext('Score  '+pad(game.score||0,9),cx,PF_H/2+10,'16px "Trebuchet MS",monospace','#ffe9fb'); ctext('Hi-Score  '+pad(game.hi||0,9),cx,PF_H/2+34,'13px "Trebuchet MS",monospace','#ffd45e'); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext(inputMode==='touch'?'Tap to continue':'Press Enter',cx,PF_H/2+78,'14px "Trebuchet MS",sans-serif','#cfa8e8'); } else if(game.state===STATE.STAGECLEAR){ const allClear=(run&&run.stage===STAGES.length-1); dimPlayfield(allClear?0.32:0.5);   /* the FINAL stage's clear = ALL CLEAR (game complete); the dawn cave shows brighter behind it */
     if(allClear){ ctext('ALL CLEAR',cx,PF_H/2-34,'bold 40px "Trebuchet MS",sans-serif','#ffe6a0'); ctext('Score  '+pad(game.score||0,9),cx,PF_H/2+10,'16px "Trebuchet MS",monospace','#fff4e0'); ctext('thank you for playing',cx,PF_H/2+40,'12px "Trebuchet MS",sans-serif','#f0c890'); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext(inputMode==='touch'?'Tap to continue':'Press Enter',cx,PF_H/2+72,'14px "Trebuchet MS",sans-serif','#ffe6a0'); }
     else { ctext('STAGE CLEAR',cx,PF_H/2-30,'bold 38px "Trebuchet MS",sans-serif','#b9ff6a'); ctext('Score  '+pad(game.score||0,9),cx,PF_H/2+12,'16px "Trebuchet MS",monospace','#ffe9fb'); ctext('Graze  '+(game.grazeCount||0),cx,PF_H/2+38,'13px "Trebuchet MS",monospace','#b9ff6a'); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext(inputMode==='touch'?'Tap to continue':'Press Enter',cx,PF_H/2+82,'14px "Trebuchet MS",sans-serif','#cfa8e8'); } } }
 
@@ -2802,10 +3013,25 @@ function drawDevHud(){
   for(let i=0;i<lines.length;i++) ctext(lines[i],x,y0+i*lh,'10px monospace',col,'left');
 }
 
+// small speaker glyph button — reflects Audio mute state (lavender speaker + waves = on, dim speaker
+// + bright slash = muted). Drawn for touch; the same glyph (read-only) is the non-touch HUD indicator.
+function drawSpeakerGlyph(cx,cy,muted,scale){ const s=scale||1; ctx.save(); ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.fillStyle=muted?'rgba(216,196,240,0.42)':'#d8c4f0';
+  ctx.beginPath(); ctx.moveTo(cx-7*s,cy-3*s); ctx.lineTo(cx-3*s,cy-3*s); ctx.lineTo(cx+2*s,cy-7*s); ctx.lineTo(cx+2*s,cy+7*s); ctx.lineTo(cx-3*s,cy+3*s); ctx.lineTo(cx-7*s,cy+3*s); ctx.closePath(); ctx.fill();
+  if(muted){ ctx.strokeStyle='#ff6f93'; ctx.lineWidth=2.4*s; ctx.beginPath(); ctx.moveTo(cx-9*s,cy-8*s); ctx.lineTo(cx+12*s,cy+9*s); ctx.stroke(); }
+  else { ctx.strokeStyle='#d8c4f0'; ctx.lineWidth=1.7*s; ctx.beginPath(); ctx.arc(cx+2*s,cy,5*s,-0.62,0.62); ctx.stroke(); ctx.beginPath(); ctx.arc(cx+2*s,cy,9*s,-0.62,0.62); ctx.stroke(); }
+  ctx.restore();
+}
+function drawMuteButton(r){ const m=!!(Audio&&Audio.isMuted&&Audio.isMuted()); ctx.save(); ctx.globalAlpha=0.6;
+  ctx.fillStyle='rgba(36,19,56,0.6)'; roundRect(r.x,r.y,r.w,r.h,9); ctx.fill();
+  ctx.lineWidth=2; ctx.strokeStyle=hexA(m?'#ff5d8f':'#9d83c0',m?0.8:0.5); roundRect(r.x,r.y,r.w,r.h,9); ctx.stroke(); ctx.restore();
+  drawSpeakerGlyph(r.x+r.w/2-3,r.y+r.h/2,m,1);
+}
 // ---- on-screen touch controls (drawn only on touch devices / after first touch) ----
 function drawTouchControls(){ if(inputMode!=='touch') return; const st=game.state; if(st!==STATE.PLAYING&&st!==STATE.PAUSED) return; ctx.setTransform(dpr,0,0,dpr,0,0);
   const btn=(r,label,lit,accent,fs,base)=>{ ctx.save(); const a=base||0.92; ctx.globalAlpha=a; ctx.fillStyle=lit?hexA(accent,0.32):'rgba(36,19,56,0.6)'; roundRect(r.x,r.y,r.w,r.h,10); ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=hexA(accent,lit?0.95:0.5); roundRect(r.x,r.y,r.w,r.h,10); ctx.stroke(); ctx.fillStyle=lit?'#ffffff':PALETTE.uiText; ctx.font='bold '+(fs||15)+'px "Trebuchet MS",sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(label,r.x+r.w/2,r.y+r.h/2); ctx.textAlign='left'; ctx.textBaseline='alphabetic'; ctx.restore(); };
   if(st===STATE.PLAYING){ btn(TOUCH_BTN.shoot,'FIRE',touchShoot,PALETTE.graze,15,0.92); btn(TOUCH_BTN.focus,'FOCUS',touchFocus,PALETTE.hitRing,15,0.92); btn(TOUCH_BTN.bomb,'BOMB',false,PALETTE.bomb,17,0.92); }
+  drawMuteButton(TOUCH_BTN.mute);   // in-game system cluster, paired with pause (NOT on menus: nothing to mute on the title, and a near-miss there would just start the game)
   btn(TOUCH_BTN.pause,(st===STATE.PAUSED?'▶':'II'),false,PALETTE.uiDim,13,0.6);   // pause: muted & small — a system action, set apart from the gameplay cluster
 }
 
@@ -3103,6 +3329,7 @@ function onPointerDown(e){
   if(Audio&&Audio.unlock) Audio.unlock();                       // touch-first audio unlock (keydown path misses this)
   if(e.pointerType==='touch') e.preventDefault();
   const p=eventToLogical(e), st=game.state;
+  if(inputMode==='touch'&&(st===STATE.PLAYING||st===STATE.PAUSED)&&ptInRect(p.x,p.y,TOUCH_BTN.mute)){ if(Audio&&Audio.toggleMute) Audio.toggleMute(); touchPointers.set(e.pointerId,{role:'btn'}); return; }   // in-game mute toggle, ONLY where the button is shown — on the title a tap must start the game (no dead-zone), so it is not intercepted here
   if(st===STATE.TITLE||st===STATE.GAMEOVER||st===STATE.STAGECLEAR){ edgeKeys['Enter']=true; if(st===STATE.TITLE) edgeKeys['KeyZ']=true; touchPointers.set(e.pointerId,{role:'menu'}); return; }
   if(st===STATE.PAUSED){ edgeKeys['Escape']=true; touchPointers.set(e.pointerId,{role:'btn'}); return; }   // any tap resumes
   if(inputMode==='touch'){
