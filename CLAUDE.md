@@ -63,7 +63,7 @@ Single `<script>`, sectioned by banner comments (line numbers drift — navigate
 | **INTERP** | **`resolveWave(opts,diff)`** / **`resolveBoss(spec,diff)`** — scale by difficulty; **identity at normal** (return the same object; clone only off-normal, never mutate the base). |
 | **SYSTEMS** | input (edge-triggered) · `player`/`game`/**`run`** structs · `startRun(diff,fromStage)` / `enterStage(i)` / `advanceStage()` (campaign spine) · scoring/items/power/bombs/death · versioned save (`migrateSave`/`danmaku_save_v2`) · `setState`. |
 | **STAGE / ENEMIES** | `Director` coro scheduler · wave factories + **`WAVES`** registry · `delayed()` · `MIDBOSS_SPEC`/`FINALBOSS_SPEC` + **`BOSSES`** registry · **`STAGES[]`** data + **`runStage(stage)`** interpreter · `runBoss`/`runPhase`/`makeBoss`/`damageEnemy`. |
-| **DEV/TEST HOOK** | `window.__dbg` (arms only with `?dev=1`/`?golden=1`/`window.__DEMO`; inert in ship). Golden harness + authoring exports. |
+| **DEV/TEST HOOK** | `window.__dbg` (arms only with `?dev=1`/`?golden=1`/`window.__DEMO`; inert in ship). Golden harness + authoring exports. **`?dev=1` also draws a read-only profiling HUD** (`DEV_HUD`/`drawDevHud`: entity counts + whole-frame & rolling-1s-peak ms + substeps; gated `dev=1 && !golden=1`, ship/golden-inert, sim untouched). |
 | **BOOT** | `boot()` IIFE → `Render.init` → `initGameSystems` → `attachInput` → `setState(TITLE)` → rAF (skipped under `?golden=1`). |
 
 ### Core loop

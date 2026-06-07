@@ -109,7 +109,7 @@ const RESPAWN_INVULN = 3.0, RESPAWN_BLINK = 0.09, DEATH_CLEAR_R = 72, DEATH_POWE
 const GRAZE_SCORE = 50;
 const EXTEND_INTERVAL = 1e6;   // score-extend fires every fixed 1M (was a [1M,3M,6M,10M] table); HUD shows a fill meter toward the next
 const EXTEND_ITEM_FALL = 70;   // score-extend drops a 1UP from the top, straight above the player, to be collected
-const POINT_BASE = 10000, POINT_MIN = 2000;   // point-item value anchors (collect high = POINT_BASE, low = POINT_MIN). spell-capture bonus 廃止 2026-06-04 (no one missed it)
+const POINT_BASE = 10000, POINT_MIN = 2000;   // point-item value anchors (collect high = POINT_BASE, low = POINT_MIN)
 
 // score-pitched point-pickup: blip note rises with gained score on a major 6/9 pentatonic ladder (C5..C7; chord-tone steps so adjacent are consonant). Audio-only, no rng → golden-neutral.
 const PITCH_DEGS=[0,2,4,7,9], PITCH_ROOT=72, PITCH_TOP=96;
@@ -366,6 +366,9 @@ function collidePlayerWells(){ if(!player||player.dead||player.invuln>0) return;
 // ---- FPS + main loop ----
 const fps = { frame:60 };
 let T = 0, renderAlpha = 0, _acc = 0, _lastMs = 0;
+// dev profiling HUD (?dev=1, never ?golden) — read-only overlay for the perf phase; ship/golden-inert (computed once, sim untouched)
+const DEV_HUD = (typeof location!=='undefined') && /[?&]dev=1/.test(location.search) && !/[?&]golden=1/.test(location.search);
+let _devSteps=0, _devWorkMs=0, _devPeakMs=0, _devPeakAcc=0, _devPeakT=0;   // last-frame substeps · whole-frame work ms · rolling 1s-peak ms (+accumulator/timer)
 
 function simStep(dt){
   T += dt;
@@ -391,6 +394,7 @@ function simStep(dt){
 
 function frame(nowMs){
   requestAnimationFrame(frame);
+  const _t0=DEV_HUD?performance.now():0;
   if(_lastMs===0) _lastMs=nowMs;
   let dt=(nowMs-_lastMs)/1000; _lastMs=nowMs;
   if(dt>MAX_FRAME_DT) dt=MAX_FRAME_DT;
@@ -405,10 +409,12 @@ function frame(nowMs){
     while(_acc>=STEP && steps<MAX_STEPS){ simStep(STEP); _acc-=STEP; steps++; }
     if(steps>=MAX_STEPS) _acc=0;
     renderAlpha=_acc/STEP;
+    if(DEV_HUD) _devSteps=steps;
   }
   if(ext.dragConsumed){ ext.dragDX=0; ext.dragDY=0; } // drag applied this frame; carry-forward on 0-substep frames (120Hz)
   for(const k in stepEdge) stepEdge[k]=false; // edges are per-frame; clear leftovers
   Render.frame(nowMs, game.paused?1:renderAlpha);
+  if(DEV_HUD){ _devWorkMs=performance.now()-_t0; if(_devWorkMs>_devPeakAcc) _devPeakAcc=_devWorkMs; _devPeakT+=dt; if(_devPeakT>=1){ _devPeakMs=_devPeakAcc; _devPeakAcc=0; _devPeakT=0; } }
 }
 
 // ============================ AUDIO ==================================
@@ -1973,6 +1979,9 @@ function buildGhostScenery(srng){
   for(let i=0;i<N;i++) _ghostEls.push({ worldY:i*(GHOST_SPAN/N)+srng()*10, lat:(srng()*2-1), kind:(srng()<0.62?'water':'flame'), v:srng(), ph:srng()*TAU });
   _ghostShore.length=0; for(let i=0;i<5;i++) _ghostShore.push({ cx:srng()*PF_W, w:60+srng()*70, yb:PF_H*0.585+srng()*10, h:18+srng()*16 });
 }
+// shared scenery helpers (road-LESS fly-over branches): depth-project world-fixed elements far→near for back-to-front paint; a bottom-edge ground-fog haze strip.
+function depthList(arr,sc,SP){ return arr.map(e=>({ p:1-((((e.worldY-sc)%SP)+SP)%SP)/SP, e })).sort((A,B)=>A.p-B.p); }
+function bottomHaze(top,c0,c1,h){ const fv=ctx.createLinearGradient(0,PF_H*top,0,PF_H); fv.addColorStop(0,c0); fv.addColorStop(1,c1); ctx.fillStyle=fv; ctx.fillRect(0,PF_H*top,PF_W,h); }
 function drawSceneryGhost(sc){
   ctx.save();
   ctx.globalCompositeOperation='lighter';   // horizon glow — the lower field smoulders green
@@ -1981,14 +1990,14 @@ function drawSceneryGhost(sc){
   ctx.fillStyle='rgba(20,48,42,0.85)';      // far-shore silhouettes (the other shore in the haze)
   for(const s of _ghostShore){ ctx.beginPath(); ctx.moveTo(s.cx-s.w,s.yb); ctx.quadraticCurveTo(s.cx,s.yb-s.h,s.cx+s.w,s.yb); ctx.lineTo(s.cx+s.w,s.yb+46); ctx.lineTo(s.cx-s.w,s.yb+46); ctx.closePath(); ctx.fill(); }
   { const wb=ctx.createLinearGradient(0,GHOST_HOR,0,PF_H); wb.addColorStop(0,'rgba(20,52,46,0)'); wb.addColorStop(1,'rgba(26,66,54,0.5)'); ctx.fillStyle=wb; ctx.fillRect(0,GHOST_HOR,PF_W,PF_H-GHOST_HOR); }  // marsh-water base
-  const SP=GHOST_SPAN, list=_ghostEls.map(e=>({ p:1-((((e.worldY-sc)%SP)+SP)%SP)/SP, e })).sort((A,B)=>A.p-B.p);   // far→near, painted back-to-front
+  const SP=GHOST_SPAN, list=depthList(_ghostEls,sc,SP);   // far→near, painted back-to-front
   for(const o of list){ const p=o.p, e=o.e; if(p<=0.02) continue;
     const s2=0.12+Math.pow(p,1.6)*1.25, y=GHOST_HOR+(PF_H+50-GHOST_HOR)*Math.pow(p,1.55), x=PF_W*0.5+e.lat*(24+Math.pow(p,1.5)*PF_W*0.6), a=Math.min(1,p*3.2)*Math.min(1,(1.06-p)*7); if(a<=0.01) continue;
     if(e.kind==='water'){ const w=56*s2; ctx.globalAlpha=a; ctx.fillStyle='rgba(12,38,34,0.7)'; ctx.save(); ctx.translate(x,y); ctx.scale(1,0.30); ctx.beginPath(); ctx.arc(0,0,w,0,TAU); ctx.fill(); ctx.restore(); ctx.globalCompositeOperation='lighter'; ctx.strokeStyle='rgba(120,235,165,'+(0.4*a).toFixed(3)+')'; ctx.lineWidth=1.3*s2+0.5; ctx.beginPath(); ctx.ellipse(x,y,w,w*0.30,0,0.15,Math.PI-0.15); ctx.stroke(); ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1;
       if(e.v<0.3){ ctx.fillStyle='rgba(190,255,205,'+(0.7*a).toFixed(3)+')'; ctx.beginPath(); ctx.arc(x,y-w*0.12,2.2*s2+0.6,0,TAU); ctx.fill(); } }
     else { const fl=0.55+0.45*Math.sin(T*2.4+e.ph), by=y+Math.sin(T*1.6+e.ph)*2*s2, w=9*s2+2; ctx.save(); ctx.globalCompositeOperation='lighter'; const fg=ctx.createRadialGradient(x,by,0,x,by,w*2.3); fg.addColorStop(0,'rgba(150,255,190,'+(0.5*a*fl).toFixed(3)+')'); fg.addColorStop(1,'rgba(120,235,165,0)'); ctx.fillStyle=fg; ctx.beginPath(); ctx.arc(x,by,w*2.3,0,TAU); ctx.fill(); ctx.fillStyle='rgba(195,255,210,'+(0.85*a*fl).toFixed(3)+')'; ctx.beginPath(); ctx.arc(x,by-w*0.25,w*0.42,0,TAU); ctx.fill(); ctx.restore(); } }
   ctx.globalAlpha=1;
-  { const fv=ctx.createLinearGradient(0,PF_H*0.8,0,PF_H); fv.addColorStop(0,'rgba(150,225,170,0)'); fv.addColorStop(1,'rgba(150,225,170,0.16)'); ctx.fillStyle=fv; ctx.fillRect(0,PF_H*0.8,PF_W,PF_H*0.2); }   // near ground-fog (static — keep the scene still)
+  bottomHaze(0.8,'rgba(150,225,170,0)','rgba(150,225,170,0.16)',PF_H*0.2);   // near ground-fog (static — keep the scene still)
   ctx.restore();
 }
 
@@ -2027,14 +2036,14 @@ function drawSceneryBamboo(sc){
   { ctx.save(); ctx.strokeStyle='rgba(26,58,44,0.8)'; ctx.lineWidth=1.4;   // far bamboo wall: hazy vertical strokes near the horizon → "endless bamboo" depth cue
     for(let i=0;i<28;i++){ const x=((i/28*PF_W+sc*0.06)%(PF_W+20))-10+Math.sin(i*1.7)*3; ctx.globalAlpha=0.16+0.16*Math.sin(i*2.1); ctx.beginPath(); ctx.moveTo(x,BAMBOO_HOR); ctx.lineTo(x+Math.sin(i)*1.5,BAMBOO_HOR-30-Math.sin(i*3.3)*8); ctx.stroke(); } ctx.restore(); }
   { const wb=ctx.createLinearGradient(0,BAMBOO_HOR,0,PF_H); wb.addColorStop(0,'rgba(16,40,32,0)'); wb.addColorStop(1,'rgba(14,36,28,0.55)'); ctx.fillStyle=wb; ctx.fillRect(0,BAMBOO_HOR,PF_W,PF_H-BAMBOO_HOR); }   // dim mossy floor fading down
-  const SP=BAMBOO_SPAN, list=_bambooStalks.map(e=>({ p:1-((((e.worldY-sc)%SP)+SP)%SP)/SP, e })).sort((A,B)=>A.p-B.p);   // far→near, painted back-to-front
+  const SP=BAMBOO_SPAN, list=depthList(_bambooStalks,sc,SP);   // far→near, painted back-to-front
   for(const o of list){ const p=o.p, e=o.e; if(p<=0.015) continue; const a=Math.min(1,p*3.4)*Math.min(1,(1.05-p)*8); if(a<=0.01) continue;
     const s=0.06+Math.pow(p,1.7)*1.7, baseY=BAMBOO_HOR+(PF_H+120-BAMBOO_HOR)*Math.pow(p,1.5), x=PF_W*0.5+e.lat*(16+Math.pow(p,1.35)*PF_W*0.62);
     drawBambooStalk(x,baseY,s*e.th,a,e); }
   ctx.globalCompositeOperation='lighter';   // drifting fog sheets (the 迷宮 obscuring veil)
   const bandH=PF_H*0.5; for(let k=0;k<3;k++){ const fy=PF_H*0.28+(((sc*(0.8+k*0.5)+k*240)%bandH)+bandH)%bandH-60; ctx.drawImage(_bambooFog[k],0,fy); }
   ctx.globalCompositeOperation='source-over';
-  { const fv=ctx.createLinearGradient(0,PF_H*0.78,0,PF_H); fv.addColorStop(0,'rgba(150,210,170,0)'); fv.addColorStop(1,'rgba(120,180,140,0.14)'); ctx.fillStyle=fv; ctx.fillRect(0,PF_H*0.78,PF_W,PF_H*0.22); }   // near ground-fog veil
+  bottomHaze(0.78,'rgba(150,210,170,0)','rgba(120,180,140,0.14)',PF_H*0.22);   // near ground-fog veil
   ctx.restore();
 }
 // ---- First Light Summit (Stage 4) scenery: a road-LESS fly-over of the SEA OF CLOUDS toward the dawn ----
@@ -2077,12 +2086,12 @@ function drawScenerySummit(sc){
   // 3) cloud-sea BASE — a mid-dark dusky veil over the whole lower field (the play band held mid-toned for bullet readability)
   { const cb=ctx.createLinearGradient(0,HOR,0,PF_H); cb.addColorStop(0,'rgba(120,140,180,0.42)'); cb.addColorStop(0.45,'rgba(86,104,150,0.30)'); cb.addColorStop(1,'rgba(46,58,92,0.20)'); ctx.fillStyle=cb; ctx.fillRect(0,HOR,PF_W,PF_H-HOR); }
   // 4) the sea of clouds: depth-projected swells flowing from the horizon DOWN to the foreground (far→near, painted back-to-front)
-  const SP=SUMMIT_SPAN, list=_summitClouds.map(e=>({ p:1-((((e.worldY-sc)%SP)+SP)%SP)/SP, e })).sort((A,B)=>A.p-B.p);
+  const SP=SUMMIT_SPAN, list=depthList(_summitClouds,sc,SP);
   for(const o of list){ const p=o.p, e=o.e; if(p<=0.02) continue; const a=Math.min(1,p*3)*Math.min(1,(1.05-p)*7); if(a<=0.01) continue;
     const s=0.20+Math.pow(p,1.6)*1.5, y=HOR+(PF_H+50-HOR)*Math.pow(p,1.5), x=PF_W*0.5+e.lat*(20+Math.pow(p,1.4)*PF_W*0.55);
     drawSummitCloud(x,y,s*e.w,a); }
   // 5) near foreground haze (keeps the very bottom mid-dark so low bullets stay readable)
-  { const fv=ctx.createLinearGradient(0,PF_H*0.82,0,PF_H); fv.addColorStop(0,'rgba(46,58,92,0)'); fv.addColorStop(1,'rgba(40,52,84,0.4)'); ctx.fillStyle=fv; ctx.fillRect(0,PF_H*0.82,PF_W,PF_H*0.18); }
+  bottomHaze(0.82,'rgba(46,58,92,0)','rgba(40,52,84,0.4)',PF_H*0.18);
   ctx.restore();
 }
 // ---- High Plain Tempest (Stage 5) scenery: a road-LESS fly-over of a TURBULENT cloud sea toward the storm's EYE ----
@@ -2127,7 +2136,7 @@ function drawSceneryStorm(sc){
   // 3) cloud-sea BASE veil — storm grey-blue, held mid-toned across the play band for bullet readability
   { const cb=ctx.createLinearGradient(0,HOR,0,PF_H); cb.addColorStop(0,'rgba(74,90,124,0.40)'); cb.addColorStop(0.5,'rgba(52,66,98,0.30)'); cb.addColorStop(1,'rgba(34,44,70,0.22)'); ctx.fillStyle=cb; ctx.fillRect(0,HOR,PF_W,PF_H-HOR); }
   // 4) the turbulent sea of clouds: depth-projected swells flowing DOWN (far→near, painted back-to-front)
-  const SP=STORM_SPAN, list=_stormClouds.map(e=>({ p:1-((((e.worldY-sc)%SP)+SP)%SP)/SP, e })).sort((A,B)=>A.p-B.p);
+  const SP=STORM_SPAN, list=depthList(_stormClouds,sc,SP);
   for(const o of list){ const p=o.p, e=o.e; if(p<=0.02) continue; const a=Math.min(1,p*3)*Math.min(1,(1.05-p)*7); if(a<=0.01) continue;
     const s=0.20+Math.pow(p,1.6)*1.6, y=HOR+(PF_H+50-HOR)*Math.pow(p,1.5), x=PF_W*0.5+e.lat*(20+Math.pow(p,1.4)*PF_W*0.55);
     drawStormCloud(x,y,s*e.w,a,e.dark); }
@@ -2135,7 +2144,7 @@ function drawSceneryStorm(sc){
   ctx.globalCompositeOperation='lighter';
   { const bandH=PF_H*0.5; for(let k=0;k<2;k++){ const ry=PF_H*0.30+(((sc*(1.1+k*0.6)+k*220)%bandH)+bandH)%bandH-40; ctx.globalAlpha=0.05; ctx.strokeStyle='rgba(200,216,248,1)'; ctx.lineWidth=1; for(let r=0;r<10;r++){ const x0=((r*53+k*27+sc*0.5)%(PF_W+40))-20; ctx.beginPath(); ctx.moveTo(x0,ry); ctx.lineTo(x0-10,ry+26); ctx.stroke(); } } ctx.globalAlpha=1; }
   ctx.globalCompositeOperation='source-over';
-  { const fv=ctx.createLinearGradient(0,PF_H*0.82,0,PF_H); fv.addColorStop(0,'rgba(34,44,70,0)'); fv.addColorStop(1,'rgba(28,38,62,0.42)'); ctx.fillStyle=fv; ctx.fillRect(0,PF_H*0.82,PF_W,PF_H*0.18); }
+  bottomHaze(0.82,'rgba(34,44,70,0)','rgba(28,38,62,0.42)',PF_H*0.18);
   // 6) LIGHTNING — a bounded full-field flash (NOT white-out) + the forked bolt itself, during its short window
   if(flash>0){ ctx.save(); ctx.globalCompositeOperation='lighter';
     ctx.fillStyle='rgba(206,224,255,'+(0.12*flash).toFixed(3)+')'; ctx.fillRect(0,0,PF_W,PF_H);   // sky lit by the strike (capped low so the bright bullets/eye don't wash out)
@@ -2189,7 +2198,7 @@ function drawSceneryIwato(sc){
       ctx.lineTo(PF_W,yb+46); ctx.closePath(); ctx.fill(); } }
   // 4) the gods' 篝火 braziers flowing past below (depth-projected, warm flicker). Dim as dawn outshines them (1-L*0.8).
   const SP=IWATO_SPAN, bcol=Cv.brazier||['rgba(255,196,120,0.85)','rgba(255,140,70,0.25)','rgba(255,140,70,0)'];
-  const list=_iwatoBraziers.map(e=>({ p:1-((((e.worldY-sc)%SP)+SP)%SP)/SP, e })).sort((A,B)=>A.p-B.p);
+  const list=depthList(_iwatoBraziers,sc,SP);
   for(const o of list){ const p=o.p, e=o.e; if(p<=0.02) continue; const a=Math.min(1,p*3)*Math.min(1,(1.05-p)*7)*(1-L*0.8); if(a<=0.01) continue;
     const s=0.25+Math.pow(p,1.6)*1.7, y=HOR+(PF_H+40-HOR)*Math.pow(p,1.5), x=cx+e.lat*(24+Math.pow(p,1.4)*PF_W*0.5)*1.9;   // stronger lateral parallax so the brazier reads as a distant drifting glow, not a fired bullet
     const fl=0.5+0.5*Math.sin(T*e.spd*0.35+e.ph); drawIwatoBrazier(x,y,s*e.w,a,fl,bcol); }   // slow flicker so it doesn't pulse at bullet cadence
@@ -2206,6 +2215,7 @@ function drawSceneryIwato(sc){
 function drawSpellBackground(t,intensity){ if(intensity<=0) return; ctx.save(); const g=ctx.createRadialGradient(PF_W*0.5,PF_H*0.42,40,PF_W*0.5,PF_H*0.42,PF_H*0.8); g.addColorStop(0,'rgba(60,20,90,0)'); g.addColorStop(1,'rgba(20,6,34,'+(0.5*intensity)+')'); ctx.fillStyle=g; ctx.fillRect(0,0,PF_W,PF_H); ctx.globalCompositeOperation='lighter'; ctx.translate(PF_W*0.5,PF_H*0.42); ctx.rotate(t*0.25); for(let i=0;i<10;i++){ ctx.rotate(TAU/10); const sg=ctx.createLinearGradient(0,0,0,-PF_H); sg.addColorStop(0,'rgba(180,120,255,'+(0.1*intensity)+')'); sg.addColorStop(1,'rgba(180,120,255,0)'); ctx.fillStyle=sg; ctx.beginPath(); ctx.moveTo(-26,0); ctx.lineTo(26,0); ctx.lineTo(8,-PF_H); ctx.lineTo(-8,-PF_H); ctx.closePath(); ctx.fill(); } ctx.restore(); }
 // ---- boss designs (dispatched on boss.design; set in stageScript via spec.design) ----
 function bossGlow(c,r,h,s,l,a){ const g=c.createRadialGradient(0,0,r*0.18,0,0,r); g.addColorStop(0,'hsla('+h+','+s+'%,'+l+'%,'+a+')'); g.addColorStop(1,'hsla('+h+','+s+'%,'+l+'%,0)'); c.fillStyle=g; c.beginPath(); c.arc(0,0,r,0,TAU); c.fill(); }
+function bossGlowAdd(c,r,h,s,l,a){ c.save(); c.globalCompositeOperation='lighter'; bossGlow(c,r,h,s,l,a); c.restore(); }   // additive-glow accent (the recurring pure save/lighter/bossGlow/restore one-liner)
 function bossPetal(c,len,wid){ c.beginPath(); c.moveTo(0,0); c.bezierCurveTo(wid,-len*0.4,wid*0.5,-len,0,-len); c.bezierCurveTo(-wid*0.5,-len,-wid,-len*0.4,0,0); c.closePath(); }
 function bossSakuraPetal(c,len,wid){ c.beginPath(); c.moveTo(0,0); c.bezierCurveTo(wid,-len*0.34,wid*0.72,-len*0.86,wid*0.26,-len); c.lineTo(0,-len*0.84); c.lineTo(-wid*0.26,-len); c.bezierCurveTo(-wid*0.72,-len*0.86,-wid,-len*0.34,0,0); c.closePath(); }
 // MIDBOSS — "Verdant Wisp": rising spirit flame · orbiting leaves · glowing core
@@ -2253,7 +2263,7 @@ function drawBossMizuchi(c,t){ const H=190, G=305;
     c.beginPath(); c.moveTo(a[0],a[1]); c.lineTo(b[0],b[1]); c.stroke();
     if(i%2===0){ c.save(); c.globalCompositeOperation='lighter'; c.fillStyle='hsla('+G+',95%,82%,0.5)'; c.beginPath(); c.arc(a[0],a[1],1.5,0,TAU); c.fill(); c.restore(); } }   // dorsal scale-lights
   const hx=pts[0][0], hy=pts[0][1]; c.save(); c.translate(hx,hy);   // draconic head at the crest
-  c.save(); c.globalCompositeOperation='lighter'; bossGlow(c,22,G,92,62,0.4); c.restore();
+  bossGlowAdd(c,22,G,92,62,0.4);
   c.fillStyle='hsla('+H+',44%,89%,0.97)'; c.beginPath(); c.ellipse(0,-2,12,10,0,0,TAU); c.fill();
   c.beginPath(); c.moveTo(-5,-7); c.quadraticCurveTo(0,-18,9,-11); c.quadraticCurveTo(4,-3,-5,-7); c.fill();   // snout
   c.strokeStyle='hsla('+H+',40%,80%,0.95)'; c.lineWidth=2.4; c.lineCap='round';
@@ -2264,7 +2274,7 @@ function drawBossMizuchi(c,t){ const H=190, G=305;
   c.save(); c.globalCompositeOperation='lighter'; const eg=0.6+0.4*Math.sin(t*3.2); bossGlow(c,6,G,96,72,0.7*eg);   // glowing eye
   c.fillStyle='hsla('+G+',100%,'+(72+eg*16)+'%,0.97)'; c.beginPath(); c.ellipse(1,-4,2.2,3.0,0,0,TAU); c.fill(); c.restore();
   c.restore();
-  c.save(); c.globalCompositeOperation='lighter'; bossGlow(c,16,G,82,82,0.8*(0.8+0.2*Math.sin(t*3))); c.restore();   // bright core at the gameplay centre
+  bossGlowAdd(c,16,G,82,82,0.8*(0.8+0.2*Math.sin(t*3)));   // bright core at the gameplay centre
 }
 // STAGE 3 BOSS — the twin sisters of the bamboo grove, 宵 (Yoi, deep indigo H=265) & 暁 (Akatsuki, amber
 // H=32), a MIRROR PAIR (drawn by the same fn; `flip` horizontally mirrors one so they read as reflections).
@@ -2302,7 +2312,7 @@ function drawBossTwin(c,t,H,flip){ c.save(); if(flip) c.scale(-1,1);
 // HAIR (her hair/thread danmaku motif made flesh) over a torn dark mantle, a gaunt veiled face + one cold eye.
 // Centred on the origin = the gameplay hit point. Distinct from the serpent / maidens / crow.
 function drawBossYamauba(c,t){ const sway=Math.sin(t*1.2);
-  c.save(); c.globalCompositeOperation='lighter'; bossGlow(c,52,210,24,72,0.28); c.restore();   // cold pale spirit-halo
+  bossGlowAdd(c,52,210,24,72,0.28);   // cold pale spirit-halo
   // 0) a luminous white HAIR-MASS behind the figure so she reads against BOTH the bright sun (silhouette) and the
   //    dark cloud sea (the white mane is her contrast there) — her white hair is the load-bearing read.
   c.save(); c.globalCompositeOperation='lighter'; const hm=c.createRadialGradient(0,2,4,0,2,46); hm.addColorStop(0,'rgba(238,240,250,0.45)'); hm.addColorStop(0.6,'rgba(210,216,236,0.18)'); hm.addColorStop(1,'rgba(210,216,236,0)'); c.fillStyle=hm; c.save(); c.translate(0,2); c.scale(1,1.15); c.beginPath(); c.arc(0,0,46,0,TAU); c.fill(); c.restore(); c.restore();
@@ -2322,7 +2332,7 @@ function drawBossYamauba(c,t){ const sway=Math.sin(t*1.2);
   c.fillStyle='hsla(46,12%,70%,0.5)'; c.beginPath(); c.ellipse(0,-17,10,7,0,0,TAU); c.fill();   // hair shadow over the brow
   c.save(); c.globalCompositeOperation='lighter'; const eg=0.55+0.45*Math.sin(t*2.6); c.translate(-2.5,-13); bossGlow(c,6,200,80,80,0.7*eg); c.fillStyle='hsla(200,90%,'+(72+eg*16)+'%,0.96)'; c.beginPath(); c.ellipse(0,0,1.8,2.8,0.2,0,TAU); c.fill(); c.restore();
   c.fillStyle='hsla(0,30%,40%,0.55)'; c.beginPath(); c.moveTo(-4,-8); c.quadraticCurveTo(0,-6,4,-9); c.stroke();   // a thin grimacing mouth (subtle)
-  c.save(); c.globalCompositeOperation='lighter'; bossGlow(c,12,46,30,90,0.4); c.restore();   // faint warm core at the gameplay centre (keeps the hit point readable)
+  bossGlowAdd(c,12,46,30,90,0.4);   // faint warm core at the gameplay centre (keeps the hit point readable)
 }
 // STAGE 4 BOSS — "Yatagarasu" (八咫烏), the three-legged sun-crow: light itself given a body. A blazing 日輪
 // behind, a gold-white heraldic crow with spread flapping wings, a tail fan, and the defining THREE splayed
@@ -2356,7 +2366,7 @@ function drawBossYatagarasu(c,t){ const flap=Math.sin(t*2.2), breath=0.92+0.06*M
   c.beginPath(); c.arc(0,-20,10.5,0,TAU); c.fill(); c.stroke();
   c.fillStyle=gold; c.beginPath(); c.moveTo(2,-23); c.lineTo(15,-19); c.lineTo(2,-15); c.closePath(); c.fill();   // beak
   c.save(); c.globalCompositeOperation='lighter'; const eg=0.6+0.4*Math.sin(t*3.4); bossGlow(c,7,16,100,82,0.8*eg); c.fillStyle='rgba(255,255,255,0.96)'; c.beginPath(); c.arc(-2,-21,2.6,0,TAU); c.fill(); c.restore();   // sun-eye
-  c.save(); c.globalCompositeOperation='lighter'; bossGlow(c,18,46,92,86,0.85*breath); c.restore();   // bright core at the gameplay centre
+  bossGlowAdd(c,18,46,92,86,0.85*breath);   // bright core at the gameplay centre
 }
 // STAGE 5 MIDBOSS — "Fūjin" (風神), the wind-bag gatekeeper of the High Plain: a wind-oni who carries the great
 // 風袋 (a billowing horseshoe wind-bag) arcing over his shoulders — the defining trait — wreathed in streaming
@@ -2365,7 +2375,7 @@ function drawBossYatagarasu(c,t){ const flap=Math.sin(t*2.2), breath=0.92+0.06*M
 // point (the robed torso); hitR covers the body core. He places NO wells (those are the boss's signature).
 function drawBossFujin(c,t){ const gust=Math.sin(t*1.6), H=158;
   c.save(); const bp=c.createRadialGradient(0,4,5,0,4,54); bp.addColorStop(0,'rgba(8,20,18,0.55)'); bp.addColorStop(1,'rgba(8,20,18,0)'); c.fillStyle=bp; c.beginPath(); c.arc(0,4,54,0,TAU); c.fill(); c.restore();   // dark backing vignette → the wind-spirit separates from the same-hue storm sky (bosses had been sinking into the background)
-  c.save(); c.globalCompositeOperation='lighter'; bossGlow(c,50,H,42,68,0.30); c.restore();   // cold wind-halo
+  bossGlowAdd(c,50,H,42,68,0.30);   // cold wind-halo
   // 1) streaming wind swirls behind (additive comma-curls blowing outward)
   c.save(); c.globalCompositeOperation='lighter'; c.strokeStyle='hsla('+H+',72%,82%,0.38)'; c.lineWidth=2; c.lineCap='round';
   for(let i=0;i<5;i++){ const a=t*0.8+i/5*TAU; c.beginPath(); for(let s=0;s<=10;s++){ const u=s/10, r=10+u*42, aa=a+u*1.7; const x=Math.cos(aa)*r, y=Math.sin(aa)*r*0.7; if(s===0) c.moveTo(x,y); else c.lineTo(x,y); } c.stroke(); }
@@ -2388,7 +2398,7 @@ function drawBossFujin(c,t){ const gust=Math.sin(t*1.6), H=158;
   c.fillStyle='hsla('+H+',28%,74%,0.95)'; c.beginPath(); c.ellipse(0,-9,10,10,0,0,TAU); c.fill();
   c.fillStyle='hsla('+H+',30%,30%,0.45)'; c.beginPath(); c.ellipse(0,-12,10,6,0,0,TAU); c.fill();   // brow shadow
   c.save(); c.globalCompositeOperation='lighter'; const eg=0.55+0.45*Math.sin(t*3); for(const sx of [-3.5,3.5]){ c.save(); c.translate(sx,-10); bossGlow(c,5,H,90,80,0.7*eg); c.fillStyle='hsla('+H+',95%,'+(72+eg*16)+'%,0.95)'; c.beginPath(); c.arc(0,0,1.7,0,TAU); c.fill(); c.restore(); } c.restore();
-  c.save(); c.globalCompositeOperation='lighter'; bossGlow(c,12,H,60,86,0.38); c.restore();   // faint core at the gameplay centre
+  bossGlowAdd(c,12,H,60,86,0.38);   // faint core at the gameplay centre
 }
 // STAGE 5 BOSS — "Susanoo" (須佐之男), the storm god: the 荒魂 (raging spirit) whose vortex IS the well-danmaku of
 // this stage. A 荒ぶる storm-blown mane streaming up & out, the 十拳剣 (Totsuka long-sword) held across the body,
@@ -2435,7 +2445,7 @@ function drawBossSusanoo(c,t){ const breath=0.92+0.06*Math.sin(t*2.2), H=212, HB
   c.fillStyle='hsla('+H+',26%,72%,0.97)'; c.beginPath(); c.ellipse(0,-16,10,11,0,0,TAU); c.fill();
   c.fillStyle='hsla('+H+',30%,30%,0.5)'; c.beginPath(); c.ellipse(0,-19,11,7,0,0,TAU); c.fill();   // brow shadow under the mane
   c.save(); c.globalCompositeOperation='lighter'; const eg=0.6+0.4*Math.sin(t*3.2); for(const sx of [-4,4]){ c.save(); c.translate(sx,-15); bossGlow(c,6,H,95,80,0.75*eg); c.fillStyle='hsla('+H+',98%,'+(72+eg*18)+'%,0.96)'; c.beginPath(); c.ellipse(0,0,1.9,2.8,sx<0?0.3:-0.3,0,TAU); c.fill(); c.restore(); } c.restore();
-  c.save(); c.globalCompositeOperation='lighter'; bossGlow(c,16,H,84,84,0.7*(0.85+0.15*Math.sin(t*3))); c.restore();   // bright core at the gameplay centre
+  bossGlowAdd(c,16,H,84,84,0.7*(0.85+0.15*Math.sin(t*3)));   // bright core at the gameplay centre
 }
 // Tsuchigumo (土蜘蛛) earth-spider sprite: bulbous abdomen + cephalothorax (the hit point) + 8 jointed legs + cold eyes.
 // Violet-magenta carapace (H=300), cold-cyan eyes/silk (HE=190); an opaque dark vignette + bright rim keep it visible on the black cave.
@@ -2466,7 +2476,7 @@ function drawBossTsuchigumo(c,t){ const tw=Math.sin(t*2.0), H=300, HE=190;
   c.save(); c.globalCompositeOperation='lighter'; const eg=0.5+0.5*Math.sin(t*3.0);
   for(const e of [[-7,2],[7,2],[-4,6],[4,6],[-9,-2],[9,-2],[0,8]]){ c.save(); c.translate(e[0],e[1]); bossGlow(c,4,HE,90,80,0.6*eg); c.fillStyle='hsla('+HE+',95%,'+(78+eg*16)+'%,0.95)'; c.beginPath(); c.arc(0,0,1.5,0,TAU); c.fill(); c.restore(); }
   c.restore();
-  c.save(); c.globalCompositeOperation='lighter'; bossGlow(c,13,H,60,80,0.42); c.restore();   // faint core at the gameplay centre (LAST, additive)
+  bossGlowAdd(c,13,H,60,80,0.42);   // faint core at the gameplay centre (LAST, additive)
 }
 // Tokoyo (常夜) BLACK-SUN/eclipse sprite: a near-black occluding disk ringed by a cold violet-white corona, turning rays,
 // cold eyes — reads as a void rimmed with cold light. Centred on origin = the hit point; hitR + hitShapes cover the disk.
@@ -2483,7 +2493,7 @@ function drawBossTokoyo(c,t){ const breath=0.92+0.06*Math.sin(t*1.8), H=252, HC=
   c.save(); c.globalCompositeOperation='lighter'; c.strokeStyle='hsla('+HC+',85%,88%,'+(0.5+0.2*Math.sin(t*2)).toFixed(2)+')'; c.lineWidth=1.6; c.beginPath(); c.arc(0,0,46,0,TAU); c.stroke(); c.restore();   // thin cold rim sliver on the disc circumference
   // 2) cold EYES on the disc — slivers of cold light (the night watching)
   c.save(); c.globalCompositeOperation='lighter'; const eg=0.55+0.45*Math.sin(t*2.6); for(const sx of [-13,13]){ c.save(); c.translate(sx,-6); c.rotate(sx<0?0.4:-0.4); bossGlow(c,7,H,90,80,0.7*eg); c.fillStyle='hsla('+HC+',95%,'+(80+eg*16)+'%,0.95)'; c.beginPath(); c.ellipse(0,0,2.0,4.2,0,0,TAU); c.fill(); c.restore(); } c.restore();
-  c.save(); c.globalCompositeOperation='lighter'; bossGlow(c,15,HC,80,86,0.6*(0.85+0.15*Math.sin(t*3))); c.restore();   // the cold core at the gameplay centre (LAST — the dodge point stays readable on the void)
+  bossGlowAdd(c,15,HC,80,86,0.6*(0.85+0.15*Math.sin(t*3)));   // the cold core at the gameplay centre (LAST — the dodge point stays readable on the void)
 }
 // generic fallback (original ellipse-with-wings) — drawn at origin; used when boss.design is unset
 function drawBossGeneric(c,t){ c.save(); c.globalCompositeOperation='lighter'; for(let k=0;k<2;k++){ c.save(); c.rotate(t*BOSS_AURA_SPIN*(k?-1:1)+k); const col=k?PALETTE.auraB:PALETTE.auraA; const g=c.createRadialGradient(0,0,6,0,0,46+k*10); g.addColorStop(0,hexA(col,0.5)); g.addColorStop(1,hexA(col,0)); c.fillStyle=g; for(let p=0;p<6;p++){ c.rotate(Math.PI/3); c.beginPath(); c.ellipse(20,0,26,9,0,0,TAU); c.fill(); } c.restore(); } c.restore(); c.fillStyle=PALETTE.bossBody; c.beginPath(); c.ellipse(0,4,16,22,0,0,TAU); c.fill(); c.beginPath(); c.arc(0,-16,9,0,TAU); c.fill(); c.strokeStyle=PALETTE.bossRim; c.lineWidth=1.6; c.beginPath(); c.ellipse(0,4,16,22,0,0,TAU); c.stroke(); c.beginPath(); c.arc(0,-16,9,0,TAU); c.stroke(); c.fillStyle=hexA(PALETTE.bossRim,0.5); c.beginPath(); c.moveTo(-16,-2); c.quadraticCurveTo(-40,-18,-30,12); c.quadraticCurveTo(-22,2,-16,6); c.fill(); c.beginPath(); c.moveTo(16,-2); c.quadraticCurveTo(40,-18,30,12); c.quadraticCurveTo(22,2,16,6); c.fill(); }
@@ -2495,9 +2505,7 @@ function drawBoss(boss,t){ const x=boss.x,y=boss.y+Math.sin(t*1.4)*2; ctx.save()
 function drawBanner(dt){ if(!_banner.active) return; _banner.t+=dt; const tt=_banner.t; let x; if(tt<0.35) x=PF_W*(1-easeOut(tt/0.35)); else if(tt<1.6) x=0; else if(tt<2.0) x=-PF_W*easeIn((tt-1.6)/0.4); else { _banner.active=false; return; } ctx.save(); ctx.translate(x,0); const by=PF_H*0.34; ctx.fillStyle=PALETTE.banner; ctx.fillRect(0,by,PF_W,46); ctx.fillStyle=hexA(PALETTE.bossRim,0.9); ctx.fillRect(0,by,PF_W,2); ctx.fillRect(0,by+44,PF_W,2); ctx.fillStyle=PALETTE.uiText; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.font='bold 19px "Trebuchet MS",sans-serif'; ctx.fillText(_banner.name,PF_W/2,by+24); ctx.restore(); }
 function triggerBanner(name){ _banner={active:true,t:0,name:name||''}; }
 
-// ---- character cut-in (一枚絵 演出): FULL-SCREEN illustration on a spell-card declaration ----
-// Cover-fits the whole playfield (crops overflow), fades in → holds → fades out. Sits ABOVE the
-// background but BELOW bullets/sprites, so danmaku & the player ship stay readable on top.
+// ---- character cut-in (一枚絵 演出): a brief screen-dim 暗転 on a spell-card declaration (no portrait art; see drawCutin) ----
 const CUTIN_IN=0.30, CUTIN_OUT=0.40;
 function triggerCutin(o){ o=o||{}; const hold=(o.announce!=null)?Math.max(0.3,o.announce-CUTIN_IN-CUTIN_OUT):(o.hold!=null?o.hold:0.7); _cutin={ active:true, t:0, hold, hue:(o.hue!=null?o.hue:null) }; }   // dim 暗転 (no portrait art); optional faint hue tint per spell
 function drawCutin(dt){
@@ -2696,6 +2704,15 @@ function drawOverlays(){ ctx.setTransform(dpr,0,0,dpr,0,0); const cx=PF_W/2; if(
     if(allClear){ ctext('ALL CLEAR',cx,PF_H/2-34,'bold 40px "Trebuchet MS",sans-serif','#ffe6a0'); ctext('Score  '+pad(game.score||0,9),cx,PF_H/2+10,'16px "Trebuchet MS",monospace','#fff4e0'); ctext('thank you for playing',cx,PF_H/2+40,'12px "Trebuchet MS",sans-serif','#f0c890'); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext(inputMode==='touch'?'Tap to continue':'Press Enter',cx,PF_H/2+72,'14px "Trebuchet MS",sans-serif','#ffe6a0'); }
     else { ctext('STAGE CLEAR',cx,PF_H/2-30,'bold 38px "Trebuchet MS",sans-serif','#b9ff6a'); ctext('Score  '+pad(game.score||0,9),cx,PF_H/2+12,'16px "Trebuchet MS",monospace','#ffe9fb'); ctext('Graze  '+(game.grazeCount||0),cx,PF_H/2+38,'13px "Trebuchet MS",monospace','#b9ff6a'); const blink=(Math.floor(game.stateT*2)&1)===0; if(blink) ctext(inputMode==='touch'?'Tap to continue':'Press Enter',cx,PF_H/2+82,'14px "Trebuchet MS",sans-serif','#cfa8e8'); } } }
 
+// ---- dev profiling HUD (?dev=1) — read-only entity counts + whole-frame/1s-peak ms + substeps; never drawn under ship/golden (DEV_HUD false) ----
+function drawDevHud(){
+  const nb=enemyBullets.count, ns=playerShots.count, np=particles.count, ne=enemies.length, nl=lasers.count, nw=wells.count, ni=items.length, tot=nb+ns+np+ne+nl+nw+ni;
+  const lines=['FPS '+(fps.frame|0)+'  '+_devWorkMs.toFixed(1)+'ms','PEAK '+_devPeakMs.toFixed(1)+'ms  SUB '+_devSteps,'BUL '+nb+'  SHOT '+ns,'PTL '+np+'  ENE '+ne,'LAS '+nl+'  WEL '+nw+'  ITM '+ni,'TOT '+tot];
+  const x=PF_W+22, lh=12, y0=PF_H-34-lines.length*lh;   // in the right HUD panel (off the playfield), stacked just above the player-facing FPS/controls line; the panel bg is already dark so no backing box
+  const col=_devPeakMs>33?'#ff6b6b':(_devPeakMs>17?'#ffd45e':'#7CFC8A');   // 1s-peak >33ms (<30fps) red · >17ms (<60fps) amber · else green
+  for(let i=0;i<lines.length;i++) ctext(lines[i],x,y0+i*lh,'10px monospace',col,'left');
+}
+
 // ---- on-screen touch controls (drawn only on touch devices / after first touch) ----
 function drawTouchControls(){ if(inputMode!=='touch') return; const st=game.state; if(st!==STATE.PLAYING&&st!==STATE.PAUSED) return; ctx.setTransform(dpr,0,0,dpr,0,0);
   const btn=(r,label,lit,accent,fs,base)=>{ ctx.save(); const a=base||0.92; ctx.globalAlpha=a; ctx.fillStyle=lit?hexA(accent,0.32):'rgba(36,19,56,0.6)'; roundRect(r.x,r.y,r.w,r.h,10); ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=hexA(accent,lit?0.95:0.5); roundRect(r.x,r.y,r.w,r.h,10); ctx.stroke(); ctx.fillStyle=lit?'#ffffff':PALETTE.uiText; ctx.font='bold '+(fs||15)+'px "Trebuchet MS",sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(label,r.x+r.w/2,r.y+r.h/2); ctx.textAlign='left'; ctx.textBaseline='alphabetic'; ctx.restore(); };
@@ -2711,7 +2728,7 @@ function RenderFrame(now,alpha){ const dt=_lastNow?Math.min(0.05,(now-_lastNow)/
   ctx.save(); ctx.translate(PF_X+cam.shakeX,PF_Y+cam.shakeY); drawWells(T); drawEnemyLasers(T); drawGrazeLaser(T); drawItems(T); drawPlayerShots(alpha); if(game.boss&&!game.boss.dead){ drawBoss(game.boss,T); const _tw=game.boss._twin; if(_tw&&!_tw.dead) drawBoss(_tw,T); } drawEnemies(ctx,T,alpha); drawParticles(); drawLaserBulletContrast(alpha); drawEnemyBullets(alpha); drawPlayer(T); drawWaves(dt); ctx.restore();  // laser drawn first (back-most) so enemy bullets & items stay visible on top; contrast backing keeps on-beam bullets readable
   ctx.save(); ctx.translate(PF_X,PF_Y); drawBanner(paused?0:dt); drawFlash(); drawVignette(T); ctx.restore();
   ctx.restore();
-  ctx.setTransform(dpr,0,0,dpr,0,0); drawHUD(); drawTouchControls(); drawOverlays();
+  ctx.setTransform(dpr,0,0,dpr,0,0); drawHUD(); drawTouchControls(); drawOverlays(); if(DEV_HUD) drawDevHud();
 }
 const Render={ timeScale:1, init:RenderInit, resize:RenderResize, frame:RenderFrame, flash:reqFlash, shake:reqShake, cancelWave:reqCancelWave, slowmo:reqSlowmo, banner:triggerBanner, cutin:triggerCutin };
 
@@ -3739,7 +3756,6 @@ const _sway=(cx0,cx1,y,dur)=>function(b){ Director.fork(function*(){ while(true)
 const orbitCircle=(cx,cy,rad,period,dir)=>function(b){ dir=dir||1; const w=TAU/period; Director.fork(function*(){ yield* moveTo(b,cx+rad,cy,0.9,EASE.smooth); let a=0; const t0=T; while(true){ const ramp=clamp((T-t0)/1.8,0,1); a+=dir*w*EASE.smooth(ramp)*STEP; b.x=clamp(cx+Math.cos(a)*rad,40,PF_W-40); b.y=clamp(cy+Math.sin(a)*rad,90,PF_H*0.55); b._steered=true; yield; } },b); };   // ease angular speed 0→full over ~1.8s so there is no velocity jump at orbit entry
 const figure8=(cx,cy,rw,rh,period)=>function(b){ const w=TAU/period; Director.fork(function*(){ yield* moveTo(b,cx,cy,0.4,EASE.inOut); const t0=T; while(true){ const t=w*(T-t0); b.x=clamp(cx+Math.sin(t)*rw,40,PF_W-40); b.y=clamp(cy+Math.sin(t*2)*rh,90,PF_H*0.55); b._steered=true; yield; } },b); };   // lemniscate (∞) weave
 const wander=(cx,cy,rx,ry,leg)=>function(b){ Director.fork(function*(){ while(true){ const tx=clamp(cx+rng.range(-rx,rx),40,PF_W-40), ty=clamp(cy+rng.range(-ry,ry),90,PF_H*0.55); yield* moveTo(b,tx,ty,leg||1.4,EASE.inOut); } },b); };   // drift to random points in a box (seeded rng → deterministic)
-const divePush=(homeX,homeY,diveY,dive,hold,back)=>function(b){ Director.fork(function*(){ while(true){ yield* moveTo(b,homeX,clamp(diveY,90,PF_H*0.58),dive||0.6,EASE.in); yield* waitT(hold||0.9); yield* moveTo(b,homeX,homeY,back||1.2,EASE.out); yield* waitT(0.6); } },b); };   // lunge down toward the player, hold, retreat up; repeat
 const diveCharge=(homeX,homeY,diveY,dx,dive,hold,back)=>function(b){ let side=(homeX>PF_W*0.5)?-1:1; Director.fork(function*(){ while(true){ yield* moveTo(b,clamp(homeX+dx*side,40,PF_W-40),clamp(diveY,90,PF_H*0.58),dive||1.0,EASE.smooth); yield* waitT(hold||0.7); yield* moveTo(b,homeX,homeY,back||1.3,EASE.smooth); yield* waitT(0.6); side=-side; } },b); };   // glide diagonally down to alternating sides, hold, glide back (smootherstep both legs = a serpent swim)
 const TASOKARE_INTRO_SPEC = { name:'Tasokare', design:'mizuchi', hue:190, enterFrom:{x:PF_W/2,y:-70}, enterTo:{x:PF_W/2,y:150}, score:90000, retreat:true, retreatDrops:['bomb'],
     phases:[
