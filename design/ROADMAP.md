@@ -15,6 +15,14 @@
 - つまり残作業は **「遊び続ける理由（エンドゲーム）」「動作の滑らかさ」「見た目/操作のパーソナライズ」「整理」** の4領域。
   新しいルール・面・敵種を足す段階ではない（§2 のガードレール参照）。
 
+- **★仕様凍結 2026-06-08。** A（2周目）まで含め全機能 landed。最適化フェーズの実測（`?golden=1` の __dbg ハーネスで
+  `captureEmitter` の densest emitter を計時）で **sim は最悪密度（~550 弾）でも ≈0.1ms/tick・弾数に線形**＝律速でない
+  ことを確認。したがって **B-2（SoA / pool 固定長化 / 画面外 cull / 衝突 grid）は実装しない**——B-1（弾ごと
+  `createRadialGradient` → bake スプライト）で唯一の実 FPS 犯人は既に解消済みで、残りは「リスクのみ・実測リワードなし」
+  （"honest constants" 方針）。同フェーズで C（整理）の機会的1パスも実施：デッドコード6件（`hypot`/`waitUntil`/
+  `moveBezier`/`waveStormSprite`+WAVES登録/`pat.doubleRing`/`pat.contractingRing`）削除、由来史コメントの刈り込み12件、
+  `drawSpellLabel` 抽出（render-only dedup）。**golden byte-identical / CI 4/4 green / HUD ラベル実描画を pixel 検証。**
+
 ---
 
 ## 1. 体験の核（すべての判断のレンズ）
@@ -220,7 +228,7 @@
 | --- | --- | --- | --- | --- | --- |
 | A 2周目+真END+EE | ★最大 | 中の下 | resolve*/campaign spine/holdTimerWhileInvuln/save | run.loop(2周固定)・1面再調整・END分岐・perfect追跡・隠し演出 | 3 ✓実装(残=数値調整) |
 | B-1 powerup render perf | 高 | 中 | getBulletSprite系 bake | 弾ごと createRadialGradient→bake スプライト（真因=render not sim）**DONE** | 2✓ |
-| B-2 残り perf(cap凍結/SoA/cull) | 中 | 中 | dev HUD/golden | 最終密度依存→**2周目仕様凍結後**・低優先 | 4 |
+| B-2 残り perf(cap凍結/SoA/cull) | — | — | dev HUD/golden | **実測で不要と判断（2026-06-08）**: sim ≈0.1ms/最悪密度=律速でない | ✗不要 |
 | C 整理 + dev HUD | 低(土台) | 小〜中 | golden/captureEmitter | （境界つき1パス）**DONE** | 1✓ |
 | D 自機(owner選定) | 中 | 小〜中 | drawPlayer/PALETTE | 候補デモ→単一アセット採択（UI 無） | 並行 |
 | E 逆手操作 | 中の下 | 小 | 既存 KB 入力層 | 右手 dual binding・レイアウト堅牢化（UI 無） | 並行 |

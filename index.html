@@ -110,7 +110,7 @@ const START_LIVES = 3, MAX_LIVES = 6;
 const RESPAWN_INVULN = 3.0, RESPAWN_BLINK = 0.09, DEATH_CLEAR_R = 72, DEATH_POWER_DROP = 8;
 
 const GRAZE_SCORE = 50;
-const EXTEND_INTERVAL = 1e6;   // score-extend fires every fixed 1M (was a [1M,3M,6M,10M] table); HUD shows a fill meter toward the next
+const EXTEND_INTERVAL = 1e6;   // score-extend fires every fixed 1M; HUD shows a fill meter toward the next
 const EXTEND_ITEM_FALL = 70;   // score-extend drops a 1UP from the top, straight above the player, to be collected
 const POINT_BASE = 10000, POINT_MIN = 2000;   // point-item value anchors (collect high = POINT_BASE, low = POINT_MIN)
 
@@ -156,7 +156,6 @@ const DEFAULT_R = 4.5;
 function clamp(v,lo,hi){ return v<lo?lo:(v>hi?hi:v); }
 function lerp(a,b,t){ return a+(b-a)*t; }
 function approach(cur,tgt,maxDelta){ const d=tgt-cur; if(d>maxDelta) return cur+maxDelta; if(d<-maxDelta) return cur-maxDelta; return tgt; }
-function hypot(dx,dy){ return Math.sqrt(dx*dx+dy*dy); }
 function dist2(ax,ay,bx,by){ const dx=ax-bx,dy=ay-by; return dx*dx+dy*dy; }
 function swapRemove(arr,i){ const last=arr.length-1; if(i!==last) arr[i]=arr[last]; arr.pop(); }
 function polarVel(a,speed){ return { vx:Math.cos(a)*speed, vy:Math.sin(a)*speed }; }
@@ -1797,7 +1796,7 @@ let canvas=null, ctx=null, dpr=1, _lastNow=0, _fps=60, _fpsAcc=0, _fpsN=0;
 const cam={ trauma:0, shakeX:0, shakeY:0, flash:0, flashHue:0, timeScale:1, slowT:0, slowTarget:1 };
 const waves=[], petals=[];
 let _banner={active:false,t:0,name:''};
-// spell-card declaration cut-in — a brief screen-dim "暗転" only (playtest found portrait art noisy; see drawCutin).
+// spell-card declaration cut-in — a brief screen-dim "暗転" only (no portrait art; see drawCutin).
 let _cutin={active:false};
 
 function easeOut(t){ return 1-(1-t)*(1-t); }
@@ -2419,7 +2418,7 @@ function drawBossYatagarasu(c,t){ const flap=Math.sin(t*2.2), breath=0.92+0.06*M
 // from the snake/maidens/crow/crone AND from the storm-blue boss to come. Centred on origin = the gameplay hit
 // point (the robed torso); hitR covers the body core. He places NO wells (those are the boss's signature).
 function drawBossFujin(c,t){ const gust=Math.sin(t*1.6), H=158;
-  c.save(); const bp=c.createRadialGradient(0,4,5,0,4,54); bp.addColorStop(0,'rgba(8,20,18,0.55)'); bp.addColorStop(1,'rgba(8,20,18,0)'); c.fillStyle=bp; c.beginPath(); c.arc(0,4,54,0,TAU); c.fill(); c.restore();   // dark backing vignette → the wind-spirit separates from the same-hue storm sky (bosses had been sinking into the background)
+  c.save(); const bp=c.createRadialGradient(0,4,5,0,4,54); bp.addColorStop(0,'rgba(8,20,18,0.55)'); bp.addColorStop(1,'rgba(8,20,18,0)'); c.fillStyle=bp; c.beginPath(); c.arc(0,4,54,0,TAU); c.fill(); c.restore();   // dark backing vignette → the wind-spirit separates from the same-hue storm sky
   bossGlowAdd(c,50,H,42,68,0.30);   // cold wind-halo
   // 1) streaming wind swirls behind (additive comma-curls blowing outward)
   c.save(); c.globalCompositeOperation='lighter'; c.strokeStyle='hsla('+H+',72%,82%,0.38)'; c.lineWidth=2; c.lineCap='round';
@@ -2429,7 +2428,7 @@ function drawBossFujin(c,t){ const gust=Math.sin(t*1.6), H=158;
   c.save(); const bag=c.createLinearGradient(0,-74,0,-2); bag.addColorStop(0,'hsl('+H+',54%,68%)'); bag.addColorStop(1,'hsl('+(H+10)+',46%,42%)');
   c.fillStyle=bag; c.strokeStyle='hsla('+H+',70%,86%,0.78)'; c.lineWidth=1.8;
   c.beginPath(); c.moveTo(-40,-2); c.bezierCurveTo(-56,-58+gust*2,-22,-78,0,-76+gust*3); c.bezierCurveTo(22,-78,56,-58+gust*2,40,-2); c.bezierCurveTo(27,-26,20,-40,0,-40); c.bezierCurveTo(-20,-40,-27,-26,-40,-2); c.closePath(); c.fill(); c.stroke();
-  for(const s of [-1,1]){ c.save(); c.translate(s*40,-2); c.fillStyle='hsl('+(H+10)+',44%,48%)'; c.beginPath(); c.ellipse(0,0,6,8,s*0.3,0,TAU); c.fill(); c.restore(); }   // bag-mouth ties (the enlarged 風袋 is now the dominant Fūjin read)
+  for(const s of [-1,1]){ c.save(); c.translate(s*40,-2); c.fillStyle='hsl('+(H+10)+',44%,48%)'; c.beginPath(); c.ellipse(0,0,6,8,s*0.3,0,TAU); c.fill(); c.restore(); }   // bag-mouth ties
   c.restore();
   // 3) robed body (solid silhouette; hitR covers it) — a SQUAT, wide hunched gatekeeper, brightened off the sky + bright wind rim
   c.fillStyle='hsla('+(H-2)+',34%,42%,0.97)'; c.beginPath(); c.moveTo(-19,-4); c.quadraticCurveTo(-28,12,-22,30);
@@ -2451,7 +2450,7 @@ function drawBossFujin(c,t){ const gust=Math.sin(t*1.6), H=158;
 // flesh). STEEL-BLUE (H=212) to match the tempest and the wells. The largest, fiercest design — distinct from
 // every prior boss. Centred on origin = the gameplay hit point (the torso); hitR covers the body core.
 function drawBossSusanoo(c,t){ const breath=0.92+0.06*Math.sin(t*2.2), H=212, HB=228, HG=46;   // HB = indigo body register (distinct from Fūjin's teal + lifts off the steel-blue sky); HG = warm GOLD lightning accent
-  c.save(); const bp=c.createRadialGradient(0,2,6,0,2,62); bp.addColorStop(0,'rgba(6,8,22,0.62)'); bp.addColorStop(1,'rgba(6,8,22,0)'); c.fillStyle=bp; c.beginPath(); c.arc(0,2,62,0,TAU); c.fill(); c.restore();   // dark backing vignette → the storm god separates from the same-hue sky (bosses had been sinking into the background)
+  c.save(); const bp=c.createRadialGradient(0,2,6,0,2,62); bp.addColorStop(0,'rgba(6,8,22,0.62)'); bp.addColorStop(1,'rgba(6,8,22,0)'); c.fillStyle=bp; c.beginPath(); c.arc(0,2,62,0,TAU); c.fill(); c.restore();   // dark backing vignette → the storm god separates from the same-hue sky
   // 0) 荒魂の渦 — the storm vortex aura behind (additive counter-rotating log-spiral arcs = the well/渦 motif)
   c.save(); c.globalCompositeOperation='lighter';
   for(let k=2;k>=1;k--){ c.save(); c.rotate(t*0.5*(k%2?1:-1)); c.strokeStyle='hsla('+H+',82%,'+(58+k*5)+'%,'+(0.12*k).toFixed(2)+')'; c.lineWidth=3+k;
@@ -2561,7 +2560,7 @@ function drawCutin(dt){
   if(t<inD) a=easeOut(t/inD);
   else if(t<inD+ci.hold) a=1;
   else a=1-easeIn((t-inD-ci.hold)/outD);
-  // Spell-declaration "暗転" — dim the playfield only (no portrait art: playtest found the images noisy).
+  // Spell-declaration "暗転" — dim the playfield only (no portrait art).
   // Uniform darken + soft centre-focused vignette, fading in→hold→out with the same envelope.
   const DIM=0.52;                                          // peak darkening (0..1) — tune to taste
   ctx.save();
@@ -2692,7 +2691,7 @@ function drawEnemyLasers(t){ const it=lasers.items, n=lasers.count; if(n===0) re
   ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.lineCap='round';
   for(let i=0;i<n;i++){ const L=it[i]; if(!L.alive) continue;
     const ca=Math.cos(L.ang), sa=Math.sin(L.ang), ex=L.x+ca*L.len, ey=L.y+sa*L.len, hue=L.hue;
-    if(L.state==='warn'){ const k=L.t/Math.max(0.01,L.warnDur), puls=0.62+0.16*Math.sin(t*11);   // gentle slow breathe (was a fast t*26 strobe — eye-straining); never dips to dark
+    if(L.state==='warn'){ const k=L.t/Math.max(0.01,L.warnDur), puls=0.62+0.16*Math.sin(t*11);   // gentle slow breathe (no fast strobe — eye-straining, S4 lesson); never dips to dark
       ctx.globalAlpha=0.06+0.12*k; ctx.strokeStyle='hsl('+hue+',100%,72%)'; ctx.lineWidth=L.halfW*2; ctx.beginPath(); ctx.moveTo(L.x,L.y); ctx.lineTo(ex,ey); ctx.stroke();   // faint danger band, swelling toward fire
       ctx.globalAlpha=(0.5+0.3*k)*puls; ctx.strokeStyle='hsl('+hue+',100%,86%)'; ctx.lineWidth=2.6; ctx.beginPath(); ctx.moveTo(L.x,L.y); ctx.lineTo(ex,ey); ctx.stroke();   // steady-glow core telegraph (reads on the dusky cloud sea without flashing)
     } else if(L.state==='fire'){ const inK=Math.min(1,L.t/0.06);
@@ -2769,9 +2768,10 @@ function drawHUD(){ ctx.save(); ctx.translate(PF_W,0); ctx.fillStyle=PALETTE.hud
   ctx.fillStyle=PALETTE.uiDim; ctx.font='9px monospace'; ctx.fillText('FPS '+(_fps|0),lx,PF_H-36); ctx.fillStyle='rgba(157,131,192,0.7)'; ctx.font='8px monospace'; ctx.fillText('Arrows or WASD  move',lx,PF_H-27); ctx.fillText('Z or .  fire    X or /  bomb',lx,PF_H-18); ctx.fillText('Shift focus    M mute    P pause',lx,PF_H-9); ctx.restore();
   const b=game.boss; if(b&&!b.dead&&b.hpMax) drawBossHUD(b);
 }
+function drawSpellLabel(boss){ if(boss.spellName){ ctx.fillStyle=PALETTE.uiText; ctx.font='italic 13px "Trebuchet MS",sans-serif'; ctx.textAlign='right'; ctx.fillText(boss.spellName,PF_W-22,34); ctx.textAlign='left'; } }   // boss-HUD spell name, shared by drawBossHUD + drawSurvivalBar
 function drawBossHUD(boss){ ctx.save();
   if(boss.survivalActive){ drawSurvivalBar(boss); ctx.restore(); return; }
-  const frac=Math.max(0,Math.min(1,boss.hp/boss.hpMax)); const bw=PF_W-40, bh=8, bx=20, by=6; ctx.fillStyle='rgba(0,0,0,0.45)'; roundRect(bx,by,bw,bh,4); ctx.fill(); const hg=ctx.createLinearGradient(bx,0,bx+bw,0); hg.addColorStop(0,PALETTE.hp0); hg.addColorStop(1,PALETTE.hp1); ctx.fillStyle=hg; roundRect(bx,by,bw*frac,bh,4); ctx.fill(); const ph=boss.phasesLeft||0; for(let i=0;i<ph;i++){ ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.arc(bx+8+i*10,by+bh+7,2,0,TAU); ctx.fill(); } if(boss.spellName){ ctx.fillStyle=PALETTE.uiText; ctx.font='italic 13px "Trebuchet MS",sans-serif'; ctx.textAlign='right'; ctx.fillText(boss.spellName,PF_W-22,34); ctx.textAlign='left'; } if(boss.timer!=null){ const warn=boss.timer<8; ctx.fillStyle=warn?PALETTE.timerWarn:PALETTE.uiText; ctx.font='bold 16px "Trebuchet MS",monospace'; ctx.fillText(boss.timer.toFixed(2),22,34); } ctx.restore();
+  const frac=Math.max(0,Math.min(1,boss.hp/boss.hpMax)); const bw=PF_W-40, bh=8, bx=20, by=6; ctx.fillStyle='rgba(0,0,0,0.45)'; roundRect(bx,by,bw,bh,4); ctx.fill(); const hg=ctx.createLinearGradient(bx,0,bx+bw,0); hg.addColorStop(0,PALETTE.hp0); hg.addColorStop(1,PALETTE.hp1); ctx.fillStyle=hg; roundRect(bx,by,bw*frac,bh,4); ctx.fill(); const ph=boss.phasesLeft||0; for(let i=0;i<ph;i++){ ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.arc(bx+8+i*10,by+bh+7,2,0,TAU); ctx.fill(); } drawSpellLabel(boss); if(boss.timer!=null){ const warn=boss.timer<8; ctx.fillStyle=warn?PALETTE.timerWarn:PALETTE.uiText; ctx.font='bold 16px "Trebuchet MS",monospace'; ctx.fillText(boss.timer.toFixed(2),22,34); } ctx.restore();
 }
 // Endurance (耐久 / Last Word) bar. Same geometry + rounded HP fill as the normal boss HP bar above
 // (unified look). The HP bar IS the goal: damaging it shrinks it from the right. goalFrac = hp/hpMax,
@@ -2800,7 +2800,7 @@ function drawSurvivalBar(boss){
   ctx.fillStyle='#5ee0ff'; ctx.fillRect(xCur-1,by-3,2,bh+6); ctx.fillStyle='#eaffff'; ctx.fillRect(xCur-0.5,by-3,1,bh+6);
   ctx.strokeStyle='rgba(255,255,255,0.16)'; ctx.lineWidth=1; roundRect(bx,by,bw,bh,r); ctx.stroke();   // crisp border
   // spell name (right) + remaining-seconds readout (left, warn-red as it nears clear) + label
-  if(boss.spellName){ ctx.fillStyle=PALETTE.uiText; ctx.font='italic 13px "Trebuchet MS",sans-serif'; ctx.textAlign='right'; ctx.fillText(boss.spellName,PF_W-22,34); ctx.textAlign='left'; }
+  drawSpellLabel(boss);
   const warn=boss.timer<8, numStr=boss.timer.toFixed(2); ctx.font='bold 16px "Trebuchet MS",monospace'; ctx.fillStyle=warn?PALETTE.timerWarn:PALETTE.uiText; ctx.fillText(numStr,22,34); const numW=ctx.measureText(numStr).width;
   ctx.fillStyle=PALETTE.uiDim; ctx.font='9px "Trebuchet MS",sans-serif'; ctx.fillText('SURVIVE',22+numW+7,34);
 }
@@ -3236,10 +3236,8 @@ pat.aimedShot=function(o,p){ let a=angleToPlayer(o.x,o.y); if(p.jitter) a+=(rng(
 pat.nWaySpread=function(o,p){ const n=loopN(p.count), half=(p.spread||0)*0.5, step=n>1?(p.spread||0)/(n-1):0; for(let i=0;i<n;i++){ const a=p.baseAngle-half+step*i; const hue=(p.hueSpread!=null)?layerHue(p.hue,i,n,p.hueSpread):p.hue; spawnPolar(o,a,p.speed,{hue,style:p.style||'orb',r:p.r}); } };
 pat.aimedSpread=function(o,p){ const q=Object.assign({},p); q.baseAngle=angleToPlayer(o.x,o.y); pat.nWaySpread(o,q); };   // delegates to nWaySpread (scaled there) → must NOT scale here
 pat.ring=function(o,p){ const n=loopN(p.count), step=TAU/n, base=p.baseAngle||0; for(let i=0;i<n;i++){ const a=base+step*i; const hue=(p.hueSpread!=null)?layerHue(p.hue,i,n,p.hueSpread):p.hue; spawnPolar(o,a,p.speed,{hue,style:p.style||'orb',r:p.r}); } };
-pat.doubleRing=function(o,p){ const n=loopN(p.count), step=TAU/n, base=p.baseAngle||0, off=p.innerOffset!=null?p.innerOffset:step*0.5; const hueA=p.hue, hueB=hueShift(p.hue,p.hueLayer!=null?p.hueLayer:HUE_SPAN_LAYER); for(let i=0;i<n;i++){ spawnPolar(o,base+step*i,p.speed,{hue:hueA,style:p.style||'orb',r:p.r}); spawnPolar(o,base+step*i+off,p.speed2!=null?p.speed2:p.speed*0.7,{hue:hueB,style:p.style2||p.style||'pellet',r:p.r2!=null?p.r2:p.r}); } };
 pat.spiral=function(o,p){ const arms=loopN(p.arms||1), armStep=TAU/arms, base=(p.baseAngle||0)+(p.phase||0); for(let k=0;k<arms;k++){ const a=base+armStep*k; const hue=layerHue(p.hue,k,arms,p.hueArmSpan!=null?p.hueArmSpan:HUE_SPAN_RING); spawnPolar(o,a,p.speed,{hue,style:p.style||'rice',r:p.r}); } };
 pat.expandingRing=function(o,p){ const n=loopN(p.count), step=TAU/n, base=p.baseAngle||0, accel=p.accel!=null?p.accel:120; for(let i=0;i<n;i++){ const a=base+step*i, v=polarVel(a,p.speed), ac=polarVel(a,accel); spawnBullet({x:o.x,y:o.y,vx:v.vx,vy:v.vy,ax:ac.vx,ay:ac.vy,hue:(p.hueSpread!=null)?layerHue(p.hue,i,n,p.hueSpread):p.hue,style:p.style||'orb',r:p.r,dir:a,speed:p.speed}); } };
-pat.contractingRing=function(o,p){ const n=loopN(p.count), step=TAU/n, base=p.baseAngle||0, decel=p.decel!=null?p.decel:200; for(let i=0;i<n;i++){ const a=base+step*i, v=polarVel(a,p.speed), ac=polarVel(a,-decel); spawnBullet({x:o.x,y:o.y,vx:v.vx,vy:v.vy,ax:ac.vx,ay:ac.vy,hue:(p.hueSpread!=null)?layerHue(p.hue,i,n,p.hueSpread):p.hue,style:p.style||'pellet',r:p.r,dir:a,speed:p.speed}); } };
 pat.randomScatter=function(o,p){ const n=loopN(p.count), base=p.baseAngle!=null?p.baseAngle:0, spread=p.spread!=null?p.spread:TAU; for(let i=0;i<n;i++){ const a=base+(rng()-0.5)*spread, sp=p.speedMin+rng()*(p.speedMax-p.speedMin); const hue=p.jitterHue?hueShift(p.hue,(rng()-0.5)*p.jitterHue):p.hue; spawnPolar(o,a,sp,{hue,style:p.style||'pellet',r:p.r}); } };
 pat.roseCurve=function(o,p){ const n=loopN(p.count), k=p.k||4, step=TAU/n, phase=p.phase||0, sMin=p.speedMin!=null?p.speedMin:p.speed*0.35, sMax=p.speed; for(let i=0;i<n;i++){ const theta=phase+step*i, rr=Math.abs(Math.cos(k*theta)), sp=sMin+(sMax-sMin)*rr; const hue=hueShift(p.hue,rr*(p.hueSpan!=null?p.hueSpan:HUE_SPAN_RING)); spawnPolar(o,theta,sp,{hue,style:p.style||'star',r:p.r}); } };
 pat.flower=function(o,p){ const layers=p.layers||3; for(let L=0;L<layers;L++){ pat.roseCurve(o,{count:p.count,k:p.k||5,speed:p.speed*(0.6+0.4*(L/layers)),phase:(p.phase||0)+L*(Math.PI/(p.k||5))*0.5,hue:hueShift(p.hue,L*(p.hueLayer!=null?p.hueLayer:28)),style:p.style||'star',r:p.r}); } };   // delegates per-layer to roseCurve (scaled) → must NOT scale here
@@ -3397,7 +3395,6 @@ function attachTouch(el){
 let player=null, game=null, run=null;
 let _musicRestart=false;   // one-shot: set by restartGame so enterStage's playMusic FORCE-restarts the stage BGM from the top (kill whatever's playing — even if it's already the stage track), instead of the no-op-when-same default. Consumed in enterStage.
 let _god=false, _melt=false;   // debug witness flags (?god / ?melt, boot-parsed in the !golden block): god = player never dies (onPlayerHit no-ops) so you can SURVIVE any stage/loop to feel density & reach the clear/ending sequences "突破できなくても"; melt = player shots one-shot non-invuln enemies/bosses (rush to the clears — survivals are boss-invuln so they still run timed). Both default false ⇒ ship/golden byte-identical.
-// difficulty knobs now live in BALANCE.difficulties (CONTENT DATA); resolveWave/resolveBoss apply them.
 function makePlayer(){ return { x:PLAYER_START.x, y:PLAYER_START.y, r:PLAYER_R, focus:false, state:'alive', dead:false, invuln:0, blink:false, fireCd:0, power:START_POWER, bombs:START_BOMBS, lives:START_LIVES, itemR:14, bombActive:0, bossDot:0, pendingDeath:0, respawnT:0, options:[], mvx:0, mvy:0, grazePowerT:0 }; }
 function makeGame(){ return { state:STATE.TITLE, score:0, hi:0, grazeCount:0, pointTotal:0, scoreMul:1, extendsTaken:0, stateT:0, fullpower:false, paused:false, boss:null, spellIntensity:0, powerMax:MAXPOWER, grazePowerThreshold:GRAZE_POWER_FIRST, grazePowerInterval:GRAZE_POWER_FIRST }; }
 function initGameSystems(){ game=makeGame(); player=makePlayer(); loadHiScore(); setState(STATE.TITLE); }
@@ -3682,7 +3679,6 @@ function abortStage(){ if(typeof Director!=='undefined') Director.clear(); }
 
 // ---- wait primitives ----
 function* waitT(sec){ yield sec; }
-function* waitUntil(pred){ while(!pred()) yield; }
 function* waitClear(opts){ const minHp=(opts&&opts.minHp)||0; while(true){ let live=0; for(let i=0;i<enemies.length;i++){ const e=enemies[i]; if(!e.dead&&!e.boss&&e.hp>minHp) live++; } if(live===0) return; yield; } }
 function* parallel(){ const gens=Array.prototype.slice.call(arguments).map(g=>({g,done:false})); while(gens.some(o=>!o.done)){ for(const o of gens) if(!o.done&&o.g.next().done) o.done=true; yield; } }
 function* spawnWave(gen){ yield* gen; }
@@ -3706,7 +3702,6 @@ function despawnEnemy(e){ e.dead=true; }
 
 // ---- movement helpers (generators) ----
 function* moveTo(e,tx,ty,dur,ease){ ease=ease||EASE.inOut; const sx=e.x,sy=e.y,t0=T; if(dur<=0){ e.x=tx; e.y=ty; e._steered=true; return; } while(true){ const k=Math.min(1,(T-t0)/dur), u=ease(k); e.x=sx+(tx-sx)*u; e.y=sy+(ty-sy)*u; e._steered=true; if(k>=1) return; yield; } }
-function* moveBezier(e,c1,c2,p3,dur,ease){ ease=ease||EASE.inOut; const p0={x:e.x,y:e.y},t0=T; while(true){ const k=Math.min(1,(T-t0)/dur),u=ease(k),iu=1-u; const b0=iu*iu*iu,b1=3*iu*iu*u,b2=3*iu*u*u,b3=u*u*u; e.x=b0*p0.x+b1*c1.x+b2*c2.x+b3*p3.x; e.y=b0*p0.y+b1*c1.y+b2*c2.y+b3*p3.y; e._steered=true; if(k>=1) return; yield; } }
 function* holdFire(e,fireGenFn,sec){ const fc=Director.fork(()=>fireGenFn(e),e); yield* waitT(sec); Director.kill(fc); }
 function* exitOff(e,dir,speed){ speed=speed||160; e.vx=Math.cos(dir)*speed; e.vy=Math.sin(dir)*speed; while(e.x>-OFFSCREEN_PAD&&e.x<PF_W+OFFSCREEN_PAD&&e.y>-OFFSCREEN_PAD&&e.y<PF_H+OFFSCREEN_PAD){ e.x+=e.vx*STEP; e.y+=e.vy*STEP; e._steered=true; yield; } e.dead=true; }
 
@@ -3886,28 +3881,6 @@ function waveCrowBeam(opts){ return (function*(){
       } });
     yield* waitT(opts.spacing!=null?opts.spacing:0.7); } })(); }
 // ---- Stage 5 (storm) wave generator ----
-// waveStormSprite — the road's IDENTITY: a cloud-sprite (雲童/つむじ) that places ONE WEAK, HARMLESS well (coreR:0)
-// at itself and fires STRAIGHT bullets (av:0 spirals) that its own swirl bends into orbiting curls — the 周回読み
-// 慣らし場 for the boss's vortices. Uses the §gravity well system with R小/strength弱/coreR0 (道中は弱い well 可,
-// the midboss stays well-free). Hovers at staggered xs+depths (a 2D formation, not a flat curtain — the road陣形
-// policy). Manual moves set _steered via moveTo; the well follows the body (follow:e) and is faded out on exit so
-// it never leaks (runPhase/stage clears also reap wells). Alternating swirl sign per index → opposing curls.
-function waveStormSprite(opts){ return (function*(){
-  const xs=opts.xs||[PF_W*0.3,PF_W*0.7], y0=opts.y!=null?opts.y:104, yStep=opts.yStep||0,
-        hue=opts.hue!=null?opts.hue:206, hold=opts.hold!=null?opts.hold:4.0, halveP=!!opts.halvePower, sparse=!!opts.sparse,
-        wR=opts.wellR||92, wStr=opts.strength||4400, wSw=opts.swirl||8200;
-  for(let i=0;i<xs.length;i++){ const hy=clamp(y0+i*yStep,56,PF_H*0.42);
-    spawnEnemy({ x:xs[i], y:-SPAWN_MARGIN, hp:HP_POP_HEAVY*0.9, r:R_POP_HEAVY, hue:hue, score:1100,
-      drops:(sparse&&i%2!==0)?[]:(halveP?['power','point','point']:['power','power','point']), cancelOnDeath:0.4,
-      coro:function*(e){
-        yield* moveTo(e,xs[i],hy,1.0,EASE.out);
-        const w=placeWell({ x:e.x, y:e.y, R:wR, strength:wStr, swirl:((i%2)?-1:1)*wSw, coreR:0, warn:0.8, active:hold+0.6, fade:0.4, hue:hue, follow:e });
-        const fc=Director.fork(function*(){ let a=i*1.3; while(true){ spiral(e,{angle:a,arms:2,speed:96,hue:hue,style:'small'}); a+=0.5*((i%2)?-1:1); yield* waitT(0.16); } },e);
-        yield* waitT(hold);
-        Director.kill(fc); if(w&&w.alive){ w.state='fade'; w.t=0; }
-        yield* exitOff(e,(i%2)?Math.PI*0.82:Math.PI*0.18,150);
-      } });
-    yield* waitT(opts.spacing!=null?opts.spacing:0.6); } })(); }
 // waveVortexRing — Stage 5's NEW road identity: a ROTATING RING of cloud-sprites orbiting a shared centre. No other
 // wave moves a GROUP on a shared orbit — every prior wave descends-a-lane or hovers-at-anchor. The ring descends into
 // view while spinning, then spirals slowly INWARD (a true vortex 編隊). A HARMLESS well sits BELOW the ring (not on it); each
@@ -3922,7 +3895,7 @@ function waveVortexRing(opts){ return (function*(){
         well=opts.well!==false, fcount=opts.fcount||5, fperiod=opts.fperiod||0.6, halveP=!!opts.halvePower, sparse=!!opts.sparse;
   const t0=T, acc=well?0:(opts.accel||74), wellY=cy+(opts.wellDy!=null?opts.wellDy:118);   // the well sits BELOW the orbiting ring, NOT on it: the sprites' straight rings travel a clear stretch then visibly HOOK into the swirl. Co-locating the well on the emitters made the bend look like the bullets were simply fired at an angle from the start.
   if(well) placeWell({ x:cx, y:wellY, R:opts.wellR||76, strength:opts.strength||5400, swirl:dir*(opts.swirl||9800), coreR:0, warn:1.2, active:hold+1.6, fade:0.5, hue:189 });
-  const y0=-(SPAWN_MARGIN+rad0*0.78);   // the ring's vertical CENTRE starts high enough that even its LOWEST sprite (sin(base)=+1, protruding rad0*0.78 below centre) is fully off-screen → the whole ring SLIDES IN from the top. (was -SPAWN_MARGIN, which left lower-half sprites popping in mid-air at Y up to rad0*0.78-SPAWN_MARGIN.)
+  const y0=-(SPAWN_MARGIN+rad0*0.78);   // the ring's vertical CENTRE starts high enough that even its LOWEST sprite (sin(base)=+1, protruding rad0*0.78 below centre) is fully off-screen → the whole ring SLIDES IN from the top.
   for(let i=0;i<n;i++){ const base=i/n*TAU;
     spawnEnemy({ x:cx+Math.cos(base)*rad0, y:y0+Math.sin(base)*rad0*0.78, hp:HP_POP_HEAVY*0.78, r:R_POP_HEAVY, hue:hue, score:1000,
       drops:(sparse&&i%2!==0)?[]:(halveP?['power','point','point']:['power','power','point']), cancelOnDeath:0.4,
@@ -4008,7 +3981,7 @@ function waveClusterBurst(opts){ return (function*(){ const n=opts.n||10, cx=opt
       drops:(sparse&&i%2!==0)?[]:(halveP?['point']:['power','point']),
       coro:function*(e){ yield* moveTo(e, cx+Math.cos(a)*14, cy+Math.sin(a)*10, 0.55, EASE.out);
         const fc=Director.fork(()=>fireAimedBursts(e,{period:1.2,n:1,speed:130,hue:hue,style:'mid'}),e);
-        yield* waitT(0.35+jit*0.2);                                                // scatter a BEAT earlier (was ~0.9-1.3s hold → players殲滅ed the knot before it opened); now it bursts before focus-fire clears it
+        yield* waitT(0.35+jit*0.2);                                                // short hold then burst (scatter before focus-fire clears the knot)
         const tx=clamp(cx+Math.cos(a)*(PF_W*0.42),30,PF_W-30), ty=cy+Math.sin(a)*100+70;
         yield* moveTo(e, tx, ty, 1.0, EASE.out);                                   // 散開: scatter radially
         yield* moveTo(e, tx, PF_H+SPAWN_MARGIN, 1.5, EASE.linear); Director.kill(fc); despawnEnemy(e); } });
@@ -4025,7 +3998,7 @@ function waveSeedfall(opts){ return (function*(){ const n=opts.n||4, hue=opts.hu
         spawnSeed({ x:e.x, y:e.y+16, vy:34, hue:SEED_HUE, n:7, births:3, every:0.65, childSpeed:78, childStyle:'pellet', childHue:SEED_CHILD_HUE, childR:4, life:6 });   // 種火 always gold (decoupled from the dropper hue) so the road embers read on the dark cave
         yield* waitT(0.7); yield* moveTo(e,tx+side*44,PF_H+SPAWN_MARGIN,2.4,EASE.linear); despawnEnemy(e); } });
     yield* waitT(opts.spacing||0.6); } })(); }
-const WAVES = { sideSweep:waveSideSweep, vFormation:waveVFormation, stream:waveStream, turrets:waveTurrets, drifters:waveDrifters, wraith:waveWraith, stalkColumn:waveStalkColumn, lantern:waveLantern, kodama:waveKodama, crowBeam:waveCrowBeam, stormSprite:waveStormSprite, vortexRing:waveVortexRing, swoopDive:waveSwoopDive, wisplight:waveWisplight, seedfall:waveSeedfall, checkerSplit:waveCheckerSplit, rowsAlt:waveRowsAlt, clusterBurst:waveClusterBurst };
+const WAVES = { sideSweep:waveSideSweep, vFormation:waveVFormation, stream:waveStream, turrets:waveTurrets, drifters:waveDrifters, wraith:waveWraith, stalkColumn:waveStalkColumn, lantern:waveLantern, kodama:waveKodama, crowBeam:waveCrowBeam, vortexRing:waveVortexRing, swoopDive:waveSwoopDive, wisplight:waveWisplight, seedfall:waveSeedfall, checkerSplit:waveCheckerSplit, rowsAlt:waveRowsAlt, clusterBurst:waveClusterBurst };
 
 // ---- boss: descriptor-driven phase machine ----
 function makeBoss(spec){ const _bd=BOSS_DESIGNS[spec.design]; const b=spawnEnemy({ x:spec.enterFrom?spec.enterFrom.x:PF_W/2, y:spec.enterFrom?spec.enterFrom.y:-60, hp:1, r:_bd?_bd.hitR:18, hue:spec.hue!=null?spec.hue:320, boss:true, score:spec.score||50000, drops:[], coro:null }); b.invuln=true; b.phaseTotal=spec.phases.length; b.phaseIndex=0; b.phasesLeft=spec.phases.length; b.spellName=''; b.inSpell=false; b.timer=null; b.hpMax=1; b.design=spec.design; b.survivalActive=false; b.survivalTotal=0; return b; }
@@ -4301,7 +4274,7 @@ const YATAGARASU_SPEC = { name:'Yatagarasu', design:'yatagarasu', hue:44, enterF
       { kind:'spell', name:'"Daybreak — Last Word"', survival:28, drops:[], cutinHue:50, body:'raw', raw:function*(b){
           const beams=[]; for(let k=0;k<3;k++){ const L=fireBeam({x:b.x,y:b.y,ang:HALFPI+k*(TAU/3),halfW:9,hue:50,warn:0.9,fire:99999,fade:0.25,len:PF_H*1.8,follow:b}); if(L) beams.push(L); }
           Director.fork(function*(){ yield* waitT(9); while(true){ const L=rng.bool(); spawnSun({x:L?-56:PF_W+56,y:120+rng.range(0,260),r:42,hitR:11,hue:48,vx:L?34:-34,vy:rng.range(-4,6)}); yield* waitT(3.0); } },b);   // suns added only after ~9s, sparse
-          let a=0,sweep=0,k2=0,t0=T; while(true){ const el=T-t0, spd=0.14+Math.min(0.32,el*0.013);   // rotation ramps ~0.14 → 0.46 rad/s over ~24s — player must be able to out-orbit the sweep (a faster ramp was理不尽)
+          let a=0,sweep=0,k2=0,t0=T; while(true){ const el=T-t0, spd=0.14+Math.min(0.32,el*0.013);   // rotation ramps ~0.14 → 0.46 rad/s over ~24s — player must be able to out-orbit the sweep
             sweep+=spd*STEP; for(let k=0;k<beams.length;k++){ const L=beams[k]; if(L&&L.alive) L.ang=HALFPI+k*(TAU/3)+sweep; }
             if(k2 % (el<13?8:6) === 0){ spiral(b,{angle:a,arms:3,speed:104,hue:(44+T*55)%360,style:'small'}); a+=0.5; } k2++; yield; } },
         onEnter:function(b){ Director.fork(function*(){ yield* moveTo(b,PF_W*0.5,PF_H*0.46,1.3,EASE.out); },b); } }
@@ -4464,7 +4437,7 @@ const TOKOYO_SPEC = { name:'Tokoyo', design:'tokoyo', hue:252, enterFrom:{x:PF_W
     ] };
 
 // ---- THE STAGE TIMELINE (declarative data + interpreter) ----
-// Boss registry: id -> spec. (Phase 8/9: resolveBoss(id, rank, diff) will apply difficulty here.)
+// Boss registry: id -> spec.
 const BOSSES = { ariel:MIDBOSS_SPEC, flowerKing:FINALBOSS_SPEC, tasokareIntro:TASOKARE_INTRO_SPEC, tasokare:TASOKARE_SPEC, twins:TWINS_SPEC, yoiIntro:YOI_INTRO_SPEC, yamauba:YAMAUBA_SPEC, yatagarasu:YATAGARASU_SPEC, fujin:FUJIN_SPEC, susanoo:SUSANOO_SPEC, tsuchigumo:TSUCHIGUMO_SPEC, tokoyo:TOKOYO_SPEC };
 
 // A stage is ONE data object; runStage() compiles its timeline into the existing Director
@@ -4491,7 +4464,7 @@ const STAGES = [
       // final boss
       {banner:'WARNING'}, {sfx:'warn'}, {flash:{color:'#ff3366',i:0.4}}, {shake:{mag:4,dur:0.6}}, {music:'boss'}, {wait:2.0},
       {boss:'flowerKing'},
-      {stageEnd:true},                 // hand off to Stage 2 (was {stageClear:true}; now no longer the terminal stage)
+      {stageEnd:true},                 // hand off to Stage 2
     ] },
   // STAGE 2 — "Twilight Petal Lane". The stage boss (Tasokare) makes an early RETREATING appearance
   // in the midboss slot (1 nonspell + 1 spell → flees), then the 道中, then returns for the full fight.
