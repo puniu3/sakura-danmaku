@@ -2757,7 +2757,7 @@ function drawHUD(){ ctx.save(); ctx.translate(PF_W,0); ctx.fillStyle=PALETTE.hud
     const gx=lx, gw=HUD_W-44, gy=y+8, gh=5, prevTh=game.grazePowerThreshold-game.grazePowerInterval, prog=active?clamp(player.grazePowerT/GRAZE_POWER_DURATION,0,1):clamp((game.grazeCount-prevTh)/Math.max(1,game.grazePowerInterval),0,1);
     ctx.fillStyle='rgba(120,255,140,0.14)'; roundRect(gx,gy,gw,gh,2.5); ctx.fill(); ctx.fillStyle=active?'hsl('+GRAZE_HUE+',100%,66%)':'rgba(185,255,106,0.85)'; roundRect(gx,gy,gw*prog,gh,2.5); ctx.fill(); } y+=30;
   if(inputMode!=='touch'&&Audio&&Audio.isMuted&&Audio.isMuted()) drawSpeakerGlyph(HUD_W-24,PF_H-12,true,0.9);   // muted indicator for key/pad (M / pad Select toggles it); touch shows state on its mute button
-  ctx.fillStyle=PALETTE.uiDim; ctx.font='9px monospace'; ctx.fillText('FPS '+(_fps|0),lx,PF_H-30); ctx.fillStyle='rgba(157,131,192,0.7)'; ctx.font='8px monospace'; ctx.fillText('Z or .  fire    X or /  bomb',lx,PF_H-18); ctx.fillText('Shift focus    M mute    P pause',lx,PF_H-9); ctx.restore();
+  ctx.fillStyle=PALETTE.uiDim; ctx.font='9px monospace'; ctx.fillText('FPS '+(_fps|0),lx,PF_H-36); ctx.fillStyle='rgba(157,131,192,0.7)'; ctx.font='8px monospace'; ctx.fillText('Arrows or WASD  move',lx,PF_H-27); ctx.fillText('Z or .  fire    X or /  bomb',lx,PF_H-18); ctx.fillText('Shift focus    M mute    P pause',lx,PF_H-9); ctx.restore();
   const b=game.boss; if(b&&!b.dead&&b.hpMax) drawBossHUD(b);
 }
 function drawBossHUD(boss){ ctx.save();
