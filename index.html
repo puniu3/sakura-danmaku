@@ -433,7 +433,7 @@ const Audio = (function(){
   let muted=(()=>{ try{ return localStorage.getItem('bh.muted')==='1'; }catch(e){ return false; } })();
   let masterVol=(()=>{ try{ const v=parseFloat(localStorage.getItem('bh.vol')); return isFinite(v)?Math.min(1,Math.max(0,v)):1; }catch(e){ return 1; } })();
   let ctx=null, masterGain=null, limiter=null, musicGain=null, musicDuck=null, sfxGain=null, cueGain=null, cueHP=null, noiseBuf=null;
-  let curTrack='none', pendingTrack=null, pendingAlign=16, pumpTimer=0, nextNoteTime=0, stepIndex=0, lastShoot=0;
+  let curTrack='none', pendingTrack=null, pendingAlign=16, pumpTimer=0, nextNoteTime=0, stepIndex=0, lastShoot=0, playOnce=false;
   const MASTER_BASE_GAIN=0.90, SCHEDULE_AHEAD=0.10, PUMP_MS=25, MUSIC_FADE=0.18, SHOOT_MIN_GAP=0.045;
   function mtof(m){ return 440*Math.pow(2,(m-69)/12); }
   function now(){ return ctx?ctx.currentTime:0; }
@@ -1723,18 +1723,19 @@ const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER,
   /*END:BGM:GEN*/
 
   function trackOf(n){ return (TRACKS && TRACKS[n]) ? TRACKS[n] : null; }
-  function pump(){ if(!ctx) return; if(nextNoteTime<ctx.currentTime) nextNoteTime=ctx.currentTime+0.06; let trk=trackOf(curTrack); if(trk){ let C=compile(trk); while(nextNoteTime<ctx.currentTime+SCHEDULE_AHEAD){ if(pendingTrack && trackOf(pendingTrack) && (stepIndex%pendingAlign)===0){ curTrack=pendingTrack; pendingTrack=null; stepIndex=0; trk=trackOf(curTrack); C=compile(trk); } scheduleTrackStep(C, musicGain, stepIndex%C.totalSteps, nextNoteTime); stepIndex++; nextNoteTime+=C.step16; } } pumpTimer=setTimeout(pump,PUMP_MS); }   // queueMusic seam-switch: at a downbeat on the pendingAlign grid (16 steps=1 bar; the dawn transition queues 32=2-bar for boss6dawn) cleanly CUT to a queued track — no crossfade. boss6↔boss6dawn share gain(0.62) so musicGain is left untouched.
+  function pump(){ if(!ctx) return; if(nextNoteTime<ctx.currentTime) nextNoteTime=ctx.currentTime+0.06; let trk=trackOf(curTrack); if(trk){ let C=compile(trk); while(nextNoteTime<ctx.currentTime+SCHEDULE_AHEAD){ if(pendingTrack && trackOf(pendingTrack) && (stepIndex%pendingAlign)===0){ curTrack=pendingTrack; pendingTrack=null; playOnce=false; stepIndex=0; trk=trackOf(curTrack); C=compile(trk); } if(playOnce && stepIndex>0 && (stepIndex%C.totalSteps)===0){ stopPump(); curTrack='none'; playOnce=false; return; } scheduleTrackStep(C, musicGain, stepIndex%C.totalSteps, nextNoteTime); stepIndex++; nextNoteTime+=C.step16; } } pumpTimer=setTimeout(pump,PUMP_MS); }   // playOnce: at the track-loop boundary, stop scheduling (the look-ahead tail rings out → silence) instead of looping — the 2周目 true-ending plays the dawn track once then quiets.   // queueMusic seam-switch: at a downbeat on the pendingAlign grid (16 steps=1 bar; the dawn transition queues 32=2-bar for boss6dawn) cleanly CUT to a queued track — no crossfade. boss6↔boss6dawn share gain(0.62) so musicGain is left untouched.
 
     function startPump(){ if(pumpTimer||!ctx) return; nextNoteTime=ctx.currentTime+0.06; pump(); }
   function stopPump(){ if(pumpTimer){ clearTimeout(pumpTimer); pumpTimer=0; } }
   function rampMusic(target,dur){ if(!musicGain) return; const t=now(); musicGain.gain.cancelScheduledValues(t); musicGain.gain.setValueAtTime(Math.max(0.0001,musicGain.gain.value),t); musicGain.gain.exponentialRampToValueAtTime(Math.max(0.0001,target),t+dur); }
   function fadeOutMusic(dur){ if(!ctx||!musicGain) return; const d=(dur>0)?dur:MUSIC_FADE, trk=curTrack; rampMusic(0.0001,d); setTimeout(()=>{ if(curTrack===trk){ stopPump(); curTrack='none'; } },(d+0.05)*1000); }   // one-shot tail fade: ramp to silence over d, then stop the pump so the loop is never regenerated (used by the GAME OVER lament)
+  function playToEnd(){ if(!ctx||curTrack==='none') return; playOnce=true; if(!pumpTimer) startPump(); }   // let the current track finish its current pass and NOT loop — at the next loop boundary the pump stops and the tail rings out to silence (the 2周目 true-ending dawn track)
   // Hard restart (pause-menu RESTART): completely stop whatever is playing and start `name` from the top.
   // The currently-playing bus is fast-faded AND DETACHED so every note already in the pump look-ahead (plus
   // its release tail) dies on an orphaned node — the new track gets a FRESH bus, so there is no carry-over /
   // "doubled" overlap (which a single shared bus' fade-down-then-up causes by reviving the old look-ahead notes).
-  function restartMusic(name){ pendingTrack=null; if(!ctx){ curTrack=name; stepIndex=0; return; } stopPump(); const oldBus=musicGain, t=now(); oldBus.gain.cancelScheduledValues(t); oldBus.gain.setValueAtTime(Math.max(0.0001,oldBus.gain.value),t); oldBus.gain.exponentialRampToValueAtTime(0.0001,t+0.07); setTimeout(()=>{ try{ oldBus.disconnect(); }catch(e){} },700); musicGain=ctx.createGain(); musicGain.gain.value=0.0001; musicGain.connect(musicDuck); curTrack=name; stepIndex=0; if(name==='none') return; const trk=trackOf(name), target=(trk&&trk.gain)?trk.gain:0.55; setTimeout(()=>{ if(curTrack!==name||!ctx) return; nextNoteTime=ctx.currentTime+0.04; startPump(); rampMusic(target,MUSIC_FADE); },130); }
-  function playMusic(name,restart){ if(name!=='none' && !trackOf(name)) return; if(restart){ restartMusic(name); return; } pendingTrack=null; if(!ctx){ curTrack=name; return; } if(name===curTrack) return; if(name==='none'){ rampMusic(0.0001,MUSIC_FADE); setTimeout(()=>{ if(curTrack==='none') stopPump(); },(MUSIC_FADE+0.3)*1000); curTrack='none'; return; } const trk=trackOf(name); const target=(trk&&trk.gain)?trk.gain:0.55; if(curTrack==='none'){ curTrack=name; stepIndex=0; startPump(); rampMusic(target,MUSIC_FADE); } else { rampMusic(0.0001,MUSIC_FADE); setTimeout(()=>{ curTrack=name; stepIndex=0; if(ctx) nextNoteTime=ctx.currentTime+0.04; rampMusic(target,MUSIC_FADE); },MUSIC_FADE*1000); } }
+  function restartMusic(name){ pendingTrack=null; playOnce=false; if(!ctx){ curTrack=name; stepIndex=0; return; } stopPump(); const oldBus=musicGain, t=now(); oldBus.gain.cancelScheduledValues(t); oldBus.gain.setValueAtTime(Math.max(0.0001,oldBus.gain.value),t); oldBus.gain.exponentialRampToValueAtTime(0.0001,t+0.07); setTimeout(()=>{ try{ oldBus.disconnect(); }catch(e){} },700); musicGain=ctx.createGain(); musicGain.gain.value=0.0001; musicGain.connect(musicDuck); curTrack=name; stepIndex=0; if(name==='none') return; const trk=trackOf(name), target=(trk&&trk.gain)?trk.gain:0.55; setTimeout(()=>{ if(curTrack!==name||!ctx) return; nextNoteTime=ctx.currentTime+0.04; startPump(); rampMusic(target,MUSIC_FADE); },130); }
+  function playMusic(name,restart){ if(name!=='none' && !trackOf(name)) return; playOnce=false; if(restart){ restartMusic(name); return; } pendingTrack=null; if(!ctx){ curTrack=name; return; } if(name===curTrack) return; if(name==='none'){ rampMusic(0.0001,MUSIC_FADE); setTimeout(()=>{ if(curTrack==='none') stopPump(); },(MUSIC_FADE+0.3)*1000); curTrack='none'; return; } const trk=trackOf(name); const target=(trk&&trk.gain)?trk.gain:0.55; if(curTrack==='none'){ curTrack=name; stepIndex=0; startPump(); rampMusic(target,MUSIC_FADE); } else { rampMusic(0.0001,MUSIC_FADE); setTimeout(()=>{ curTrack=name; stepIndex=0; if(ctx) nextNoteTime=ctx.currentTime+0.04; rampMusic(target,MUSIC_FADE); },MUSIC_FADE*1000); } }
   function queueMusic(name,bars){ if(name!=='none' && !trackOf(name)) return; if(!ctx || curTrack==='none' || name==='none'){ playMusic(name); return; } if(name===curTrack || name===pendingTrack) return; pendingAlign=Math.max(1,bars||1)*16; pendingTrack=name; if(!pumpTimer) startPump(); }   // 音楽の切れ目で自然に繋ぐ: クロスフェードせず pump が次の境界(bars 小節, 既定1)頭でクリーンにカット切替。何も鳴ってない時は即時 playMusic にフォールバック。
   function applyMuteToCtx(){ if(!ctx) return; if(muted){ if(ctx.state==='running') ctx.suspend(); } else { tryResume(); } }
   function setMuted(m){ muted=!!m; try{ localStorage.setItem('bh.muted',muted?'1':'0'); }catch(e){} applyMuteToCtx(); }
@@ -1764,7 +1765,7 @@ const TRACKS = { stage: STAGE, midboss: MIDBOSS, boss: BOSS, gameover: GAMEOVER,
     tone({t0:t,type:'sawtooth',f0:base*2.0,f1:base*0.9,glideExp:true,peak:0.08,atk:0.002,dec:0.05,sus:0.32,rel:0.1,dur:0.22,filter:'lowpass',filterFreq:3200,filterFreq1:1100});
     tone({t0:t,type:'sine',f0:base*1.2,f1:base*0.55,glideExp:true,peak:0.055,atk:0.001,dec:0.04,sus:0.28,rel:0.08,dur:0.18});
     noise({t0:t,filter:'bandpass',filterFreq:base*3.0,filterFreq1:base*1.0,q:1.6,peak:0.045,atk:0.001,rel:0.12,dur:0.14}); }
-  return { unlock, toggleMute, setMuted, isMuted, sfxShoot, sfxEnemyHit, sfxEnemyDeath, sfxGraze, sfxGrazeHit, sfxBomb, sfxPlayerDeath, sfxSpellDeclare, sfxItemGet, sfxExtend, sfxOneUpCadence, sfxBossWarn, sfxPowerShot, sfxBeam, playMusic, queueMusic, fadeOutMusic, suspendForHidden, resumeFromHidden };
+  return { unlock, toggleMute, setMuted, isMuted, sfxShoot, sfxEnemyHit, sfxEnemyDeath, sfxGraze, sfxGrazeHit, sfxBomb, sfxPlayerDeath, sfxSpellDeclare, sfxItemGet, sfxExtend, sfxOneUpCadence, sfxBossWarn, sfxPowerShot, sfxBeam, playMusic, queueMusic, fadeOutMusic, playToEnd, suspendForHidden, resumeFromHidden };
 })();
 
 // sfx shim (method-name facade used by systems/stage)
@@ -2025,8 +2026,14 @@ function drawSceneryGhost(sc){
   ctx.globalCompositeOperation='lighter';   // horizon glow — the lower field smoulders green
   { const gx=PF_W*0.5, gy=PF_H*0.66, gg=ctx.createRadialGradient(gx,gy,0,gx,gy,PF_W*0.95); gg.addColorStop(0,'rgba(120,235,165,0.26)'); gg.addColorStop(1,'rgba(120,235,165,0)'); ctx.fillStyle=gg; ctx.fillRect(0,PF_H*0.42,PF_W,PF_H*0.58); }
   ctx.globalCompositeOperation='source-over';
-  ctx.fillStyle='rgba(20,48,42,0.85)';      // far-shore silhouettes (the other shore in the haze)
-  for(const s of _ghostShore){ ctx.beginPath(); ctx.moveTo(s.cx-s.w,s.yb); ctx.quadraticCurveTo(s.cx,s.yb-s.h,s.cx+s.w,s.yb); ctx.lineTo(s.cx+s.w,s.yb+46); ctx.lineTo(s.cx-s.w,s.yb+46); ctx.closePath(); ctx.fill(); }
+  { // far-shore silhouettes (the other shore in the haze) — the ORIGINAL humps (same top arcs/positions), but
+    // the unnatural vertical lines are gone: each hump is closed with a mirrored bottom arc (a soft lens whose
+    // left/right ends taper to points — no vertical sides), all humps share ONE union path (a single fill, so
+    // overlaps no longer stack into darker vertical bands), and a vertical foot-fade melts them into the water.
+    const sg=ctx.createLinearGradient(0,300,0,372); sg.addColorStop(0,'rgba(20,48,42,0.85)'); sg.addColorStop(0.5,'rgba(20,48,42,0.85)'); sg.addColorStop(1,'rgba(20,48,42,0)');
+    ctx.fillStyle=sg; ctx.beginPath();
+    for(const s of _ghostShore){ ctx.moveTo(s.cx-s.w,s.yb); ctx.quadraticCurveTo(s.cx,s.yb-s.h,s.cx+s.w,s.yb); ctx.quadraticCurveTo(s.cx,s.yb+s.h,s.cx-s.w,s.yb); ctx.closePath(); }
+    ctx.fill(); }
   { const wb=ctx.createLinearGradient(0,GHOST_HOR,0,PF_H); wb.addColorStop(0,'rgba(20,52,46,0)'); wb.addColorStop(1,'rgba(26,66,54,0.5)'); ctx.fillStyle=wb; ctx.fillRect(0,GHOST_HOR,PF_W,PF_H-GHOST_HOR); }  // marsh-water base
   const SP=GHOST_SPAN, list=depthList(_ghostEls,sc,SP);   // far→near, painted back-to-front
   for(const o of list){ const p=o.p, e=o.e; if(p<=0.02) continue;
@@ -2741,11 +2748,12 @@ function drawVignette(t){ if(_vig) ctx.drawImage(_vig,0,0,PF_W,PF_H); }
 // ---- HUD ----
 function icon_heart(x,y){ ctx.beginPath(); ctx.moveTo(x,y+4); ctx.bezierCurveTo(x-7,y-3,x-3,y-7,x,y-3); ctx.bezierCurveTo(x+3,y-7,x+7,y-3,x,y+4); ctx.fill(); }
 function icon_star(x,y){ ctx.save(); ctx.translate(x,y-1); ctx.beginPath(); for(let i=0;i<10;i++){ const r=(i&1)?2.6:6, a=-HALFPI+i*Math.PI/5, X=Math.cos(a)*r, Y=Math.sin(a)*r; i?ctx.lineTo(X,Y):ctx.moveTo(X,Y); } ctx.closePath(); ctx.fill(); ctx.restore(); }
+function icon_sakura(x,y){ ctx.save(); ctx.translate(x,y); for(let i=0;i<5;i++){ ctx.save(); ctx.rotate(-HALFPI+i*TAU/5); ctx.beginPath(); ctx.ellipse(0,-2.9,1.7,2.7,0,0,TAU); ctx.fill(); ctx.restore(); } ctx.beginPath(); ctx.arc(0,0,1.2,0,TAU); ctx.fill(); ctx.restore(); }   // small 5-petal blossom (HUD glyph, current fillStyle)
 function drawHUD(){ ctx.save(); ctx.translate(PF_W,0); ctx.fillStyle=PALETTE.hudBg; ctx.fillRect(0,0,HUD_W,PF_H); ctx.fillStyle=PALETTE.hudPanel; ctx.fillRect(8,8,HUD_W-16,PF_H-16); ctx.strokeStyle=PALETTE.hudEdge; ctx.lineWidth=2; ctx.strokeRect(8,8,HUD_W-16,PF_H-16); ctx.textAlign='left'; let y=34; const lx=22; const label=s=>{ ctx.fillStyle=PALETTE.uiDim; ctx.font='10px "Trebuchet MS",sans-serif'; ctx.textAlign='left'; ctx.fillText(s,lx,y); }; const val=(s,col)=>{ ctx.fillStyle=col||PALETTE.uiText; ctx.font='bold 17px "Trebuchet MS",sans-serif'; ctx.textAlign='right'; ctx.fillText(s,HUD_W-22,y); ctx.textAlign='left'; };
   const lives=player?player.lives:0, bombs=player?player.bombs:0, pw=player?player.power:0;
   label('HiScore'); val(pad(game.hi||0,9),PALETTE.uiGold); y+=22; label('Score'); val(pad(game.score||0,9),PALETTE.uiText); y+=16;
   { // score multiplier readout (dim at x1.0, heats toward the cap) + extend fill meter (progress to the next 1M -> 1UP)
-    if(run&&run.loop>=1){ ctx.fillStyle=PALETTE.uiGold; ctx.font='bold 11px "Trebuchet MS",sans-serif'; ctx.textAlign='left'; ctx.fillText('LOOP II',lx,y); }   // 2周目 badge (left slot of the multiplier row — the right-aligned x-mult shares the line, no collision)
+    if(run&&run.loop>=1){ ctx.fillStyle=PALETTE.uiGold; icon_sakura(lx+5,y-5); }   // 2周目 badge: a small gold sakura in the multiplier-row left slot (replaced the old 'LOOP II' text — the right-aligned x-mult shares the line, no collision)
     const mul=Math.min(SCORE_MUL_MAX_APPLY,game.scoreMul), t=Math.max(0,(mul-1)/(SCORE_MUL_MAX_APPLY-1));
     ctx.fillStyle=(t<0.01)?PALETTE.uiDim:'hsl('+(48-t*40)+',100%,'+(60+t*10)+'%)'; ctx.font='bold 12px "Trebuchet MS",sans-serif'; ctx.textAlign='right'; ctx.fillText('x'+mul.toFixed(1),HUD_W-22,y); ctx.textAlign='left';
     const emw=HUD_W-44, eh=4, my=y+5, ef=(game.score%EXTEND_INTERVAL)/EXTEND_INTERVAL; ctx.fillStyle=PALETTE.powerBg; roundRect(lx,my,emw,eh,2); ctx.fill(); ctx.fillStyle=PALETTE.uiGold; roundRect(lx,my,emw*ef,eh,2); ctx.fill();
@@ -3403,7 +3411,7 @@ function updateGameSystems(dt){ game.stateT+=dt;
       if(!game._goFade && game.stateT>GAMEOVER_AUTORET-GAMEOVER_FADE){ game._goFade=true; Audio.fadeOutMusic(GAMEOVER_FADE); }   // begin the gentle tail fade so silence lands right at the auto-return
       if(keyEdge('Enter')||game.stateT>GAMEOVER_AUTORET) setState(STATE.TITLE);
       break;
-    case STATE.STAGECLEAR: if(keyEdge('Enter')||game.stateT>8) setState(STATE.TITLE); break;
+    case STATE.STAGECLEAR: if(keyEdge('Enter')) setState(STATE.TITLE); break;   // hold the ALL CLEAR screen until the player inputs (no time-based auto-return)
   }
   game.spellIntensity=approach(game.spellIntensity,(game.boss&&game.boss.inSpell&&!game.boss.dead)?1:0,dt*2.5);
 }
@@ -3415,7 +3423,7 @@ function setState(s){ const prev=game.state; game.state=s; game.stateT=0;
   else if(s===STATE.PAUSED){ game.paused=true; }
   else if(s===STATE.PLAYING){ game.paused=false; }
   else if(s===STATE.GAMEOVER){ game.paused=false; game._goFade=false; saveHiScore(); enemyBullets.clear(); lasers.clear(); wells.clear(); Audio.playMusic('gameover'); }   // somber lament; tail fades out (GAMEOVER_FADE) then auto-returns to TITLE at GAMEOVER_AUTORET (Enter also returns early)
-  else if(s===STATE.STAGECLEAR){ game.paused=false; saveHiScore(); enemyBullets.clear(); lasers.clear(); wells.clear(); game.boss=null; if(player) endGrazePower(); Audio.playMusic('none'); }
+  else if(s===STATE.STAGECLEAR){ game.paused=false; saveHiScore(); enemyBullets.clear(); lasers.clear(); wells.clear(); game.boss=null; if(player) endGrazePower(); Audio.playToEnd(); }   // let the dawn track (boss6dawn) finish its current pass then quiet — no loop — while the ALL CLEAR screen waits for the player's input
 }
 // run = one campaign playthrough. startRun resets the whole loadout (score/lives/bombs/power);
 // enterStage does the per-stage spawn reset and CARRIES the run loadout; advanceStage steps the
@@ -4229,9 +4237,14 @@ const YOI_INTRO_SPEC = { name:'Yoi', design:'twinYoi', hue:265, enterFrom:{x:PF_
 const YAMAUBA_SPEC = { name:'Yamauba', design:'yamauba', hue:210, enterFrom:{x:PF_W/2,y:-70}, enterTo:{x:PF_W/2,y:150}, score:100000, drops:['bomb','bigpower','point','point','point','point','power'],
     phases:[
       // 1 — nonspell: the white-hair NAGI — a wide thread-rake sweeping back and forth + periodic aimed thread bursts
-      { kind:'nonspell', hp:1320, body:'raw', raw:function*(b){ let dir=1, base=HALFPI-0.55;
+      { kind:'nonspell', hp:1320, body:'raw', raw:function*(b){ let dir=1, base=HALFPI-0.55; const L=(run&&run.loop>=1);
           Director.fork(function*(){ while(true){ aimedShot(b,{n:4,spread:0.5,speed:130,hue:205,style:'mid'}); yield* waitT(1.3); } },b);
-          while(true){ pat.nWaySpread(b,{count:9,spread:0.85,baseAngle:base,speed:116,hue:210,hueSpread:26,style:'rice'}); base+=dir*0.11; if(base>HALFPI+0.55||base<HALFPI-0.55) dir=-dir; yield* waitT(0.15); } },
+          // the rake fan is a threadable curtain — densifying the SAME spread (loopN 9→13) would shrink the lanes
+          // into a wall. loop 2 keeps count:9 (noLoop) and adds a SECOND faster fan, half-step offset so it interleaves
+          // BETWEEN the base lanes (more pressure, gap stays threadable), NOT a denser single fan.
+          while(true){ noLoop(()=>{ pat.nWaySpread(b,{count:9,spread:0.85,baseAngle:base,speed:116,hue:210,hueSpread:26,style:'rice'});
+                                    if(L) pat.nWaySpread(b,{count:8,spread:0.85,baseAngle:base+0.85/16,speed:150,hue:214,hueSpread:26,style:'rice'}); });
+            base+=dir*0.11; if(base>HALFPI+0.55||base<HALFPI-0.55) dir=-dir; yield* waitT(0.15); } },
         onEnter:_sway(PF_W*0.36,PF_W*0.64,150,2.4) },
       // 2 — spell: 糸車 — a falling thread-curtain woven from fine counter-rotating rice spirals + aimed hair whips
       { kind:'spell', name:'Thread Sign "Spinning-Wheel Veil"', hp:1680, drops:['point','point','point','power'], cutinHue:210, body:'raw', raw:function*(b){ let a=0;
@@ -4300,12 +4313,17 @@ const FUJIN_SPEC = { name:'Fūjin', design:'fujin', hue:158, enterFrom:{x:PF_W/2
     phases:[
       // 1 nonspell — a continuous wide gust-rake whose centre leans to alternating sides, punctuated by periodic
       // strong wide gusts, over a rain sheet + steady aimed pressure.
-      { kind:'nonspell', hp:1400, body:'raw', raw:function*(b){
+      { kind:'nonspell', hp:1400, body:'raw', raw:function*(b){ const L=(run&&run.loop>=1);
           Director.fork(function*(){ while(true){ rain(b,{across:PF_W,count:6,speed:74,gravity:30,hue:150,style:'rice'}); yield* waitT(0.6); } },b);
           Director.fork(function*(){ while(true){ aimedShot(b,{n:3,spread:0.32,speed:152,hue:152,style:'mid'}); yield* waitT(0.82); } },b);
+          // both gust fans are threadable curtains — densifying the SAME spread (loopN 9→13 / 13→18) closes the lanes
+          // into a wall. loop 2 keeps the authored counts (noLoop) and adds a SECOND faster fan, half-step offset so it
+          // interleaves BETWEEN the base lanes (more pressure, gap stays threadable), NOT a denser single fan.
           let k=0; while(true){ const lean=Math.sin(k*0.17)*0.72;
-            pat.nWaySpread(b,{count:9,spread:0.92,baseAngle:HALFPI+lean,speed:132,hue:158,hueSpread:20,style:'rice'});
-            if(k%7===0) pat.nWaySpread(b,{count:13,spread:1.3,baseAngle:HALFPI+((k%14<7)?0.85:-0.85),speed:158,hue:152,hueSpread:18,style:'rice'});   // periodic STRONG gust to an alternating side
+            noLoop(()=>{ pat.nWaySpread(b,{count:9,spread:0.92,baseAngle:HALFPI+lean,speed:132,hue:158,hueSpread:20,style:'rice'});
+                         if(L) pat.nWaySpread(b,{count:8,spread:0.92,baseAngle:HALFPI+lean+0.92/16,speed:168,hue:162,hueSpread:20,style:'rice'}); });
+            if(k%7===0) noLoop(()=>{ const gb=HALFPI+((k%14<7)?0.85:-0.85); pat.nWaySpread(b,{count:13,spread:1.3,baseAngle:gb,speed:158,hue:152,hueSpread:18,style:'rice'});   // periodic STRONG gust to an alternating side
+                                     if(L) pat.nWaySpread(b,{count:12,spread:1.3,baseAngle:gb+1.3/24,speed:194,hue:148,hueSpread:18,style:'rice'}); });
             k++; yield* waitT(0.16); } },
         onEnter:_sway(PF_W*0.34,PF_W*0.66,150,2.3) },
       // 2 spell — thick slow counter-spirals (a vortex foreshadow — visual only, NO well) over aimed gust sprays.
@@ -4670,7 +4688,7 @@ function* runStage(stage){
     else if(e.flash)        screenFlash(e.flash.color, e.flash.i);
     else if(e.shake)        shake(e.shake.mag, e.shake.dur);
     else if(e.stageEnd)     { screenFlash('#ffffff',0.8); banner('STAGE CLEAR'); Audio.fadeOutMusic(1.4); yield* waitT(2.8); advanceStage(); return; }   // mid-campaign handoff: advance to the next stage (deferred via run._advanceTo) WITHOUT the terminal all-clear; next stage's music starts in enterStage
-    else if(e.stageClear)   { Audio.fadeOutMusic(1.6); screenFlash('#fffaf0',0.5); yield* waitT(2.2); if(run&&run.loop===0){ banner('THE DREAM DEEPENS'); yield* waitT(2.0); } advanceStage(); return; }   // terminal: last stage of the run -> advanceStage()->onStageClear(). The 常夜 defeat already ran the long tokoyoFinale (岩戸開き). On 1周目 clear, onStageClear loops back into a harder 2周目 — announce it over the dawn-lit field BEFORE the loopback (run.loop is still 0 here; advanceStage flips it). On 2周目 clear → STAGECLEAR true ending (the overlay carries the closing text → no redundant banner).
+    else if(e.stageClear)   { screenFlash('#fffaf0',0.5); if(run&&run.loop===0){ Audio.fadeOutMusic(1.6); yield* waitT(2.6); } else { yield* waitT(2.2); } advanceStage(); return; }   // terminal: last stage -> advanceStage()->onStageClear(). The 常夜 defeat already ran tokoyoFinale (岩戸開き). 1周目: fade the dawn track + loop straight back into a harder 2周目 (no banner). 2周目 (TRUE ending): keep boss6dawn playing — setState(STAGECLEAR) lets it play to the track end then quiet.
   }
 }
 
