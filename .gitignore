@@ -23,6 +23,10 @@ sfx-demo.html
 balance-demo.html
 stage3-demo.html
 
+# Player-ship candidate preview harness (throwaway; visual-4choice audition for
+# roadmap task D, port the chosen drawShip into index.html drawPlayer on 反映)
+ship-demo.html
+
 # Endurance-bar presentation tuning harness (throwaway; port the chosen look into
 # index.html drawSurvivalBar on 反映, then this can be deleted)
 endurance-demo.html

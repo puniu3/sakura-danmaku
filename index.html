@@ -136,7 +136,14 @@ const STATE = { TITLE:0, PLAYING:1, PAUSED:2, GAMEOVER:3, STAGECLEAR:4,
 // pulled in to 11.6s so we leave just before the 12.0s loop seam (never re-attacking A5), and the
 // last GAMEOVER_FADE seconds gently fade the tail to silence so the exit lands on a clean break.
 const GAMEOVER_AUTORET = 11.6, GAMEOVER_FADE = 0.7;
-const GAME_KEYS = new Set(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','ShiftLeft','ShiftRight','KeyZ','KeyX','Escape','KeyP','Enter','KeyM']);
+// Period+IntlRo = fire, Slash = bomb, RightShift = focus → the 逆手 (left-hand-WASD) right-hand grip is
+// "RightShift + its 2 left-neighbour keys", self-contained with NO gap on every physical layout:
+//   ANSI/ISO/Chinese/Korean: [Period(fire) Slash(bomb) RShift]   (Chinese=ANSI 104; Korean's extra 한/영·한자 keys split the spacebar, not this row)
+//   JIS/Brazil-ABNT2:        [Slash(bomb) IntlRo(fire) RShift]   (these insert IntlRo next to RShift; Period stays an outer fire alias)
+// IntlRo SHARES Period's fire role (not bomb) so the immediate 3-key cluster never has a hole. Bound by
+// physical KeyboardEvent.code, so positions are layout-stable (only printed labels drift). In GAME_KEYS so
+// preventDefault kills the browser default (e.g. '/' = Firefox quick-find).
+const GAME_KEYS = new Set(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','ShiftLeft','ShiftRight','KeyZ','KeyX','Escape','KeyP','Enter','KeyM','Period','Slash','IntlRo']);
 
 const TAU = Math.PI*2, HALFPI = Math.PI/2, DEG = Math.PI/180;
 const DEFAULT_R = 4.5;
@@ -1772,7 +1779,7 @@ const PALETTE={
   uiText:'#ffe9fb', uiDim:'#9d83c0', uiGold:'#ffd45e',
   life:'#ff5d8f', bomb:'#80fadb', graze:'#b9ff6a',  // bomb = teal hsl(165,92%,74%) = the bomb item's top-stop colour (ITEM_HUE.bomb=165) so HUD↔item read as one resource
   power0:'#ffb347', power1:'#ffe08a', powerBg:'#2a1840',
-  ship:'#f7fbff', shipTrim:'#8fd0ff', engine:'#6cf0ff', hitRing:'#ff3b6b', option:'#bff0ff',
+  ship:'#f7fbff', shipTrim:'#8fd0ff', engine:'#6cf0ff', hitRing:'#ff3b6b', option:'#bff0ff', shipAccent:'#ff9ed6',
   bossBody:'#2a1030', bossRim:'#ff7ae0', auraA:'#ff5ec4', auraB:'#7a5cff',
   hp0:'#ff5e8a', hp1:'#ffd45e', timerWarn:'#ff4040', banner:'rgba(20,6,34,0.82)'
 };
@@ -2574,7 +2581,68 @@ function drawItems(t){
   }
   ctx.textAlign='left'; ctx.textBaseline='alphabetic';
 }
-function drawPlayer(t){ if(!player||player.dead) return; const x=player.x,y=player.y; let vis=1; if(player.invuln>0) vis=(Math.floor(player.invuln/RESPAWN_BLINK)&1)?0.35:1; ctx.save(); ctx.globalAlpha=vis; ctx.save(); ctx.globalCompositeOperation='lighter'; const eg=ctx.createRadialGradient(x,y+10,1,x,y+10,12+Math.sin(t*20)*2); eg.addColorStop(0,hexA(PALETTE.engine,0.9)); eg.addColorStop(1,hexA(PALETTE.engine,0)); ctx.fillStyle=eg; ctx.beginPath(); ctx.arc(x,y+10,12,0,TAU); ctx.fill(); ctx.restore(); ctx.fillStyle=PALETTE.ship; ctx.beginPath(); ctx.moveTo(x,y-11); ctx.lineTo(x-8,y+8); ctx.lineTo(x,y+4); ctx.lineTo(x+8,y+8); ctx.closePath(); ctx.fill(); ctx.fillStyle=PALETTE.shipTrim; ctx.beginPath(); ctx.moveTo(x,y-6); ctx.lineTo(x-4,y+5); ctx.lineTo(x+4,y+5); ctx.closePath(); ctx.fill(); if(player.options) for(const o of player.options){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.fillStyle=PALETTE.option; ctx.beginPath(); ctx.arc(x+o.x,y+o.y,3.4,0,TAU); ctx.fill(); ctx.restore(); } if(player.focus){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.translate(x,y); ctx.rotate(t*2.2); ctx.strokeStyle=PALETTE.hitRing; ctx.lineWidth=1.6; for(let s=0;s<3;s++){ ctx.rotate(TAU/3); ctx.beginPath(); ctx.arc(0,0,9,0.2,Math.PI*0.8); ctx.stroke(); } ctx.restore(); ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.arc(x,y,PLAYER_R,0,TAU); ctx.fill(); ctx.fillStyle=PALETTE.hitRing; ctx.beginPath(); ctx.arc(x,y,1.2,0,TAU); ctx.fill(); }
+// Player craft = 折り鶴 (origami paper-crane), adopted from the roadmap-D candidate audition (ship-demo).
+// Drawn centered at (x,y), nose toward -y; self-contained (own additive engine glow + faceted hull),
+// wrapped in save/restore so it never leaks ctx state. P maps the ship-identity palette; the uniform
+// hit-dot + focus ring are still drawn by drawPlayer (not here), exactly as in the audition harness.
+function drawShip(c,x,y,t,focus){ c.save(); c.translate(x,y);
+  const P={hull:PALETTE.ship,trim:PALETTE.shipTrim,engine:PALETTE.engine,accent:PALETTE.shipAccent,core:'#ffffff'};
+  // ---- soft engine glow (additive) ----
+  c.save();
+  c.globalCompositeOperation='lighter';
+  var pulse=0.55+0.45*Math.sin(t*7.3);
+  var flick=0.5+0.5*Math.sin(t*17.1+1.3);
+  var gRad=(focus?6:8)+pulse*2.5;   // halo kept SMALLER than the wingspan (±11.5) so the white hull reads as a craft, not a light ball — at 1× game scale a wide glow swallows the faceted hull
+  var glow=c.createRadialGradient(0,9,0,0,9,gRad);
+  glow.addColorStop(0,P.engine); glow.addColorStop(0.5,P.trim); glow.addColorStop(1,'rgba(0,0,0,0)');
+  c.globalAlpha=focus?0.4:0.55; c.fillStyle=glow;
+  c.beginPath(); c.arc(0,9,gRad,0,TAU); c.fill();
+  // twin folded-paper exhaust streaks (short — a flame, not a tail)
+  c.globalAlpha=0.35+0.3*pulse; c.fillStyle=P.engine;
+  var fl=(focus?3:4.5)+(pulse*0.5+flick*0.3)*(focus?2.5:4);
+  c.beginPath();
+  c.moveTo(-3.0,5); c.lineTo(-1.0,6.2); c.lineTo(-2.0,6+fl); c.closePath();
+  c.moveTo(3.0,5); c.lineTo(1.0,6.2); c.lineTo(2.0,6+fl); c.closePath();
+  c.fill();
+  c.globalAlpha=0.45+0.35*flick; c.fillStyle=P.core;
+  c.beginPath(); c.moveTo(-0.8,5.5); c.lineTo(0.8,5.5); c.lineTo(0,6+fl*0.7); c.closePath(); c.fill();
+  c.restore();
+  // ---- crane body: faceted folded-paper craft ----
+  c.save(); c.lineJoin='miter'; c.lineWidth=0.8;
+  var wing=focus?8.5:11.5;   // wing sweep retracts in focus
+  // far/under wing fold (shadowed underside)
+  c.fillStyle=P.hull; c.globalAlpha=0.55;
+  c.beginPath(); c.moveTo(0,-2); c.lineTo(-wing,4.5); c.lineTo(-wing*0.5,7.5); c.lineTo(0,4); c.lineTo(wing*0.5,7.5); c.lineTo(wing,4.5); c.closePath(); c.fill();
+  c.globalAlpha=1;
+  // LEFT WING — lit upper facet + cyan-shaded lower fold
+  c.fillStyle=P.hull; c.beginPath(); c.moveTo(0,-3); c.lineTo(-wing,3.5); c.lineTo(-2.2,4.5); c.closePath(); c.fill();
+  c.fillStyle=P.trim; c.globalAlpha=0.32; c.beginPath(); c.moveTo(-wing,3.5); c.lineTo(-wing*0.55,6.8); c.lineTo(-2.2,4.5); c.closePath(); c.fill(); c.globalAlpha=1;
+  // RIGHT WING — mirror
+  c.fillStyle=P.hull; c.beginPath(); c.moveTo(0,-3); c.lineTo(wing,3.5); c.lineTo(2.2,4.5); c.closePath(); c.fill();
+  c.fillStyle=P.trim; c.globalAlpha=0.32; c.beginPath(); c.moveTo(wing,3.5); c.lineTo(wing*0.55,6.8); c.lineTo(2.2,4.5); c.closePath(); c.fill(); c.globalAlpha=1;
+  // CENTRAL SPINE — folded paper body/neck (brightest facet) + shaded right half for the crease
+  c.fillStyle=P.hull; c.beginPath(); c.moveTo(0,-10.5); c.lineTo(-2.6,-1); c.lineTo(-2.0,5); c.lineTo(0,6.5); c.lineTo(2.0,5); c.lineTo(2.6,-1); c.closePath(); c.fill();
+  c.fillStyle=P.trim; c.globalAlpha=0.22; c.beginPath(); c.moveTo(0,-10.5); c.lineTo(2.6,-1); c.lineTo(2.0,5); c.lineTo(0,6.5); c.closePath(); c.fill(); c.globalAlpha=1;
+  // FOLDED BEAK NOSE — sakura-pink accent tip + lit ridge
+  c.fillStyle=P.accent; c.beginPath(); c.moveTo(0,-13); c.lineTo(-2.2,-8.5); c.lineTo(0,-9.5); c.lineTo(2.2,-8.5); c.closePath(); c.fill();
+  c.fillStyle=P.hull; c.globalAlpha=0.6; c.beginPath(); c.moveTo(0,-13); c.lineTo(0,-9.5); c.lineTo(-2.2,-8.5); c.closePath(); c.fill(); c.globalAlpha=1;
+  // crisp cyan rim-light creases (additive over facets)
+  c.save(); c.globalCompositeOperation='lighter'; c.strokeStyle=P.trim; c.globalAlpha=focus?0.95:0.8; c.lineWidth=1;
+  c.beginPath();
+  c.moveTo(0,-12); c.lineTo(0,6.5);
+  c.moveTo(0,-3); c.lineTo(-wing,3.5); c.moveTo(0,-3); c.lineTo(wing,3.5);
+  c.moveTo(-wing,3.5); c.lineTo(-2.2,4.5); c.moveTo(wing,3.5); c.lineTo(2.2,4.5);
+  c.stroke(); c.restore();
+  // bright cockpit core node where neck meets wings
+  c.save(); c.globalCompositeOperation='lighter';
+  c.globalAlpha=focus?0.85:0.55+0.25*Math.sin(t*5.0);
+  var cg=c.createRadialGradient(0,-4,0,0,-4,focus?3.4:2.7);
+  cg.addColorStop(0,P.core); cg.addColorStop(0.6,P.trim); cg.addColorStop(1,'rgba(0,0,0,0)');
+  c.fillStyle=cg; c.beginPath(); c.arc(0,-4,focus?3.4:2.7,0,TAU); c.fill(); c.restore();
+  c.restore();
+  c.restore();
+}
+function drawPlayer(t){ if(!player||player.dead) return; const x=player.x,y=player.y; let vis=1; if(player.invuln>0) vis=(Math.floor(player.invuln/RESPAWN_BLINK)&1)?0.35:1; ctx.save(); ctx.globalAlpha=vis; drawShip(ctx,x,y,t,player.focus); if(player.options) for(const o of player.options){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.fillStyle=PALETTE.option; ctx.beginPath(); ctx.arc(x+o.x,y+o.y,3.4,0,TAU); ctx.fill(); ctx.restore(); } if(player.focus){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.translate(x,y); ctx.rotate(t*2.2); ctx.strokeStyle=PALETTE.hitRing; ctx.lineWidth=1.6; for(let s=0;s<3;s++){ ctx.rotate(TAU/3); ctx.beginPath(); ctx.arc(0,0,9,0.2,Math.PI*0.8); ctx.stroke(); } ctx.restore(); ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.arc(x,y,PLAYER_R,0,TAU); ctx.fill(); ctx.fillStyle=PALETTE.hitRing; ctx.beginPath(); ctx.arc(x,y,1.2,0,TAU); ctx.fill(); }
   if(player.grazePowerT>0){ const frac=clamp(player.grazePowerT/GRAZE_POWER_DURATION,0,1); ctx.save(); ctx.translate(x,y); ctx.rotate(t*1.6);  // remaining-time ring — source-over (NO additive glow, so it won't impede dodging); identical in focus & non-focus
     ctx.strokeStyle='hsla('+GRAZE_HUE+',95%,68%,0.9)'; ctx.lineWidth=2.5; ctx.lineCap='round'; ctx.beginPath(); ctx.arc(0,0,18,-HALFPI,-HALFPI+TAU*frac); ctx.stroke(); ctx.restore(); }
   ctx.globalAlpha=1; ctx.restore(); }   // graze-power glow/halo intentionally NOT drawn (it obscured the hitbox); only the non-glowing timer ring above
@@ -2992,8 +3060,8 @@ function attachInput(targetEl){ const el=targetEl||window;
 function held2(a,b){ return !!(rawKeys[a]||rawKeys[b]); }
 function keyEdge(code){ if(stepEdge[code]){ stepEdge[code]=false; return true; } return false; }
 const moveLeft=()=>held2('ArrowLeft','KeyA'), moveRight=()=>held2('ArrowRight','KeyD'), moveUp=()=>held2('ArrowUp','KeyW'), moveDown=()=>held2('ArrowDown','KeyS');
-const focusHeld=()=>held2('ShiftLeft','ShiftRight')||(inputMode==='touch'&&touchFocus), fireHeld=()=>!!rawKeys['KeyZ']||(inputMode==='touch'&&touchShoot);
-function handleInput(dt){ for(const k in edgeKeys){ if(edgeKeys[k]){ stepEdge[k]=true; edgeKeys[k]=false; } } if(stepEdge['ShiftRight']) stepEdge['ShiftLeft']=true; if(stepEdge['KeyP']) stepEdge['Escape']=true; }
+const focusHeld=()=>held2('ShiftLeft','ShiftRight')||(inputMode==='touch'&&touchFocus), fireHeld=()=>!!rawKeys['KeyZ']||!!rawKeys['Period']||!!rawKeys['IntlRo']||(inputMode==='touch'&&touchShoot);
+function handleInput(dt){ for(const k in edgeKeys){ if(edgeKeys[k]){ stepEdge[k]=true; edgeKeys[k]=false; } } if(stepEdge['ShiftRight']) stepEdge['ShiftLeft']=true; if(stepEdge['KeyP']) stepEdge['Escape']=true; if(stepEdge['Slash']) stepEdge['KeyX']=true; }
 
 // ---- gamepad: poll once per frame, BEFORE handleInput, so pad edges land in edgeKeys in time ----
 function pollGamepad(){
