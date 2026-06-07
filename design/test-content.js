@@ -29,7 +29,7 @@ check('index.html is a single-file artifact (one <script>)', (html.match(/<scrip
 check('BGM:GEN anchors present', html.indexOf('/*BGM:GEN*/') >= 0 && html.indexOf('/*END:BGM:GEN*/') >= 0);
 check('CONTENT anchors present', html.indexOf('/*BUILD:CONTENT*/') >= 0 && html.indexOf('/*END:CONTENT*/') >= 0);
 check('playMusic uses the trackOf whitelist (not a hardcoded name list)',
-  /function playMusic\(name\)\{ if\(name!=='none' && !trackOf\(name\)\) return;/.test(html));
+  /function playMusic\(name,restart\)\{ if\(name!=='none' && !trackOf\(name\)\) return;/.test(html));
 try {
   require('child_process').execFileSync('node', [path.join(__dirname, 'build-game.js'), '--check'], { stdio: 'pipe' });
   check('BGM:GEN region in sync with bgm-engine.js + bgm-tracks.js (build-game --check)', true);
