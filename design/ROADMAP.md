@@ -74,35 +74,38 @@
      立っていればエンディング中に隠し演出。完走条件に紐づくクリア報酬。
      ※ no-bomb 完走では loop2 の last-word 凍結（上記）は自然に発火しない＝両仕様は無衝突。
 - **コスト：** 中の下。コード量は小さいが「2周目1面の体感」のプレイテスト調整に時間がかかる。
-- **依存：** 弾数が countMul 倍に増える → **パフォーマンス（B）に支えられている必要がある。**
+- **依存：** 弾数が countMul 倍（最大2×）に増える。powerup の実 FPS 犯人は step 2（B-1）で解消済みなので **A は着手可能**。
+  残りの perf（B-2 cap凍結/SoA/cull）は逆に **A の後**＝最終密度が確定してから当てる。
 - **決定済み：** last-word 凍結は **2周目のみ**（上記）。難度は player に選ばせず `run.loop` で active 係数を
   乗算する（難度選択を作らない＝核①）。
 
-### B. パフォーマンス最適化 — ★ A の前提・全体の土台
+### B. パフォーマンス最適化 — B-1（powerup render）DONE / B-2（残り）は2周目後
 
 - **価値（高）：** iPad 実機での体感を守る。worst frame < 66ms を割ると `MAX_STEPS=8` の slow-mo トラップに
-  落ちる。A（2周目）が弾数を増やすので**実質的に必須の前提**。
-- **★実測（2026-06-07 実プレイ）— 照準を更新：** dev HUD で計測したところ **TOT（全エンティティ）~350 の最大ケースでも
-  FPS 影響なし＝エンティティ数は律速ではない**（下の「弾プール throughput」仮説は実測で棄却寄り）。
-  **処理を重くしている単一障害点は powerup mode**（graze パワーアップ発動中）。→ Phase 12 の照準を汎用 throughput から
-  **powerup mode のホットパス**へ絞る。候補（step 2 で dev HUD の work-ms / PEAK で確認・優先順位づけ）:
-  - (a) **最有力**: `updHomingShot`→`nearestHomingTarget`（index.html）が **homing 弾ごとに毎 sim tick** 敵配列を全走査
-    ＝O(homing弾 × 敵)。120Hz で効く超線形コスト。fix候補=ターゲットキャッシュ / 再照準を数 tick に間引き / 共有最近傍。
-  - (b) 巨大 homing 弾の per-弾ラジアルグラデーション描画（大スプライト多数）。
-  - (c) focus レーザー時の `drawLaserBulletContrast` 追加全弾描画パス + ビーム描画。
-- **既存の的（実測前の仮説・上で更新）：** ARCHITECTURE-V2 Phase 12 は**弾プールの integrate+compact+draw
-  スループット**を照準していた（`collidePlayerBullets` は自機1点 O(n)、grid は no-op なので**作らない**）。
-  実測では ~350 体で律速にならないため、これは二次的（A 2周目で countMul が上がれば再評価）。
-- **作業：** dev HUD（実装済み・step 1）で powerup mode の work-ms を計測 → 上記 (a)(b)(c) を優先順位順に。
-  汎用策（画面外 culling・draw batching・compact 低コスト化）は二次。
+  落ちる。**B-1（powerup render）は A の前提として先に完了。** B-2（残り）は逆に A が最終密度を決めてから。
+- **★B-1 DONE（2026-06-07, step 2）— powerup ホットパス解消：** dev HUD 実測で **TOT（全エンティティ）~350 の最大でも
+  FPS 影響なし＝エンティティ数は律速でない**（下の「弾プール throughput」仮説は棄却寄り）。**単一障害点は powerup mode**。
+  実ブラウザプロファイル（使い捨て index-perf.html ＋ Playwright）で真因を切り分けた結果、**犯人は sim でなく render の
+  「弾ごと `createRadialGradient` を毎フレーム生成」**だった。当初最有力視した `nearestHomingTarget` の O(homing×敵) は無罪
+  （58発×敵30 でも 0.05ms/tick）。fix＝既存 `getBulletSprite`/`getPlayerShotSprite` と同じ **bake-once スプライト**化を3経路に:
+  - `drawPlayerShots` homing グロー → `getHomingSprite`（exact-hue）: 5.5→2.0ms
+  - `drawLaserBulletContrast` ダークブロブ → `getContrastBlob`（単位blob×`globalAlpha`で旧 alpha-in-stops を厳密再現）: 2.8→1.8ms
+  - `drawParticles` 既定kind → `getParticleSprite`（hueKey バケット, 全シーン共通）
+  → **最悪 L2-focus 14.4→9.6ms（−33%）**。golden byte-identical（render専用＝sim不変）/ CI 4/4 / 3経路 A/B 視覚一致 /
+  4-agent 敵対レビュー全 pass。残コストは fill-rate 律速（見た目維持で縮小不可）＋ honest な `drawEnemyBullets` O(n)。
+- **B-2（残りの perf：cap凍結 / SoA / 画面外 cull / draw batch）は 2周目（A）の後・仕様凍結後に回す。** 理由：これらは
+  **最終的なエンティティ密度とデータ構造に依存**する。2周目で弾数が countMul 倍（最大 **2×**）になり最悪密度が決まるまで
+  pool 上限の固定長化も SoA の hot-field 選定も確定できない（早く凍結すると 2× 密度で上限を踏み抜く）。B-1 で実 FPS の
+  犯人は潰したので B-2 は**低優先**＝A の density を盛った後に1度だけ実 worst を計測し、`drawEnemyBullets` O(n) が問題化した
+  ときだけ着手。`collidePlayerBullets` は自機1点 O(n)、grid は no-op なので**作らない**（§5）。
 - **owner 方針（最適化フェーズの前提）：** 数 MB のメモリ無駄遣いは**完全に許容**。最適化に入った段階で
   **エンティティ数上限を凍結してよい**（pool を soft-grow から**固定長**へ＝現状の "soft caps grow on exhaustion"
   不変条件を最適化時に意図的に破る。これで `pool.shrink`／`STAGE_INTERMISSION` の縮退は不要化）。
   **後からデータ構造が増えることはない → SoA（Structure of Arrays）が候補**（弾プールの hot field を並列配列化し
   integrate/draw を cache 効率化）。
 - **コスト：** 中。挙動非変更が建前 → golden で検証可能。
-- **順序の根拠：** 2周目を待たず、**既存の Lunatic worst カードで先に最適化できる**（2周目はそれを countMul 倍に
-  するだけなので良い proxy）。HUD を先に入れると以降全部の計測基盤になる。
+- **順序の根拠：** B-1（powerup render）は density 非依存だったので step 2 で先に完了。B-2（cap凍結/SoA/cull）は density
+  依存＝**2周目（A）で最終 worst が確定してから**当てる（早く凍結すると 2× 密度で上限を踏み抜く）。
 
 ### C. コード整理（デッドコード・コメント・共通抽出）— 土台（境界を切ること）
 
@@ -150,18 +153,22 @@
 依存（B は A を支える）と価値で決定。D/E/F は依存なし・UI なしで完全独立。
 
 **主系列（依存があるもの）：**
-1. **C（軽い整理）＋ dev HUD** — 土台。境界を切った1パスのみ。HUD は以降の perf 計器。
-2. **B（パフォーマンス）** — 純粋な勝ち。既存 Lunatic worst カードで先行最適化（A の前提）。
-   エンティティ上限の凍結＋SoA 化はこの段で。
-3. **A（2周目 + 真エンディング + ノーミス/ノーボム イースターエッグ）** — 本命エンドゲーム。
-   perf の余力に支えて density を盛る。実装後に B の worst を1度だけ再計測（2周目の実 worst を確認）。
+1. ~~**C（軽い整理）＋ dev HUD**~~ — **DONE 2026-06-07**。土台＋以降の perf 計器。
+2. ~~**B-1（powerup render perf）**~~ — **DONE 2026-06-07（step 2）**。弾ごと `createRadialGradient` → bake-once スプライト化で
+   powerup mode の実 FPS 犯人を解消（最悪 −33%、真因は render not sim）。詳細 §3 B。
+3. **A（2周目 + 真エンディング + ノーミス/ノーボム イースターエッグ）** — ★本命エンドゲーム・**次の作業**。perf の余力に
+   支えて density を盛る。**実装し終えたらここで仕様を凍結する**（2周目の 2× 密度＝最終 worst が確定）。
+4. **B-2（残りの perf：エンティティ上限の凍結＋SoA＋画面外 cull/draw batch）** — **A の後・仕様凍結後**に当てる。最終密度と
+   データ構造が固まって初めて pool 固定長化／SoA が確定できる。B-1 で実 FPS は確保済みなので低優先＝A 完了後に実 worst を
+   1度計測し、`drawEnemyBullets` O(n) 等が問題化したときだけ着手。
 
 **独立・並行（依存なし・いつでも）：** D（自機 owner 選定）・E（逆手操作）・F（タイトル）。
 **この3つがすべて UI 不要になったため、menu-cursor／Phase 8 の予約画面群は一切作らない。**
 → **本作は最後までメニューを持たない**（核①ゼロフリクション完全保持）。
 
-**順序の核心：** 「遊び続ける理由（A）」を、それを滑らかに動かす土台（B）の上に置く。D/E/F は配線が軽く
-独立なので主系列の合間に随時。C は以降も機会的に継続。
+**順序の核心：** powerup の実 FPS 犯人は step 2（B-1）で先に潰した（render gradient-alloc）。残る perf（B-2）は
+**最終密度依存**なので、本命の A（2周目）を実装し**仕様凍結してから**当てる。D/E/F は配線が軽く独立なので主系列の
+合間に随時。C は以降も機会的に継続。
 
 ---
 
@@ -195,9 +202,10 @@
 
 | 項目 | 価値 | コスト | 主な再利用 | 真に新規 | 順 |
 | --- | --- | --- | --- | --- | --- |
-| A 2周目+真END+EE | ★最大 | 中の下 | resolve*/campaign spine/holdTimerWhileInvuln/save | run.loop(2周固定)・1面再調整・END分岐・perfect追跡・隠し演出 | 3 |
-| B パフォーマンス | 高 | 中 | dev HUD(実装済) | **powerup hotpath(homing最近傍 O(弾×敵))** ← 実測の単一障害点 · cap凍結/SoA/cull は二次 | 2 |
-| C 整理 | 低(土台) | 小〜中 | golden/captureEmitter | （境界つき1パス） | 1 |
+| A 2周目+真END+EE | ★最大 | 中の下 | resolve*/campaign spine/holdTimerWhileInvuln/save | run.loop(2周固定)・1面再調整・END分岐・perfect追跡・隠し演出 | 3(次) |
+| B-1 powerup render perf | 高 | 中 | getBulletSprite系 bake | 弾ごと createRadialGradient→bake スプライト（真因=render not sim）**DONE** | 2✓ |
+| B-2 残り perf(cap凍結/SoA/cull) | 中 | 中 | dev HUD/golden | 最終密度依存→**2周目仕様凍結後**・低優先 | 4 |
+| C 整理 + dev HUD | 低(土台) | 小〜中 | golden/captureEmitter | （境界つき1パス）**DONE** | 1✓ |
 | D 自機(owner選定) | 中 | 小〜中 | drawPlayer/PALETTE | 候補デモ→単一アセット採択（UI 無） | 並行 |
 | E 逆手操作 | 中の下 | 小 | 既存 KB 入力層 | 右手 dual binding・レイアウト堅牢化（UI 無） | 並行 |
 | F タイトル | 中 | 極小 | drawOverlays | 候補提案（"Sakura Danmaku" 有力・UI 無） | 並行 |
