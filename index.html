@@ -10,7 +10,10 @@
     font-family:"Trebuchet MS","Segoe UI",sans-serif;}
   #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     background:radial-gradient(circle at 50% 30%,#1a0e2a,#070310 70%);}
-  #game{image-rendering:auto;display:block;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;box-shadow:0 0 60px rgba(120,40,160,0.35),0 0 0 1px rgba(180,120,220,0.18);}
+  #game{image-rendering:auto;display:block;max-width:100%;max-height:100%;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;box-shadow:0 0 60px rgba(120,40,160,0.35),0 0 0 1px rgba(180,120,220,0.18);}
+  /* hero title kanji — 4-glyph (桜花弾幕) Noto Sans CJK JP subset, inlined so the wordmark renders
+     identically on every client (no system CJK dependency, tofu-proof). ~1.7KB. */
+  @font-face{font-family:'SakuraTitle';font-weight:100 900;font-style:normal;font-display:swap;src:url(data:font/woff2;base64,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) format('woff2');}
 </style>
 </head>
 <body>
@@ -1809,7 +1812,7 @@ function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w
 let _vig=null;
 function buildVignette(){ const cv=document.createElement('canvas'); cv.width=PF_W; cv.height=PF_H; const c=cv.getContext('2d'); const g=c.createRadialGradient(PF_W/2,PF_H/2,PF_H*0.35,PF_W/2,PF_H/2,PF_H*0.72); g.addColorStop(0,'rgba(40,18,46,0)'); g.addColorStop(1,'rgba(40,18,46,0.5)'); c.fillStyle=g; c.fillRect(0,0,PF_W,PF_H); c.fillStyle='rgba(0,0,0,0.05)'; for(let y=0;y<PF_H;y+=3) c.fillRect(0,y,PF_W,1); _vig=cv; }
 function RenderInit(canvasEl){ canvas=canvasEl; ctx=canvas.getContext('2d',{alpha:false,desynchronized:true}); buildPetals(); setTheme('spring'); buildVignette(); window.addEventListener('resize',RenderResize); RenderResize(); }
-function RenderResize(){ dpr=Math.min(DPR_CAP,window.devicePixelRatio||1); canvas.width=Math.round(CANVAS_W*dpr); canvas.height=Math.round(CANVAS_H*dpr); const sx=window.innerWidth/CANVAS_W, sy=window.innerHeight/CANVAS_H; let s=Math.min(sx,sy); if(s>=1) s=Math.max(1,Math.floor(s*2)/2); canvas.style.width=(CANVAS_W*s)+'px'; canvas.style.height=(CANVAS_H*s)+'px'; ctx.imageSmoothingEnabled=true; }
+function RenderResize(){ const sx=window.innerWidth/CANVAS_W, sy=window.innerHeight/CANVAS_H; const s=Math.min(sx,sy); dpr=Math.min(DPR_CAP,(window.devicePixelRatio||1)*Math.max(1,s)); canvas.width=Math.round(CANVAS_W*dpr); canvas.height=Math.round(CANVAS_H*dpr); canvas.style.width=(CANVAS_W*s)+'px'; canvas.style.height=(CANVAS_H*s)+'px'; ctx.imageSmoothingEnabled=true; }   // s = continuous contain-fit (fills window, letterboxed by #wrap); dpr tracks the on-screen scale up to DPR_CAP so text/sprites stay crisp at fullscreen without exceeding the retina render budget.
 
 // ---- bullet sprite cache ----
 const _bulletCache=new Map(), _shotCache=new Map();
@@ -2893,7 +2896,7 @@ function drawTitleLogo(ctx, W, H, t){
 
   // ---------- 3. kanji 「桜花弾幕」 — MEDIUM weight, GENEROUS tracking, calm not blaring ----------
   const kY=158;
-  const kFont='600 44px "Trebuchet MS",sans-serif';
+  const kFont='600 44px "SakuraTitle","Trebuchet MS",sans-serif';   // SakuraTitle = embedded 4-glyph Noto JP subset (see @font-face) → the hero kanji render identically on every client (Trebuchet has no CJK → would otherwise tofu / pick a system-dependent, often Chinese-shaped, font). Latin/romaji still resolve to Trebuchet.
   ctx.save();
   ctx.shadowColor = rose(0.5);
   ctx.shadowBlur = 9 + 3*pulse;
@@ -4715,6 +4718,8 @@ function* runStage(stage){
 (function boot(){
   const cv=document.getElementById('game');
   Render.init(cv);
+  if(document.fonts&&document.fonts.load) document.fonts.load('600 44px "SakuraTitle"').catch(()=>{});   // a @font-face used ONLY on canvas is never auto-loaded — request it explicitly; the inline data: URI resolves within a frame and the title (redrawn every rAF) self-corrects off the fallback
+
   initGameSystems();
   attachInput(window);
   attachTouch(cv);
