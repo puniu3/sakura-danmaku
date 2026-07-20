@@ -104,5 +104,5 @@ Phase 8 は**構造スパイン + 予約 STATE 定数のみ**実装済み。残�
 6. **`cutinHue`** 機構は実装済みだが未使用（暗転のまま）。ステージごとに hue を付けたい時は spec に
    `cutinHue:` を足すだけ（drawCutin が薄色を乗せる、画像0）。
 
-主要参照: `/home/puniu/bullet/CLAUDE.md`（節構成・規約・検証手順）、`index.html`（真実）、
+主要参照: `/home/puniu/archive/bullet/CLAUDE.md`（節構成・規約・検証手順）、`index.html`（真実）、
 `design/bgm-tracks.js`（音楽）、`design/build-game.js`（スプライサ）、`design/test-content.js`（CIゲート）。
