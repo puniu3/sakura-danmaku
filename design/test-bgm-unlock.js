@@ -2,9 +2,9 @@
 // Extracts the REAL transport functions from index.html and runs the state
 // machine with mocks. Reproduces the bug with the old unlock() and confirms the
 // fix (the `&&!pumpTimer` guard) stops the restart-on-every-keydown.
-//   node design/test-bgm-unlock.js
+//   node design/test-bgm-unlock.js [path-to-index.html]   (default: ../index.html)
 const fs = require('fs');
-const src = fs.readFileSync(__dirname + '/../index.html', 'utf8').split('\n');
+const src = fs.readFileSync(process.argv[2] || (__dirname + '/../index.html'), 'utf8').split('\n');
 function grab(name) {
   const re = new RegExp('^\\s*(function ' + name + '\\(.*\\})\\s*$');
   for (const l of src) { const m = l.match(re); if (m) return m[1]; }

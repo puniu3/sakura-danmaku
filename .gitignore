@@ -1,5 +1,17 @@
+# itch.io distribution & marketing assets (cover/thumbnail/screenshots, store
+# description, devlog, postmortem, cover-wip art) — staged locally for upload,
+# not part of the shippable game (index.html is the only artifact that ships).
+itch/
+
 # Playwright MCP artifacts (console logs, page snapshots)
 .playwright-mcp/
+
+# Remaster regenerables: procedural reference exports, i2i staging output, and
+# the rebuilt BGM audition harness (curated remaster/assets/*.png stay tracked)
+remaster/refs/
+remaster/assets/gen/
+remaster/bgm2-demo.html
+remaster/index.html.bak
 
 # Local pre-integration backup (rollback safety, not for the repo)
 design/index.html.bak
